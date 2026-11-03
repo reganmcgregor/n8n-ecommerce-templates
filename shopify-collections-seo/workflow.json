@@ -1,0 +1,4524 @@
+{
+  "name": "Shopify collections SEO",
+  "nodes": [
+    {
+      "id": "29e5f97f-2172-58ab-af5b-9418adce9005",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        -140
+      ],
+      "parameters": {
+        "content": "## Shopify collections SEO\n\nFinds the collections your catalogue can support and shoppers search for, asks you in Slack, then creates them as smart collections. Gives every brand its own page and proposes unpublishing collections that run out of stock.\n\n### How it works\n1. **Setup** (run once) creates the `collection_proposals` data table.\n2. **Propose** (weekly) groups live products by product type and metafield value, and by brand and type, names each group with AI, checks Google search volume, difficulty and whether you already rank, scores it, and posts the best to Slack.\n3. **Review** (Slack buttons) checks Slack's signature and records Approve or Skip.\n4. **Apply** creates, unpublishes or republishes the collection in Shopify and replies on the card.\n5. **Brands** (daily) creates a collection for every new vendor.\n6. **Retire** (weekly) proposes unpublishing collections this template made that fall below `retire_below` live products, and republishing them when stock returns.\n\n### Setup\n1. Credentials: Custom Auth with your Shopify client ID and secret on every **Get Shopify token** node, Slack API on the Slack nodes, Crypto with your Slack signing secret on **Sign the request**, Basic Auth with your DataForSEO login on the three DataForSEO nodes, Ollama on **Ollama Chat Model**.\n2. Fill in each lane's settings node.\n3. Run **Run once to set up**.\n4. Point your Slack app's Interactivity URL at **Slack button click**, then publish.\n\n### Customisation\n- Swap **Ollama Chat Model** for any chat model sub-node.\n- Set `review_brands` to true to get a card for each brand.\n- Raise or lower `create_score` once you trust the cards.",
+        "width": 880,
+        "height": 760,
+        "color": 1
+      }
+    },
+    {
+      "id": "32e0d570-d65f-56b1-9898-a65b6292bfcb",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -140
+      ],
+      "parameters": {
+        "content": "## Setup (run once)\nCreates the `collection_proposals` data table. Safe to run again: an existing table is kept.",
+        "width": 760,
+        "height": 340,
+        "color": 7
+      }
+    },
+    {
+      "id": "96af0980-6a59-5533-a6b6-a25ef9d56b17",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        40
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "4dcd995f-503f-5e0d-a568-d6c0a9ef09ba",
+      "name": "Create collection_proposals",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        40
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "collection_proposals",
+        "columns": {
+          "column": [
+            {
+              "name": "key",
+              "type": "string"
+            },
+            {
+              "name": "kind",
+              "type": "string"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "product_type",
+              "type": "string"
+            },
+            {
+              "name": "vendor",
+              "type": "string"
+            },
+            {
+              "name": "attr_key",
+              "type": "string"
+            },
+            {
+              "name": "attr_value",
+              "type": "string"
+            },
+            {
+              "name": "raw_title",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "name": "handle",
+              "type": "string"
+            },
+            {
+              "name": "keywords",
+              "type": "string"
+            },
+            {
+              "name": "main_keyword",
+              "type": "string"
+            },
+            {
+              "name": "volume",
+              "type": "number"
+            },
+            {
+              "name": "live_count",
+              "type": "number"
+            },
+            {
+              "name": "score",
+              "type": "number"
+            },
+            {
+              "name": "floor",
+              "type": "number"
+            },
+            {
+              "name": "sample_titles",
+              "type": "string"
+            },
+            {
+              "name": "rule_set",
+              "type": "string"
+            },
+            {
+              "name": "name_source",
+              "type": "string"
+            },
+            {
+              "name": "skip_reason",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "collection_id",
+              "type": "string"
+            },
+            {
+              "name": "slack_channel",
+              "type": "string"
+            },
+            {
+              "name": "slack_ts",
+              "type": "string"
+            },
+            {
+              "name": "error",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      }
+    },
+    {
+      "id": "92a8d4b8-5b13-59c4-b175-ed9a6d58836a",
+      "name": "Lane Propose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        260
+      ],
+      "parameters": {
+        "content": "## Propose (weekly)\nGroups live products into candidate collections, names them with AI, checks demand with DataForSEO, scores them and posts the best to Slack.",
+        "width": 4960,
+        "height": 760,
+        "color": 7
+      }
+    },
+    {
+      "id": "d0447da7-4453-5541-b5ae-b16717b00be1",
+      "name": "Every Monday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        510
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "40039e65-736e-551c-b8e3-59b4b469e21d",
+      "name": "Run Propose now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        690
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2382bc59-5f13-5c13-844c-ec5b0e2d12ed",
+      "name": "Propose settings",
+      "notes": "Your settings for the Propose lane.",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        600
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"namespace\": \"custom\",\n  \"min_products\": 5,\n  \"max_candidates\": 30,\n  \"max_cards\": 10,\n  \"min_volume\": 30,\n  \"create_score\": 65,\n  \"location_code\": 2840,\n  \"language_code\": \"en\",\n  \"own_domain\": \"yourstore.com\",\n  \"slack_channel\": \"#review-collections\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d67c27cc-b9fb-517b-a7e5-5ebec64fac87",
+      "name": "Get Shopify token",
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "position": [
+        440,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Propose settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "270dac85-47e6-590f-8ceb-1a3a1e4632a4",
+      "name": "Get products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        660,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Propose settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Products($after: String, $ns: String!) {\n  products(first: 50, after: $after, query: \"status:active AND published_status:published\") {\n    pageInfo { hasNextPage endCursor }\n    nodes {\n      id title vendor productType totalInventory tracksInventory\n      metafields(first: 25, namespace: $ns) { nodes { key value type } }\n    }\n  }\n}`, variables: { after: null, ns: $('Propose settings').first().json.namespace } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { after: $response.body.data.products.pageInfo.endCursor, ns: $('Propose settings').first().json.namespace } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.products.pageInfo.hasNextPage }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "648140c1-5162-547c-bc89-798dd588b5e9",
+      "name": "Get definitions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        880,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Propose settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Definitions($ns: String!) {\n  metafieldDefinitions(first: 100, ownerType: PRODUCT, namespace: $ns) {\n    nodes { id namespace key name type { name } capabilities { smartCollectionCondition { enabled } } }\n  }\n}`, variables: { ns: $('Propose settings').first().json.namespace } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a30368ad-2445-5f26-9a24-c003bc419215",
+      "name": "Get collections",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        1100,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Propose settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Collections($after: String) {\n  collections(first: 100, after: $after) {\n    pageInfo { hasNextPage endCursor }\n    nodes { id handle title\n      ruleSet { appliedDisjunctively rules { column relation condition\n        conditionObject { ... on CollectionRuleMetafieldCondition { metafieldDefinition { key } } } } } }\n  }\n}`, variables: { after: null } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { after: $response.body.data.collections.pageInfo.endCursor } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.collections.pageInfo.hasNextPage }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "f396eb8a-c2a5-568a-8aca-6e0260307308",
+      "name": "Get proposals",
+      "notes": "Every saved row, so nothing is proposed twice.",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "position": [
+        1320,
+        600
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "e7a30741-2890-5fc7-be85-39d58b4fa1d4",
+      "name": "Find candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Propose settings').first().json;\nconst products = $('Get products').all().flatMap(i => i.json.data.products.nodes);\nconst live = products.filter(p => !p.tracksInventory || p.totalInventory > 0);\nconst OK_TYPES = ['single_line_text_field', 'number_integer', 'number_decimal', 'boolean'];\nconst defs = Object.fromEntries($('Get definitions').first().json.data.metafieldDefinitions.nodes\n  .filter(d => d.namespace === s.namespace && d.capabilities.smartCollectionCondition.enabled && OK_TYPES.includes(d.type.name))\n  .map(d => [d.key, d]));\nconst collections = $('Get collections').all().flatMap(i => i.json.data.collections.nodes);\nconst sig = rules => rules.map(r => [r.column, r.key ?? '', String(r.condition).toLowerCase()].join('|')).sort().join('&');\n\n// Anything Shopify already has, by rule or by handle, is taken.\nconst taken = new Set(collections.map(c => 'handle:' + c.handle));\nfor (const c of collections) if (c.ruleSet && !c.ruleSet.appliedDisjunctively)\n  taken.add(sig(c.ruleSet.rules.map(r => ({ ...r, key: r.conditionObject?.metafieldDefinition?.key }))));\nfor (const row of $('Get proposals').all()) if (row.json.key) taken.add(row.json.key);\n\nconst byType = {};\nfor (const p of live) if (p.productType) (byType[p.productType] ??= []).push(p);\nconst typesPerVendor = {};\nfor (const p of live) if (p.vendor) (typesPerVendor[p.vendor] ??= new Set()).add(p.productType);\n\nconst out = [];\nconst add = (c) => {\n  c.key = sig(c.rules);\n  if (taken.has(c.key) || c.products.length < s.min_products || c.products.length === byType[c.product_type].length) return;\n  out.push(c);\n};\nfor (const [type, items] of Object.entries(byType)) {\n  const groups = {};\n  for (const p of items) for (const m of p.metafields.nodes) {\n    const d = defs[m.key];\n    if (!d || (d.type.name === 'boolean' && m.value !== 'true')) continue;\n    (groups[m.key + '=' + m.value] ??= { d, value: m.value, products: [] }).products.push(p);\n  }\n  for (const g of Object.values(groups)) add({ source: 'attribute', product_type: type, attr_key: g.d.key,\n    attr_label: g.d.name, attr_value: g.value, products: g.products,\n    rules: [{ column: 'TYPE', relation: 'EQUALS', condition: type },\n            { column: 'PRODUCT_METAFIELD_DEFINITION', relation: 'EQUALS', condition: g.value, conditionObjectId: g.d.id, key: g.d.key }] });\n  for (const [vendor, types] of Object.entries(typesPerVendor)) if (types.size >= 2) add({ source: 'brand_type',\n    product_type: type, vendor, products: items.filter(p => p.vendor === vendor),\n    rules: [{ column: 'TYPE', relation: 'EQUALS', condition: type }, { column: 'VENDOR', relation: 'EQUALS', condition: vendor }] });\n}\nreturn out.sort((a, b) => b.products.length - a.products.length).slice(0, s.max_candidates).map(c => ({ json: {\n  ...c, live_count: c.products.length, vendors: [...new Set(c.products.map(p => p.vendor))],\n  sample_titles: c.products.slice(0, 5).map(p => p.title),\n  sibling_titles: collections.filter(k => k.ruleSet?.rules.some(r => r.column === 'TYPE' && r.condition === c.product_type)).map(k => k.title),\n  products: undefined } }));"
+      }
+    },
+    {
+      "id": "0f6c0079-f57c-57cb-8dd4-c1bceac9ef97",
+      "name": "Name the collection",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "position": [
+        1760,
+        600
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=You name a collection page for an online store.\n\nCategory: {{ $json.product_type }}\nAttribute: {{ $json.attr_label || 'brand' }}\nValue: {{ $json.attr_value || $json.vendor }}\nBrand for this page: {{ $json.source === 'brand_type' ? $json.vendor : 'none' }}\nProducts on the page: {{ $json.live_count }}\nSample product titles:\n{{ $json.sample_titles.join('\\n') }}\nExisting collections in this category:\n{{ $json.sibling_titles.join('\\n') || 'none' }}\n\nTitle:\n- The words a shopper would type to find these products, in Title Case, plural.\n- Value first, category noun last.\n- Units as shoppers write them: 8 Port, 4K, 2TB, 5m.\n- Name a brand only if \"Brand for this page\" is not none, spelled exactly as given.\n- No model numbers. No product names. No claims such as best or cheap.\n- 60 characters or fewer.\n\nKeywords:\n- 3 to 8 phrases a shopper would type into Google to find this page.\n- Lower case.\n- Every phrase contains the value or the brand.\n- No model numbers.\n\nskip_reason:\n- Explain in a few words when the value only works as a filter, not a page: pack quantities, internal codes, materials shoppers don't search for.\n- Explain when the page would repeat an existing collection.\n- Otherwise an empty string.",
+        "hasOutputParser": true
+      }
+    },
+    {
+      "id": "cd8624a0-ae56-5580-b13e-8e531ddd996b",
+      "name": "Ollama Chat Model",
+      "notes": "Ollama Cloud: an Ollama credential with Base URL https://ollama.com and your API key. Output Format JSON stops stray commas breaking the parser. Swap for any chat model.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        820
+      ],
+      "parameters": {
+        "model": "=gpt-oss:120b",
+        "options": {
+          "temperature": 0.2,
+          "format": "json"
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "name": "Ollama Cloud"
+        }
+      }
+    },
+    {
+      "id": "2e63c4d2-b593-5af5-a0b8-b16393bab01f",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1880,
+        820
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\"\n    },\n    \"keywords\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"maxItems\": 8\n    },\n    \"skip_reason\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"title\",\n    \"keywords\",\n    \"skip_reason\"\n  ]\n}"
+      }
+    },
+    {
+      "id": "cc37b07d-a19a-514f-900c-6fef53081f90",
+      "name": "Check names",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const all = $('Find candidates').all().map(i => i.json);\nconst vendors = [...new Set($('Get products').all().flatMap(i => i.json.data.products.nodes.map(p => p.vendor)).filter(Boolean))];\nconst words = t => String(t).toLowerCase().split(/[^a-z0-9.+]+/).filter(Boolean);\nconst slug = t => t.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');\nconst seen = new Set();\n\nreturn $input.all().map((item, i) => {\n  const c = all[i];\n  const ai = item.json.output ?? {};\n  const own = c.source === 'brand_type' ? c.vendor.toLowerCase() : null;\n  const raw = c.source === 'brand_type' ? `${c.vendor} ${c.product_type}` : `${c.attr_value} ${c.product_type}`;\n  // Any word with a digit (a size, a spec, a model code) must come from the value or the category.\n  const allowed = new Set(words(raw));\n  const problems = (text) => {\n    const low = ` ${String(text).toLowerCase()} `;\n    const found = vendors.filter(v => v.toLowerCase() !== own && low.includes(` ${v.toLowerCase()} `)).map(v => 'brand ' + v);\n    return found.concat(words(text).filter(w => /\\d/.test(w) && !allowed.has(w)).map(w => 'not in the data: ' + w));\n  };\n  const aiOk = ai.title && ai.title.length <= 60 && problems(ai.title).length === 0;\n  const title = aiOk ? ai.title.trim() : raw;\n  let keywords = (ai.keywords ?? []).map(k => k.toLowerCase().replace(/[^a-z0-9 .+&'-]/g, ' ').replace(/\\s+/g, ' ').trim())\n    .filter(k => k && k.length <= 80 && k.split(' ').length <= 10 && problems(k).length === 0);\n  if (!keywords.length) keywords = [raw.toLowerCase()];\n  const handle = slug(title);\n  const dupe = seen.has(handle); seen.add(handle);\n  return { json: { ...c, raw_title: raw, title, handle, keywords: [...new Set(keywords)],\n    name_source: aiOk ? 'ai' : 'fallback', name_problems: aiOk ? [] : problems(ai.title ?? ''),\n    skip_reason: ai.skip_reason || (dupe ? 'same title as another proposal this week' : '') } };\n});"
+      }
+    },
+    {
+      "id": "106cc073-fb44-51b5-98df-310dca6e9176",
+      "name": "Anything to look up?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "executeOnce": true,
+      "position": [
+        2320,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "any-lookup",
+              "leftValue": "={{ $('Check names').all().some(i => !i.json.skip_reason) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c3528f5d-79e5-5970-92d9-304c2b07fb2b",
+      "name": "Search volume",
+      "notes": "DataForSEO: one task for every keyword, about US$0.09.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "position": [
+        2540,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify([{\n  keywords: [...new Set($('Check names').all().filter(i => !i.json.skip_reason).flatMap(i => i.json.keywords))].slice(0, 1000),\n  location_code: $('Propose settings').first().json.location_code,\n  language_code: $('Propose settings').first().json.language_code\n}]) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "name": "DataForSEO"
+        }
+      }
+    },
+    {
+      "id": "1a6c7a6b-d1f5-5c87-b7ac-93eac6c7e464",
+      "name": "Pick keyword",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Propose settings').first().json;\nconst task = $input.first().json.tasks?.[0];\nif (!task || task.status_code !== 20000) throw new Error('Search volume failed: ' + (task?.status_message || 'no task'));\nconst vol = Object.fromEntries((task.result ?? []).map(r => [r.keyword.toLowerCase(), r.search_volume ?? 0]));\nreturn $('Check names').all().map(({ json: c }) => {\n  // Google Ads reports close variants with one shared volume, so take the best keyword, never a sum.\n  const best = c.keywords.map(k => ({ k, v: vol[k] ?? 0 })).sort((a, b) => b.v - a.v)[0];\n  const status = c.skip_reason ? 'ai_skipped' : best.v < s.min_volume ? 'no_demand' : 'pending';\n  return { json: { ...c, main_keyword: best.k, volume: best.v, status } };\n});"
+      }
+    },
+    {
+      "id": "c6372250-b34e-5d08-a545-1100ad0adc0a",
+      "name": "All skipped",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        720
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $('Check names').all().map(({ json: c }) => ({ json: { ...c, main_keyword: c.keywords[0], volume: 0, status: 'ai_skipped', score: 0 } }));"
+      }
+    },
+    {
+      "id": "244bb61c-a687-5700-bc28-2a7017ab3301",
+      "name": "Any with demand?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "executeOnce": true,
+      "position": [
+        2980,
+        500
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "any-demand",
+              "leftValue": "={{ $('Pick keyword').all().some(i => i.json.status === 'pending') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "79dd4efd-c7da-5ad7-8c26-019bb794caee",
+      "name": "Keyword difficulty",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "position": [
+        3200,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/dataforseo_labs/google/bulk_keyword_difficulty/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify([{ keywords: [...new Set($('Pick keyword').all().filter(i => i.json.status === 'pending').map(i => i.json.main_keyword))],\n  location_code: $('Propose settings').first().json.location_code, language_code: $('Propose settings').first().json.language_code }]) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "name": "DataForSEO"
+        }
+      }
+    },
+    {
+      "id": "ffb16b04-c43b-5b6c-92dc-957cb7d0a237",
+      "name": "Demand only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3420,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $('Pick keyword').all().filter(i => i.json.status === 'pending').map(i => ({ json: { main_keyword: i.json.main_keyword } }));"
+      }
+    },
+    {
+      "id": "112d07dd-094c-5e3c-a81b-e4fb3104d669",
+      "name": "Rank check",
+      "notes": "One Google results page per keyword, about US$0.002 each.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "position": [
+        3640,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/serp/google/organic/live/advanced",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify([{ keyword: $json.main_keyword, location_code: $('Propose settings').first().json.location_code,\n  language_code: $('Propose settings').first().json.language_code, depth: 10 }]) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "name": "DataForSEO"
+        }
+      }
+    },
+    {
+      "id": "b2b12a10-7fcd-5503-aa52-3c8a098a9b80",
+      "name": "Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3860,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Propose settings').first().json;\nconst clamp = (x, a, b) => Math.max(a, Math.min(b, x));\nconst demand = vol => vol ? clamp(Math.log10(vol + 1) / Math.log10(5000) * 40, 0, 40) : 0; // 5,000 searches = full 40\nconst depth = n => clamp(n / 50 * 25, 0, 25);                                          // 50 products = full 25\nconst gap = ranksNow => ranksNow ? 8 : 20;                                             // more to win if you don't rank\nconst ease = kd => kd == null ? 8 : clamp((100 - kd) / 100 * 15, 0, 15);\n\nconst kd = {}, ranks = {};\nconst bare = d => String(d || '').toLowerCase().replace(/^www\\./, '');\nif ($('Keyword difficulty').isExecuted)\n  for (const r of $('Keyword difficulty').first().json.tasks?.[0]?.result?.[0]?.items ?? []) kd[r.keyword] = r.keyword_difficulty;\nif ($('Rank check').isExecuted)\n  for (const it of $('Rank check').all()) {\n    const t = it.json.tasks?.[0];\n    ranks[t?.data?.keyword] = (t?.result?.[0]?.items ?? []).some(x => x.type === 'organic' && bare(x.domain).endsWith(bare(s.own_domain)));\n  }\nreturn $('Pick keyword').all().map(({ json: c }) => ({ json: { ...c, kd: kd[c.main_keyword] ?? null, ranks_now: !!ranks[c.main_keyword],\n  score: c.status === 'pending' ? Math.round(demand(c.volume) + depth(c.live_count) + gap(ranks[c.main_keyword]) + ease(kd[c.main_keyword])) : 0 } }));"
+      }
+    },
+    {
+      "id": "f2422520-da58-569f-b3b4-44bbdf2706ba",
+      "name": "Save proposals",
+      "notes": "Every candidate is kept, including no_demand and ai_skipped ones, so you can see why it was left out.",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4080,
+        600
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "={{ $json.key }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "key": "={{ $json.key }}",
+            "kind": "create",
+            "source": "={{ $json.source }}",
+            "product_type": "={{ $json.product_type }}",
+            "vendor": "={{ $json.vendor || '' }}",
+            "attr_key": "={{ $json.attr_key || '' }}",
+            "attr_value": "={{ $json.attr_value || '' }}",
+            "raw_title": "={{ $json.raw_title }}",
+            "title": "={{ $json.title }}",
+            "handle": "={{ $json.handle }}",
+            "keywords": "={{ JSON.stringify($json.keywords) }}",
+            "main_keyword": "={{ $json.main_keyword }}",
+            "volume": "={{ $json.volume }}",
+            "live_count": "={{ $json.live_count }}",
+            "score": "={{ $json.score }}",
+            "sample_titles": "={{ JSON.stringify($json.sample_titles) }}",
+            "rule_set": "={{ JSON.stringify($json.rules) }}",
+            "name_source": "={{ $json.name_source }}",
+            "skip_reason": "={{ $json.skip_reason }}",
+            "status": "={{ $json.status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_type",
+              "displayName": "product_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "vendor",
+              "displayName": "vendor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "attr_key",
+              "displayName": "attr_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "attr_value",
+              "displayName": "attr_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "raw_title",
+              "displayName": "raw_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "handle",
+              "displayName": "handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "keywords",
+              "displayName": "keywords",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "main_keyword",
+              "displayName": "main_keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "volume",
+              "displayName": "volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "live_count",
+              "displayName": "live_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sample_titles",
+              "displayName": "sample_titles",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rule_set",
+              "displayName": "rule_set",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "name_source",
+              "displayName": "name_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "skip_reason",
+              "displayName": "skip_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "644d9ebb-d4fd-5ddf-8a27-03484d369949",
+      "name": "Pick cards",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4300,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Propose settings').first().json;\nreturn $input.all().filter(i => i.json.status === 'pending' && i.json.score >= s.create_score)\n  .sort((a, b) => b.json.score - a.json.score).slice(0, s.max_cards);"
+      }
+    },
+    {
+      "id": "8c11c4c5-168c-5a1d-b9bd-a0e1ae68b1c6",
+      "name": "Post the card",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        4520,
+        600
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Propose settings').first().json.slack_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ JSON.stringify({ blocks: [\n  { type: 'section', text: { type: 'mrkdwn', text: '*' + $json.title + '* (`/collections/' + $json.handle + '`)\\n' +\n    'Score: *' + $json.score + '/100* | Keyword: `' + $json.main_keyword + '` (*' + $json.volume + '/mo*)\\n' +\n    'In-stock products: *' + $json.live_count + '* (' + JSON.parse($json.sample_titles).slice(0, 3).join(', ') + ')\\n' +\n    'Rule: product type is `' + $json.product_type + '` and ' + ($json.attr_key ? '`' + $json.attr_key + '` is `' + $json.attr_value + '`' : 'vendor is `' + $json.vendor + '`') } },\n  { type: 'actions', elements: [\n    { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Approve & Create' }, action_id: 'collection_approve', value: String($json.id) },\n    { type: 'button', text: { type: 'plain_text', text: 'Skip' }, action_id: 'collection_skip', value: String($json.id) } ] }\n] }) }}",
+        "text": "=New collection proposal: {{ $json.title }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "b0f2666e-1804-5696-b980-b27e5400e77d",
+      "name": "Save the card",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4740,
+        600
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick cards').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "slack_channel": "={{ $json.channel }}",
+            "slack_ts": "={{ $json.message_timestamp }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "slack_channel",
+              "displayName": "slack_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "slack_ts",
+              "displayName": "slack_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "35387695-8a22-5f82-a745-f0d3ed7863f3",
+      "name": "Lane Review",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1060
+      ],
+      "parameters": {
+        "content": "## Review (Slack buttons)\nChecks Slack's signature, ignores taps on old cards, records Approve or Skip, updates the card and sends approvals to Apply.",
+        "width": 2900,
+        "height": 420,
+        "color": 7
+      }
+    },
+    {
+      "id": "f9865a40-4cde-55d7-9769-a535f90e12a0",
+      "name": "Slack button click",
+      "notes": "Your Slack app's Interactivity Request URL.",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "collection-review",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      }
+    },
+    {
+      "id": "da28733f-fc77-5460-ba63-7fd8b871b3c2",
+      "name": "Respond to Slack",
+      "notes": "An empty 200 at once, inside Slack's 3 seconds.",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        1300
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      }
+    },
+    {
+      "id": "b66a5746-e4e3-5744-bd49-f2123b91b3bc",
+      "name": "Read the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nif (Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) > 300) throw new Error('Stale request');\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || ''; // no URLSearchParams in the Code node\nconst p = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' ')));\nconst a = p.actions[0];\nreturn [{ json: { base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'],\n  action: a.action_id, id: Number(a.value), user: p.user.username, channel: p.channel.id, ts: p.message.ts } }];"
+      }
+    },
+    {
+      "id": "bdeec299-599d-5fec-92fe-28af8400139e",
+      "name": "Sign the request",
+      "notes": "Crypto credential: Hmac Secret = your Slack app's Signing Secret.",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1300
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "id": "1a16f6ef-5b6d-5e4d-8836-6dbcb5606c7a",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        1300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sig-check",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ed464983-6c1e-5fab-a524-39f1c10797cb",
+      "name": "Get pending proposal",
+      "notes": "A second tap, or a tap on an old card, finds nothing and stops here.",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        1300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Read the click').first().json.id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "d3c9f530-11ee-59f2-81f4-962823c2fc60",
+      "name": "Approve or skip?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1320,
+        1300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Approve",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r0-approve",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'collection_approve' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Skip",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1-skip",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'collection_skip' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9c4eae60-0eb8-5bb8-b077-32baf907c8f6",
+      "name": "Mark approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        1210
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Read the click').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2fb550ef-1e36-56de-adf1-6e703d2f727b",
+      "name": "Mark skipped",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        1390
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Read the click').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "skipped"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "72b45ffd-9bf4-5787-80e4-fdbb1dd404c2",
+      "name": "Update the card",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1760,
+        1300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "update",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Read the click').first().json.channel }}"
+        },
+        "ts": "={{ $('Read the click').first().json.ts }}",
+        "messageType": "block",
+        "blocksUi": "={{ (() => {\n  const r = $('Get pending proposal').first().json, c = $('Read the click').first().json;\n  const ok = c.action === 'collection_approve';\n  const what = { create: 'Create', retire: 'Unpublish', restore: 'Republish' }[r.kind];\n  return JSON.stringify({ blocks: [\n    { type: 'section', text: { type: 'mrkdwn', text: '*' + what + ': ' + r.title + '* (`/collections/' + r.handle + '`)' } },\n    { type: 'context', elements: [{ type: 'mrkdwn', text: (ok ? ':white_check_mark: Approved by @' : ':heavy_minus_sign: Skipped by @') + c.user + (ok ? '. Working on it.' : '.') }] }\n  ] });\n})() }}",
+        "text": "=Collection proposal reviewed",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        },
+        "updateFields": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "848c39ac-f270-5c20-9c58-75d18051421d",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        1300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "was-approved",
+              "leftValue": "={{ $('Read the click').first().json.action === 'collection_approve' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "90aeeddb-489a-5136-9b9d-92bca330a670",
+      "name": "Send to Apply",
+      "notes": "Calls the Apply lane on this canvas.",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2200,
+        1210
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ Number($('Read the click').first().json.id) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "e0df22d5-cf3c-51cb-b1f4-a14543bb7f89",
+      "name": "Lane Apply",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1560
+      ],
+      "parameters": {
+        "content": "## Apply (called by Review and Brands)\nCreates, unpublishes or republishes each approved collection, records the result and replies on the card.",
+        "width": 3800,
+        "height": 820,
+        "color": 7
+      }
+    },
+    {
+      "id": "ee0b0148-620d-5461-882d-01e86d33373b",
+      "name": "When called to apply",
+      "notes": "id = one proposal row, or 0 for every approved row.",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        1900
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "id",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bb81d648-21f6-5baf-9935-0d6ba714e40e",
+      "name": "Apply settings",
+      "notes": "Your settings for the Apply lane.",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1900
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"seo_title_suffix\": \" | Your Store\",\n  \"sort_order\": \"BEST_SELLING\",\n  \"publication_name\": \"Online Store\",\n  \"keyword_namespace\": \"seo\",\n  \"slack_channel\": \"#review-collections\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "e95e3f44-d86e-5492-b237-074445c5c739",
+      "name": "Get Shopify token for Apply",
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "position": [
+        440,
+        1900
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "cb4da15a-5964-53ef-97d5-456bf2dae95e",
+      "name": "Find the publication",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        660,
+        1900
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Apply').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: '{ publications(first: 20) { nodes { id name } } }' }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "8c19a3ca-90bc-5d09-bba7-1c945a014a8f",
+      "name": "Get approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "executeOnce": true,
+      "position": [
+        880,
+        1900
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "approved"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "9cd943da-bf15-5ceb-b7da-bd88c556dd4b",
+      "name": "Pick rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const id = Number($('When called to apply').first().json.id) || 0;\nreturn $('Get approved').all().filter(i => !id || i.json.id === id);"
+      }
+    },
+    {
+      "id": "6bd672cb-0d34-51e4-a4ce-6684f7e54e5a",
+      "name": "Claim rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        1900
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "applying"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "acd7a948-66d3-5be2-a013-d88de40bf650",
+      "name": "Route by kind",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1540,
+        1900
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Create",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r0-create",
+                    "leftValue": "={{ $('Pick rows').item.json.kind === 'create' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Retire",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1-retire",
+                    "leftValue": "={{ $('Pick rows').item.json.kind === 'retire' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Restore",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r2-restore",
+                    "leftValue": "={{ $('Pick rows').item.json.kind === 'restore' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "94f5c4f9-315f-5906-8acf-2e4983435712",
+      "name": "Check handle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        1700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Apply').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'query($h: String!) { collectionByIdentifier(identifier: { handle: $h }) { id handle } }', variables: { h: $('Pick rows').item.json.handle } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "9a6621bc-1848-5c96-83b1-bb963bad61c7",
+      "name": "Handle free?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        1700
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "handle-free",
+              "leftValue": "={{ !$json.data?.collectionByIdentifier && !$json.errors }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f21852d0-86a2-5fde-a3d1-352981f45525",
+      "name": "Create collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        1610
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Apply').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: `mutation Create($input: CollectionInput!) {\n    collectionCreate(input: $input) { collection { id handle } userErrors { field message } } }`,\n  variables: { input: (r => ({\n    title: r.title,\n    handle: r.handle,\n    sortOrder: $('Apply settings').first().json.sort_order,\n    seo: { title: r.title + $('Apply settings').first().json.seo_title_suffix },\n    ruleSet: { appliedDisjunctively: false, rules: JSON.parse(r.rule_set).map(({ key, ...rule }) => rule) },\n    metafields: r.main_keyword ? [\n      { namespace: $('Apply settings').first().json.keyword_namespace, key: 'target_keyword', type: 'single_line_text_field', value: r.main_keyword },\n      { namespace: $('Apply settings').first().json.keyword_namespace, key: 'keyword_volume', type: 'number_integer', value: String(r.volume || 0) }\n    ] : []\n  }))($('Pick rows').item.json) }\n}) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "81006dcc-6e00-5e11-95a9-a4abcefc08b6",
+      "name": "Created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        1610
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "created",
+              "leftValue": "={{ !!$json.data?.collectionCreate?.collection && $json.data.collectionCreate.collection.handle === $('Pick rows').item.json.handle }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2535b497-b46e-569e-908b-07818db03f49",
+      "name": "Publish collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        1520
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Apply').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation($id: ID!, $pub: ID!) { publishablePublish(id: $id, input: [{ publicationId: $pub }]) { userErrors { field message } } }', variables: { id: $json.data.collectionCreate.collection.id, pub: $('Find the publication').first().json.data.publications.nodes.find(p => p.name === $('Apply settings').first().json.publication_name)?.id } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "86249344-8688-5386-819f-22a88ea3d710",
+      "name": "Mark created",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2860,
+        1520
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "applied",
+            "collection_id": "={{ $('Create collection').item.json.data.collectionCreate.collection.id }}",
+            "error": "={{ ($json.data?.publishablePublish?.userErrors || []).map(e => 'publish: ' + e.message).join('; ') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "collection_id",
+              "displayName": "collection_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "69824fb1-d3b3-56d4-b330-b2103175dfd3",
+      "name": "Mark failed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2860,
+        1700
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "failed",
+            "error": "={{ $json.data?.collectionByIdentifier ? 'handle taken by ' + $json.data.collectionByIdentifier.id : $json.data?.collectionCreate?.collection ? 'Shopify changed the handle to ' + $json.data.collectionCreate.collection.handle : [...($json.errors || []), ...($json.data?.collectionCreate?.userErrors || [])].map(e => e.message).join('; ') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5b7399dc-a0cf-5bee-b7c2-1dff546b2dad",
+      "name": "Recount products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        1960
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Apply').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'query($id: ID!) { collection(id: $id) { products(first: 250) { nodes { status totalInventory tracksInventory } } } }', variables: { id: $('Pick rows').item.json.collection_id } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "f792d513-9f8c-5df1-892e-4042b602a729",
+      "name": "Still thin?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        1960
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "still-thin",
+              "leftValue": "={{ ($json.data?.collection?.products?.nodes || []).filter(p => p.status === 'ACTIVE' && (!p.tracksInventory || p.totalInventory > 0)).length < $('Pick rows').item.json.floor }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3ab23dbe-99a1-5998-8d16-438cdcd0d462",
+      "name": "Unpublish collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        1880
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Apply').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation($id: ID!, $pub: ID!) { publishableUnpublish(id: $id, input: [{ publicationId: $pub }]) { userErrors { field message } } }', variables: { id: $('Pick rows').item.json.collection_id, pub: $('Find the publication').first().json.data.publications.nodes.find(p => p.name === $('Apply settings').first().json.publication_name)?.id } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b3024b14-8df3-5ef8-a6e4-f246a135722b",
+      "name": "Mark unpublished",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        1880
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.data?.publishableUnpublish?.userErrors?.length || $json.errors ? \"failed\" : \"applied\" }}",
+            "error": "={{ [...($json.errors || []), ...($json.data?.publishableUnpublish?.userErrors || [])].map(e => e.message).join('; ') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "775239e9-e13b-5cdb-ade8-15a7d1438175",
+      "name": "Mark kept",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        2040
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "skipped",
+            "error": "={{ 'stock came back: ' + ($json.data?.collection?.products?.nodes || []).filter(p => p.status === 'ACTIVE' && (!p.tracksInventory || p.totalInventory > 0)).length + ' live products' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5f6b3091-205d-558d-896f-9fe286c82d3c",
+      "name": "Republish collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        2200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Apply').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation($id: ID!, $pub: ID!) { publishablePublish(id: $id, input: [{ publicationId: $pub }]) { userErrors { field message } } }', variables: { id: $('Pick rows').item.json.collection_id, pub: $('Find the publication').first().json.data.publications.nodes.find(p => p.name === $('Apply settings').first().json.publication_name)?.id } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "21224556-a279-5b75-ac5f-17460c25fa80",
+      "name": "Mark republished",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        2200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.data?.publishablePublish?.userErrors?.length || $json.errors ? \"failed\" : \"applied\" }}",
+            "error": "={{ [...($json.errors || []), ...($json.data?.publishablePublish?.userErrors || [])].map(e => e.message).join('; ') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e8ded972-2e78-5bed-b94d-19ef2734de2c",
+      "name": "Card or failure?",
+      "notes": "Brand pages made without a card are summed up by the Brands lane instead.",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        3080,
+        1900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "card-or-fail",
+              "leftValue": "={{ !!$('Pick rows').item.json.slack_ts || $json.status === 'failed' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e205a548-65f7-5f80-bab4-8d80664d9df6",
+      "name": "Reply in Slack",
+      "notes": "Replies on the card, or posts to slack_channel when there was no card.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        1900
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((() => {\n  const s = $('Apply settings').first().json, r = $('Pick rows').item.json, row = $json;\n  const admin = 'https://admin.shopify.com/store/' + s.store_domain.split('.')[0] + '/collections/' + String(row.collection_id || r.collection_id || '').split('/').pop();\n  const page = 'https://' + s.store_domain + '/collections/' + r.handle;\n  const text = row.status === 'failed' ? ':x: ' + r.title + ' not done: ' + row.error\n    : row.status === 'skipped' ? ':information_source: ' + r.title + ' left published: ' + row.error\n    : r.kind === 'create' ? ':white_check_mark: Created and published ' + r.title + ': <' + page + '|storefront> | <' + admin + '|admin>. Link it from a menu or its parent collection so shoppers and Google can reach it.' + (row.error ? ' ' + row.error : '')\n    : r.kind === 'retire' ? ':white_check_mark: Unpublished ' + r.title + '. Remove it from any menu that links to it.'\n    : ':white_check_mark: Republished ' + r.title + ': <' + page + '|storefront>';\n  return Object.assign({ channel: r.slack_channel || s.slack_channel, text, unfurl_links: false }, r.slack_ts ? { thread_ts: r.slack_ts } : {});\n})()) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "fe80f4e3-09da-5627-85a3-6fa26e4518cb",
+      "name": "Risk Apply",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3060,
+        1580
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify\nCreates, publishes and unpublishes collections. Test on a development store first.",
+        "width": 420,
+        "height": 140,
+        "color": 3
+      }
+    },
+    {
+      "id": "d466928d-6d14-5580-85fa-4451ceb74bd2",
+      "name": "Lane Brands",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2460
+      ],
+      "parameters": {
+        "content": "## Brands (daily)\nCreates a smart collection for every vendor that has none, using the vendor exactly as written. Set `review_brands` to true for a card first.",
+        "width": 3080,
+        "height": 520,
+        "color": 7
+      }
+    },
+    {
+      "id": "bc7a4b5b-1891-5b1f-9805-7146901cd77b",
+      "name": "Every day",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        2610
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cfdbc842-d0fc-526f-acf8-0b54747e984e",
+      "name": "Run Brands now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2790
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2808ac41-0c19-5f41-85c6-9ed58dd1d8e2",
+      "name": "Brands settings",
+      "notes": "Your settings for the Brands lane.",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        2700
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"exclude_vendors\": [\n    \"Generic\",\n    \"Other\",\n    \"Unbranded\"\n  ],\n  \"review_brands\": false,\n  \"slack_channel\": \"#review-collections\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "7a55af8f-ff30-57fc-9ca9-ade5bb2ad7cb",
+      "name": "Get Shopify token for Brands",
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "position": [
+        440,
+        2700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Brands settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "4bbda5a6-ebf7-543a-acaa-730de3ed790c",
+      "name": "Get vendors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        660,
+        2700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Brands settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Brands').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Vendors($after: String) {\n  products(first: 250, after: $after, query: \"status:active AND published_status:published\") {\n    pageInfo { hasNextPage endCursor }\n    nodes { vendor }\n  }\n}`, variables: { after: null } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { after: $response.body.data.products.pageInfo.endCursor } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.products.pageInfo.hasNextPage }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "41cd7fe3-7325-534a-8bf8-4e1d9de28421",
+      "name": "Get brand collections",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        880,
+        2700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Brands settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Brands').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Collections($after: String) {\n  collections(first: 250, after: $after) {\n    pageInfo { hasNextPage endCursor }\n    nodes { handle ruleSet { rules { column relation condition } } }\n  }\n}`, variables: { after: null } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { after: $response.body.data.collections.pageInfo.endCursor } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.collections.pageInfo.hasNextPage }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "5a114c40-e836-5ec4-9f09-37f5b85774dc",
+      "name": "Get brand proposals",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "position": [
+        1100,
+        2700
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "source",
+              "condition": "eq",
+              "keyValue": "brand"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "4e61ab67-cb14-5938-96db-3354c9e0093c",
+      "name": "Find new brands",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        2700
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Brands settings').first().json;\nconst count = {};\nfor (const p of $('Get vendors').all().flatMap(i => i.json.data.products.nodes)) if (p.vendor) count[p.vendor] = (count[p.vendor] || 0) + 1;\nconst cols = $('Get brand collections').all().flatMap(i => i.json.data.collections.nodes);\n// A brand page is a collection whose only rule is VENDOR EQUALS.\nconst hasPage = new Set(cols.filter(c => c.ruleSet?.rules.length === 1 && c.ruleSet.rules[0].column === 'VENDOR' && c.ruleSet.rules[0].relation === 'EQUALS')\n  .map(c => c.ruleSet.rules[0].condition.toLowerCase()));\nconst handles = new Set(cols.map(c => c.handle));\nconst seen = new Set($('Get brand proposals').all().map(i => String(i.json.vendor || '').toLowerCase()));\nconst skip = new Set(s.exclude_vendors.map(v => v.toLowerCase()));\nconst slug = t => t.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');\nreturn Object.entries(count)\n  .filter(([v]) => !skip.has(v.toLowerCase()) && !hasPage.has(v.toLowerCase()) && !seen.has(v.toLowerCase()) && !handles.has(slug(v)))\n  .map(([v, n]) => ({ json: { key: 'VENDOR||' + v.toLowerCase(), source: 'brand', vendor: v, title: v, handle: slug(v), live_count: n,\n    rule_set: JSON.stringify([{ column: 'VENDOR', relation: 'EQUALS', condition: v }]), status: s.review_brands ? 'pending' : 'approved' } }));"
+      }
+    },
+    {
+      "id": "0abac30f-f36f-55c5-b738-204c7d6be9fd",
+      "name": "Save brands",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        2700
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "key": "={{ $json.key }}",
+            "kind": "create",
+            "source": "brand",
+            "vendor": "={{ $json.vendor }}",
+            "raw_title": "={{ $json.vendor }}",
+            "title": "={{ $json.title }}",
+            "handle": "={{ $json.handle }}",
+            "live_count": "={{ $json.live_count }}",
+            "rule_set": "={{ $json.rule_set }}",
+            "name_source": "vendor",
+            "status": "={{ $json.status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "vendor",
+              "displayName": "vendor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "raw_title",
+              "displayName": "raw_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "handle",
+              "displayName": "handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "live_count",
+              "displayName": "live_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rule_set",
+              "displayName": "rule_set",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "name_source",
+              "displayName": "name_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "473b6374-5c49-5b9d-86fe-6143f96f3ba0",
+      "name": "Review brands?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        2700
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "review-brands",
+              "leftValue": "={{ $('Brands settings').first().json.review_brands }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1a04b70-0102-5ad5-ac81-773eab66d13f",
+      "name": "Post brand card",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1980,
+        2610
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Brands settings').first().json.slack_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ JSON.stringify({ blocks: [\n  { type: 'section', text: { type: 'mrkdwn', text: '*New brand page: ' + $json.title + '* (`/collections/' + $json.handle + '`)\\n' + $json.live_count + ' live products. Rule: vendor is `' + $json.vendor + '`' } },\n  { type: 'actions', elements: [\n    { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Approve & Create' }, action_id: 'collection_approve', value: String($json.id) },\n    { type: 'button', text: { type: 'plain_text', text: 'Skip' }, action_id: 'collection_skip', value: String($json.id) } ] }\n] }) }}",
+        "text": "=New brand page: {{ $json.title }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "6ed2678b-f9d7-554d-ba01-707510d8a782",
+      "name": "Save brand card",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        2610
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Save brands').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "slack_channel": "={{ $json.channel }}",
+            "slack_ts": "={{ $json.message_timestamp }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "slack_channel",
+              "displayName": "slack_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "slack_ts",
+              "displayName": "slack_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4dac1c93-9e59-50e1-8199-ee3b5cc37214",
+      "name": "Create brand pages",
+      "notes": "Calls the Apply lane on this canvas.",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "position": [
+        1980,
+        2790
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ 0 }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "79db51fb-6caa-5e4e-8cfc-bd1bd5f54197",
+      "name": "Post brand summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        2200,
+        2790
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Brands settings').first().json.slack_channel, unfurl_links: false,\n  text: ':label: New brand pages (' + $('Save brands').all().length + '): ' + $('Save brands').all().map(i => i.json.title).join(', ') +\n    '. Any that failed are posted separately.' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "9c049d12-2078-5839-8e54-195eef332b89",
+      "name": "Lane Retire",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        3060
+      ],
+      "parameters": {
+        "content": "## Retire (weekly)\nCounts live products in every collection this template created (brand pages are left alone). Proposes unpublishing below `retire_below` and republishing at `restore_at`.",
+        "width": 2860,
+        "height": 520,
+        "color": 7
+      }
+    },
+    {
+      "id": "b7dfe59b-a7e1-56f7-a7c3-f0c5cfa5556e",
+      "name": "Every Sunday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        3210
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                0
+              ],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "df1cb778-92be-5fff-8b93-f91b89b376c9",
+      "name": "Run Retire now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        3390
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "974bd273-cf07-5a76-b8f6-51f28a3df021",
+      "name": "Retire settings",
+      "notes": "Your settings for the Retire lane. Create at 5 and retire under 3, so a collection near the floor does not flip every week.",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        3300
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"retire_below\": 3,\n  \"restore_at\": 5,\n  \"keep_days\": 28,\n  \"slack_channel\": \"#review-collections\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "befa8770-bbc1-502b-8ccd-bfc00192c35a",
+      "name": "Get Shopify token for Retire",
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "position": [
+        440,
+        3300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Retire settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "e7b041e0-0d7b-58a5-9806-e2c1d4267414",
+      "name": "Get all proposals",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "executeOnce": true,
+      "position": [
+        660,
+        3300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "b018702c-f0af-5ad0-808d-b5105e0ea594",
+      "name": "Collections to check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        3300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Retire settings').first().json;\nconst rows = $('Get all proposals').all().map(i => i.json);\nconst byCol = {};\nfor (const r of rows) if (r.collection_id) (byCol[r.collection_id] ??= []).push(r);\nconst cutoff = Date.now() - s.keep_days * 864e5;\nconst out = [];\nfor (const [id, rs] of Object.entries(byCol)) {\n  const made = rs.find(r => r.kind === 'create' && r.status === 'applied' && r.source !== 'brand');\n  if (!made) continue;\n  const changes = rs.filter(r => r.kind !== 'create').sort((a, b) => a.id - b.id);\n  if (changes.some(r => ['pending', 'approved', 'applying'].includes(r.status))) continue;    // a card is already out\n  if (changes.some(r => r.status === 'skipped' && new Date(r.updatedAt) > cutoff)) continue;  // you chose to keep it recently\n  const last = changes.filter(r => r.status === 'applied').at(-1);\n  out.push({ json: { collection_id: id, title: made.title, handle: made.handle, source: made.source, live: !last || last.kind === 'restore' } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "d5802055-a951-541a-8c8e-21e743248f4b",
+      "name": "Count products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        3300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Retire settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Retire').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'query($id: ID!) { collection(id: $id) { products(first: 250) { nodes { status totalInventory tracksInventory } } } }', variables: { id: $json.collection_id } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "900f06a7-7b76-5adb-b7e4-5af52dad04bf",
+      "name": "Pick changes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        3300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Retire settings').first().json;\nconst cols = $('Collections to check').all().map(i => i.json);\nconst today = new Date().toISOString().slice(0, 10);\nreturn $input.all().flatMap((it, i) => {\n  const c = cols[i], col = it.json.data?.collection;\n  if (!col) return [];                                         // deleted in Shopify\n  const live = col.products.nodes.filter(p => p.status === 'ACTIVE' && (!p.tracksInventory || p.totalInventory > 0)).length;\n  const kind = c.live && live < s.retire_below ? 'retire' : !c.live && live >= s.restore_at ? 'restore' : null;\n  if (!kind) return [];\n  return [{ json: { key: `${kind}|${c.collection_id}|${today}`, kind, source: c.source, title: c.title, handle: c.handle,\n    collection_id: c.collection_id, live_count: live, floor: kind === 'retire' ? s.retire_below : s.restore_at } }];\n});"
+      }
+    },
+    {
+      "id": "50aea7ee-0656-5bb2-ab1f-4b816d7bb753",
+      "name": "Save changes",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        3300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "key": "={{ $json.key }}",
+            "kind": "={{ $json.kind }}",
+            "source": "={{ $json.source }}",
+            "title": "={{ $json.title }}",
+            "handle": "={{ $json.handle }}",
+            "collection_id": "={{ $json.collection_id }}",
+            "live_count": "={{ $json.live_count }}",
+            "floor": "={{ $json.floor }}",
+            "status": "pending"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "handle",
+              "displayName": "handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "collection_id",
+              "displayName": "collection_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "live_count",
+              "displayName": "live_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "floor",
+              "displayName": "floor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "339fbada-355a-50f4-a29d-72e3ebb48d41",
+      "name": "Post retire card",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1760,
+        3300
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Retire settings').first().json.slack_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ JSON.stringify({ blocks: [\n  { type: 'section', text: { type: 'mrkdwn', text: $json.kind === 'retire'\n    ? '*Unpublish ' + $json.title + '*: ' + $json.live_count + ' live products (min ' + $json.floor + ')\\n`/collections/' + $json.handle + '`'\n    : '*Republish ' + $json.title + '*: back to ' + $json.live_count + ' live products\\n`/collections/' + $json.handle + '`' } },\n  { type: 'actions', elements: [\n    { type: 'button', style: 'primary', text: { type: 'plain_text', text: $json.kind === 'retire' ? 'Unpublish' : 'Republish' }, action_id: 'collection_approve', value: String($json.id) },\n    { type: 'button', text: { type: 'plain_text', text: $json.kind === 'retire' ? 'Keep' : 'Leave unpublished' }, action_id: 'collection_skip', value: String($json.id) } ] }\n] }) }}",
+        "text": "={{ ($json.kind === 'retire' ? 'Unpublish ' : 'Republish ') + $json.title }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "b4e8c896-5385-5b43-bae5-847049c7f3d0",
+      "name": "Save retire card",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        3300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_proposals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Save changes').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "slack_channel": "={{ $json.channel }}",
+            "slack_ts": "={{ $json.message_timestamp }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "slack_channel",
+              "displayName": "slack_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "slack_ts",
+              "displayName": "slack_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Create collection_proposals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Name the collection",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Name the collection",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Monday": {
+      "main": [
+        [
+          {
+            "node": "Propose settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Propose now": {
+      "main": [
+        [
+          {
+            "node": "Propose settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Propose settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Get products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get products": {
+      "main": [
+        [
+          {
+            "node": "Get definitions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get definitions": {
+      "main": [
+        [
+          {
+            "node": "Get collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get collections": {
+      "main": [
+        [
+          {
+            "node": "Get proposals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get proposals": {
+      "main": [
+        [
+          {
+            "node": "Find candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find candidates": {
+      "main": [
+        [
+          {
+            "node": "Name the collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Name the collection": {
+      "main": [
+        [
+          {
+            "node": "Check names",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check names": {
+      "main": [
+        [
+          {
+            "node": "Anything to look up?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to look up?": {
+      "main": [
+        [
+          {
+            "node": "Search volume",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search volume": {
+      "main": [
+        [
+          {
+            "node": "Pick keyword",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick keyword": {
+      "main": [
+        [
+          {
+            "node": "Any with demand?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any with demand?": {
+      "main": [
+        [
+          {
+            "node": "Keyword difficulty",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keyword difficulty": {
+      "main": [
+        [
+          {
+            "node": "Demand only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demand only": {
+      "main": [
+        [
+          {
+            "node": "Rank check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rank check": {
+      "main": [
+        [
+          {
+            "node": "Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score": {
+      "main": [
+        [
+          {
+            "node": "Save proposals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save proposals": {
+      "main": [
+        [
+          {
+            "node": "Pick cards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick cards": {
+      "main": [
+        [
+          {
+            "node": "Post the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the card": {
+      "main": [
+        [
+          {
+            "node": "Save the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All skipped": {
+      "main": [
+        [
+          {
+            "node": "Save proposals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Respond to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Slack": {
+      "main": [
+        [
+          {
+            "node": "Read the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the click": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Get pending proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get pending proposal": {
+      "main": [
+        [
+          {
+            "node": "Approve or skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve or skip?": {
+      "main": [
+        [
+          {
+            "node": "Mark approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark approved": {
+      "main": [
+        [
+          {
+            "node": "Update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update the card": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Send to Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark skipped": {
+      "main": [
+        [
+          {
+            "node": "Update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When called to apply": {
+      "main": [
+        [
+          {
+            "node": "Apply settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Apply": {
+      "main": [
+        [
+          {
+            "node": "Find the publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find the publication": {
+      "main": [
+        [
+          {
+            "node": "Get approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get approved": {
+      "main": [
+        [
+          {
+            "node": "Pick rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick rows": {
+      "main": [
+        [
+          {
+            "node": "Claim rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim rows": {
+      "main": [
+        [
+          {
+            "node": "Route by kind",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by kind": {
+      "main": [
+        [
+          {
+            "node": "Check handle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recount products",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Republish collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check handle": {
+      "main": [
+        [
+          {
+            "node": "Handle free?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle free?": {
+      "main": [
+        [
+          {
+            "node": "Create collection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create collection": {
+      "main": [
+        [
+          {
+            "node": "Created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Created?": {
+      "main": [
+        [
+          {
+            "node": "Publish collection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish collection": {
+      "main": [
+        [
+          {
+            "node": "Mark created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark created": {
+      "main": [
+        [
+          {
+            "node": "Card or failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark failed": {
+      "main": [
+        [
+          {
+            "node": "Card or failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recount products": {
+      "main": [
+        [
+          {
+            "node": "Still thin?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still thin?": {
+      "main": [
+        [
+          {
+            "node": "Unpublish collection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark kept",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unpublish collection": {
+      "main": [
+        [
+          {
+            "node": "Mark unpublished",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark unpublished": {
+      "main": [
+        [
+          {
+            "node": "Card or failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark kept": {
+      "main": [
+        [
+          {
+            "node": "Card or failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Republish collection": {
+      "main": [
+        [
+          {
+            "node": "Mark republished",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark republished": {
+      "main": [
+        [
+          {
+            "node": "Card or failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card or failure?": {
+      "main": [
+        [
+          {
+            "node": "Reply in Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day": {
+      "main": [
+        [
+          {
+            "node": "Brands settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Brands now": {
+      "main": [
+        [
+          {
+            "node": "Brands settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brands settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Brands": {
+      "main": [
+        [
+          {
+            "node": "Get vendors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get vendors": {
+      "main": [
+        [
+          {
+            "node": "Get brand collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get brand collections": {
+      "main": [
+        [
+          {
+            "node": "Get brand proposals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get brand proposals": {
+      "main": [
+        [
+          {
+            "node": "Find new brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find new brands": {
+      "main": [
+        [
+          {
+            "node": "Save brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save brands": {
+      "main": [
+        [
+          {
+            "node": "Review brands?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review brands?": {
+      "main": [
+        [
+          {
+            "node": "Post brand card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create brand pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post brand card": {
+      "main": [
+        [
+          {
+            "node": "Save brand card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create brand pages": {
+      "main": [
+        [
+          {
+            "node": "Post brand summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Sunday": {
+      "main": [
+        [
+          {
+            "node": "Retire settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Retire now": {
+      "main": [
+        [
+          {
+            "node": "Retire settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retire settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Retire",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Retire": {
+      "main": [
+        [
+          {
+            "node": "Get all proposals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all proposals": {
+      "main": [
+        [
+          {
+            "node": "Collections to check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collections to check": {
+      "main": [
+        [
+          {
+            "node": "Count products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count products": {
+      "main": [
+        [
+          {
+            "node": "Pick changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick changes": {
+      "main": [
+        [
+          {
+            "node": "Save changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save changes": {
+      "main": [
+        [
+          {
+            "node": "Post retire card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post retire card": {
+      "main": [
+        [
+          {
+            "node": "Save retire card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

@@ -1,0 +1,4819 @@
+{
+  "name": "Add products to Shopify",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Add products to Shopify\n\nBrings a wholesaler's CSV price list and hand-picked AliExpress listings into one table, finds what you don't sell yet, asks you in Slack, writes the copy with AI, creates a Shopify draft and puts it live on a second tap.\n\n### How it works\n1. **Setup** (run once) creates four data tables and looks up your Online Store publication and location IDs.\n2. **Ingest** (daily, or upload a CSV in the form) maps the price list and refreshes AliExpress cost, stock and freight in `offers`.\n3. **Token** (every 6 hours) refreshes the AliExpress access token.\n4. **Detect** (daily) applies `category_map`, skips what you already sell, prices the rest and posts a Slack card each. Hand-picked AliExpress rows go straight to Draft.\n5. **Review** (Slack buttons) checks the signature and handles both cards.\n6. **Draft** writes and checks the copy, creates a DRAFT product and posts a second card.\n7. **Go live** checks the draft, then publishes it to your Online Store.\n\n### Setup\n1. Credentials: Custom Auth with your Shopify client ID and secret on the four **Get Shopify token** nodes, Slack API on the Slack nodes, Crypto with your Slack signing secret on **Sign the request**, Crypto with your AliExpress App Secret on the three AliExpress **Sign** nodes, Ollama on **Ollama Chat Model**.\n2. Fill in **Ingest settings**, then paste the same JSON into every settings node.\n3. Run **Run once to set up** and copy the two IDs it finds into the settings.\n4. Point your Slack app's Interactivity URL at **Slack button click**.\n5. Add rules to `category_map`, then test with `dry_run` on.\n\n### Customisation\n- Swap **Ollama Chat Model** for any chat model sub-node.\n- Another supplier is another Ingest branch writing the same `offers` columns.\n- Data tables share a 200 MiB limit. Past that, move `offers` to Postgres.",
+        "width": 880,
+        "height": 700,
+        "color": 1
+      },
+      "id": "d681a80e-7fcd-5586-b07a-0182a33ee138",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup (run once)\nCreates the four data tables, then looks up your Online Store publication and your locations. Copy both IDs into the settings. Safe to run again: existing tables are kept.",
+        "width": 1840,
+        "height": 360,
+        "color": 7
+      },
+      "id": "1b085d9d-1b51-5b3e-8aa3-0351141c09ea",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -140
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "5a46679f-cd6b-5aac-973a-48e5c9f68497",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"currency\": \"USD\",\n  \"prices_include_tax\": false,\n  \"tax_rate\": 0,\n  \"markup\": 1.6,\n  \"min_margin\": 0.15,\n  \"round_to\": 0.95,\n  \"ship_to_country\": \"US\",\n  \"ships_from_allowed\": [\"china\", \"china mainland\", \"united states\"],\n  \"max_delivery_days\": 20,\n  \"batch_limit\": 15,\n  \"aliexpress_pre_approved\": true,\n  \"slack_channel\": \"C0123456789\",\n  \"location_id\": \"gid://shopify/Location/...\",\n  \"online_store_publication_id\": \"gid://shopify/Publication/...\",\n  \"default_vendor\": \"Your Store\",\n  \"dry_run\": true,\n  \"source_name\": \"wholesaler\",\n  \"price_list_url\": \"https://example.com/price-list.csv\",\n  \"columns\": {\n    \"source_sku\": \"Stock Code\", \"brand\": \"Manufacturer\", \"mpn\": \"Part No\", \"gtin\": \"EAN\",\n    \"title\": \"Description\", \"description\": \"Long Description\", \"category\": \"Category\",\n    \"cost\": \"Dealer Ex Tax\", \"rrp\": \"RRP\", \"stock\": \"Stock\", \"image\": \"Image URL\"\n  },\n  \"cost_includes_tax\": false,\n  \"shipping_per_unit\": 0,\n  \"ships_from\": \"united states\"\n}",
+        "options": {}
+      },
+      "id": "df2487a3-1228-5b88-bb23-5c28027b468d",
+      "name": "Setup settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        40
+      ],
+      "notes": "Your settings. Every lane has a copy of the same JSON."
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "offers",
+        "columns": {
+          "column": [
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "source_sku",
+              "type": "string"
+            },
+            {
+              "name": "item_id",
+              "type": "string"
+            },
+            {
+              "name": "sku_id",
+              "type": "string"
+            },
+            {
+              "name": "mpn",
+              "type": "string"
+            },
+            {
+              "name": "gtin",
+              "type": "string"
+            },
+            {
+              "name": "brand",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "name": "description",
+              "type": "string"
+            },
+            {
+              "name": "category_raw",
+              "type": "string"
+            },
+            {
+              "name": "product_type",
+              "type": "string"
+            },
+            {
+              "name": "shopify_category_id",
+              "type": "string"
+            },
+            {
+              "name": "ships_from",
+              "type": "string"
+            },
+            {
+              "name": "image_url",
+              "type": "string"
+            },
+            {
+              "name": "raw",
+              "type": "string"
+            },
+            {
+              "name": "freight_method",
+              "type": "string"
+            },
+            {
+              "name": "block_reason",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "reviewed_by",
+              "type": "string"
+            },
+            {
+              "name": "product_id",
+              "type": "string"
+            },
+            {
+              "name": "card_ts",
+              "type": "string"
+            },
+            {
+              "name": "card_nonce",
+              "type": "string"
+            },
+            {
+              "name": "draft_card_ts",
+              "type": "string"
+            },
+            {
+              "name": "cost",
+              "type": "number"
+            },
+            {
+              "name": "shipping_cost",
+              "type": "number"
+            },
+            {
+              "name": "rrp",
+              "type": "number"
+            },
+            {
+              "name": "stock",
+              "type": "number"
+            },
+            {
+              "name": "delivery_days",
+              "type": "number"
+            },
+            {
+              "name": "est_price",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "28eea84f-9401-55c1-be21-8938a017b8fa",
+      "name": "Create offers",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "category_map",
+        "columns": {
+          "column": [
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "match_field",
+              "type": "string"
+            },
+            {
+              "name": "pattern",
+              "type": "string"
+            },
+            {
+              "name": "product_type",
+              "type": "string"
+            },
+            {
+              "name": "shopify_category_id",
+              "type": "string"
+            },
+            {
+              "name": "action",
+              "type": "string"
+            },
+            {
+              "name": "reason",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "08d88c64-67e9-599a-9b13-ca80d1589e5a",
+      "name": "Create category_map",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "aliexpress_items",
+        "columns": {
+          "column": [
+            {
+              "name": "item_id",
+              "type": "string"
+            },
+            {
+              "name": "sku_id",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "523f1840-711e-5405-bd87-43f8db959ea3",
+      "name": "Create aliexpress_items",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "aliexpress_auth",
+        "columns": {
+          "column": [
+            {
+              "name": "app_key",
+              "type": "string"
+            },
+            {
+              "name": "access_token",
+              "type": "string"
+            },
+            {
+              "name": "refresh_token",
+              "type": "string"
+            },
+            {
+              "name": "access_expires_at",
+              "type": "string"
+            },
+            {
+              "name": "refresh_expires_at",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "6407169c-aa81-59a7-b940-b885dbeaf277",
+      "name": "Create aliexpress_auth",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "97b0c5b4-1175-541a-a105-b2d409d82140",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        40
+      ],
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query SetupIds {\n  publications(first: 20) { nodes { id catalog { title } } }\n  locations(first: 10) { nodes { id name } }\n}` }) }}",
+        "options": {}
+      },
+      "id": "faf3eafe-532c-5b64-a327-a8219c1c85e1",
+      "name": "Get publication and location IDs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        40
+      ],
+      "notes": "Copy the Online Store publication ID and your main location ID into the settings."
+    },
+    {
+      "parameters": {
+        "content": "## Ingest (daily, or upload a CSV)\nTop: maps your wholesaler's price list into `offers`. Bottom: reads each listing in `aliexpress_items`, keeps in-stock variants that ship from an allowed country, and adds the cheapest tracked freight. Status is never overwritten.",
+        "width": 3200,
+        "height": 900,
+        "color": 7
+      },
+      "id": "f98870d0-8e9e-5027-8e7c-16003c48da7b",
+      "name": "Lane Ingest",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 5
+            }
+          ]
+        }
+      },
+      "id": "ecfb2da5-a8ee-5027-9bc9-4e7a3d79c709",
+      "name": "Every day at 05:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Upload a price list",
+        "formDescription": "A CSV with the columns named in the settings.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Price list",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".csv",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "66a67f41-c0a4-5f87-9212-795df0ab725b",
+      "name": "Upload a price list",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"currency\": \"USD\",\n  \"prices_include_tax\": false,\n  \"tax_rate\": 0,\n  \"markup\": 1.6,\n  \"min_margin\": 0.15,\n  \"round_to\": 0.95,\n  \"ship_to_country\": \"US\",\n  \"ships_from_allowed\": [\"china\", \"china mainland\", \"united states\"],\n  \"max_delivery_days\": 20,\n  \"batch_limit\": 15,\n  \"aliexpress_pre_approved\": true,\n  \"slack_channel\": \"C0123456789\",\n  \"location_id\": \"gid://shopify/Location/...\",\n  \"online_store_publication_id\": \"gid://shopify/Publication/...\",\n  \"default_vendor\": \"Your Store\",\n  \"dry_run\": true,\n  \"source_name\": \"wholesaler\",\n  \"price_list_url\": \"https://example.com/price-list.csv\",\n  \"columns\": {\n    \"source_sku\": \"Stock Code\", \"brand\": \"Manufacturer\", \"mpn\": \"Part No\", \"gtin\": \"EAN\",\n    \"title\": \"Description\", \"description\": \"Long Description\", \"category\": \"Category\",\n    \"cost\": \"Dealer Ex Tax\", \"rrp\": \"RRP\", \"stock\": \"Stock\", \"image\": \"Image URL\"\n  },\n  \"cost_includes_tax\": false,\n  \"shipping_per_unit\": 0,\n  \"ships_from\": \"united states\"\n}",
+        "options": {}
+      },
+      "id": "dee82da4-e014-5f3d-949b-f1048fba00ad",
+      "name": "Ingest settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        560
+      ],
+      "notes": "Your settings. Every lane has a copy of the same JSON."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e22af320-9e74-5823-924d-4a809b7f00ec",
+              "leftValue": "={{ $('Upload a price list').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c4abc23e-f7a9-551d-82f3-1b7768a73c43",
+      "name": "Uploaded a file?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// A Set node drops files, so take the upload straight from the form\nconst file = Object.values($('Upload a price list').first().binary)[0];\nreturn [{ json: {}, binary: { data: file } }];"
+      },
+      "id": "605a4965-472c-5120-a176-49f74b34e036",
+      "name": "Use the uploaded file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.price_list_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "09af75e3-18e8-58bd-abfc-11b1ff407bfb",
+      "name": "Download price list",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        460
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "84cc5700-82dc-5cf4-b557-cc8f6c933133",
+      "name": "Read price list",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One price list row -> one offer row. Column names come from settings.\nconst s = $('Ingest settings').first().json;\nconst c = s.columns; // {\"source_sku\":\"Stock Code\",\"brand\":\"Manufacturer\",\"mpn\":\"Part No\", ...}\nconst text = v => (v ?? '').toString().trim();\nconst num = v => {\n  let t = text(v).replace(/[^0-9.,\\-]/g, '');\n  if (/,\\d{1,2}$/.test(t)) t = t.replace(/\\./g, '').replace(',', '.'); // \"1.234,50\" -> 1234.50\n  else t = t.replace(/,/g, '');                                       // \"1,234.50\" -> 1234.50\n  const n = parseFloat(t); return Number.isFinite(n) ? n : null;\n};\nconst qty = v => { const n = parseInt(text(v).replace(/[^0-9]/g, ''), 10); return Number.isFinite(n) ? n : 0; }; // \"20+\" -> 20, \"CALL\" -> 0\n\nreturn $input.all().map(({ json: r }) => {\n  let cost = num(r[c.cost]);\n  if (cost !== null && s.cost_includes_tax) cost = +(cost / (1 + s.tax_rate)).toFixed(2);\n  return { json: {\n    source: s.source_name, source_sku: text(r[c.source_sku]),\n    mpn: text(r[c.mpn]), gtin: text(r[c.gtin]).replace(/\\D/g, ''),\n    brand: text(r[c.brand]), title: text(r[c.title]), description: text(r[c.description]).slice(0, 1500),\n    category_raw: text(r[c.category]), cost, shipping_cost: s.shipping_per_unit || 0,\n    rrp: num(r[c.rrp]), stock: qty(r[c.stock]), image_url: text(r[c.image]),\n    ships_from: s.ships_from, raw: JSON.stringify(r).slice(0, 2000),\n  } };\n}).filter(i => i.json.source_sku && i.json.cost !== null);"
+      },
+      "id": "996389f4-eafb-5348-a9a0-b6a7ece72ef2",
+      "name": "Map price list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "source",
+              "condition": "eq",
+              "keyValue": "={{ $json.source }}"
+            },
+            {
+              "keyName": "source_sku",
+              "condition": "eq",
+              "keyValue": "={{ $json.source_sku }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source": "={{ $json.source }}",
+            "source_sku": "={{ $json.source_sku }}",
+            "mpn": "={{ $json.mpn }}",
+            "gtin": "={{ $json.gtin }}",
+            "brand": "={{ $json.brand }}",
+            "title": "={{ $json.title }}",
+            "description": "={{ $json.description }}",
+            "category_raw": "={{ $json.category_raw }}",
+            "cost": "={{ $json.cost }}",
+            "shipping_cost": "={{ $json.shipping_cost }}",
+            "rrp": "={{ $json.rrp }}",
+            "stock": "={{ $json.stock }}",
+            "image_url": "={{ $json.image_url }}",
+            "ships_from": "={{ $json.ships_from }}",
+            "raw": "={{ $json.raw }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source_sku",
+              "displayName": "source_sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "mpn",
+              "displayName": "mpn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "gtin",
+              "displayName": "gtin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "category_raw",
+              "displayName": "category_raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "cost",
+              "displayName": "cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "shipping_cost",
+              "displayName": "shipping_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rrp",
+              "displayName": "rrp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "stock",
+              "displayName": "stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ships_from",
+              "displayName": "ships_from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "raw",
+              "displayName": "raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c1b4a256-a0a8-571b-9dab-a703cac418b9",
+      "name": "Save price list rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        560
+      ],
+      "notes": "Matches on source and source_sku. status is left out, so reviewed rows keep theirs."
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"currency\": \"USD\",\n  \"prices_include_tax\": false,\n  \"tax_rate\": 0,\n  \"markup\": 1.6,\n  \"min_margin\": 0.15,\n  \"round_to\": 0.95,\n  \"ship_to_country\": \"US\",\n  \"ships_from_allowed\": [\"china\", \"china mainland\", \"united states\"],\n  \"max_delivery_days\": 20,\n  \"batch_limit\": 15,\n  \"aliexpress_pre_approved\": true,\n  \"slack_channel\": \"C0123456789\",\n  \"location_id\": \"gid://shopify/Location/...\",\n  \"online_store_publication_id\": \"gid://shopify/Publication/...\",\n  \"default_vendor\": \"Your Store\",\n  \"dry_run\": true,\n  \"source_name\": \"wholesaler\",\n  \"price_list_url\": \"https://example.com/price-list.csv\",\n  \"columns\": {\n    \"source_sku\": \"Stock Code\", \"brand\": \"Manufacturer\", \"mpn\": \"Part No\", \"gtin\": \"EAN\",\n    \"title\": \"Description\", \"description\": \"Long Description\", \"category\": \"Category\",\n    \"cost\": \"Dealer Ex Tax\", \"rrp\": \"RRP\", \"stock\": \"Stock\", \"image\": \"Image URL\"\n  },\n  \"cost_includes_tax\": false,\n  \"shipping_per_unit\": 0,\n  \"ships_from\": \"united states\"\n}",
+        "options": {}
+      },
+      "id": "e8f7bdbc-d238-5745-97d9-f8049b7dcf67",
+      "name": "AliExpress settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        860
+      ],
+      "notes": "Your settings. Every lane has a copy of the same JSON."
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "aliexpress_auth"
+        },
+        "returnAll": true
+      },
+      "id": "20361768-a356-5c80-98c5-3763c5701375",
+      "name": "Get token",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        860
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "aliexpress_items"
+        },
+        "returnAll": true
+      },
+      "id": "710d8ed5-d8ca-53f7-81ec-97acc8b36cef",
+      "name": "Get AliExpress items",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        860
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Parameters and string to sign for aliexpress.ds.product.get\nconst s = $('AliExpress settings').first().json;\nconst auth = $('Get token').first().json; // the one row in aliexpress_auth\nconst ids = [...new Set($input.all().map(i => String(i.json.item_id)))]; // one call per listing\nreturn ids.map(item_id => {\n  const params = {\n    method: 'aliexpress.ds.product.get',\n    app_key: auth.app_key,\n    access_token: auth.access_token,\n    timestamp: String(Date.now()),\n    sign_method: 'sha256',\n    product_id: item_id,\n    ship_to_country: s.ship_to_country,\n    target_currency: s.currency,\n    target_language: 'en_US',\n  };\n  const toSign = Object.keys(params).sort().map(k => k + params[k]).join('');\n  return { json: { item_id, params, toSign } };\n});"
+      },
+      "id": "833ba977-9e06-5ab2-91f4-e17338801826",
+      "name": "Build product request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.toSign }}",
+        "dataPropertyName": "sign",
+        "encoding": "hex"
+      },
+      "id": "c2cf3751-1d46-51e5-b541-7bfcf3b1130c",
+      "name": "Sign product request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        860
+      ],
+      "notes": "Crypto credential: Hmac Secret = your AliExpress App Secret.",
+      "credentials": {
+        "crypto": {
+          "name": "AliExpress App Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-sg.aliexpress.com/sync",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ ...$json.params, sign: $json.sign.toUpperCase() }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 1000
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "136a5406-f9e9-5d54-81f1-7c1f6de56fb7",
+      "name": "Get AliExpress product",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('AliExpress settings').first().json;\nconst allowed = s.ships_from_allowed;\nconst wanted = $('Get AliExpress items').all().map(i => i.json); // a blank sku_id means every variant\nconst countryRx = /^(china( mainland)?|united (kingdom|states)|australia|spain|france|germany|poland|italy|czech republic|turkey|brazil|russian federation|saudi arabia)$/i;\nconst out = [];\nfor (const { json } of $input.all()) {\n  const r = json.aliexpress_ds_product_get_response?.result;\n  if (!r?.ae_item_base_info_dto) continue; // API error such as SHIP_TO_COUNTRY_PROHIBITED: the rows keep their last values\n  const item = String(r.ae_item_base_info_dto.product_id);\n  const skus = wanted.filter(w => String(w.item_id) === item).map(w => String(w.sku_id || ''));\n  const brandProp = (r.ae_item_properties?.ae_item_property || []).find(p => /^brand/i.test(p.attr_name));\n  const brand = /^(none|no brand|oem|other|unbranded)$/i.test(brandProp?.attr_value || 'none') ? '' : brandProp.attr_value;\n  const images = (r.ae_multimedia_info_dto?.image_urls || '').split(';').filter(Boolean);\n  for (const sku of r.ae_item_sku_info_dtos?.ae_item_sku_info_d_t_o || []) {\n    const props = (sku.ae_sku_property_dtos?.ae_sku_property_d_t_o || []).map(p => p.property_value_definition_name || p.sku_property_value);\n    const shipsFrom = props.find(p => countryRx.test(p)) || '';\n    if (shipsFrom && !allowed.includes(shipsFrom.toLowerCase())) continue;\n    if (Number(sku.sku_available_stock) <= 0) continue;\n    if (!skus.includes('') && !skus.includes(String(sku.sku_id))) continue;\n    const variant = props.filter(p => p !== shipsFrom).join(' / ');\n    out.push({ json: {\n      source: 'aliexpress', source_sku: `${item}-${sku.sku_id}`, item_id: item, sku_id: String(sku.sku_id),\n      brand, gtin: (sku.ean_code || '').replace(/\\D/g, ''), mpn: '',\n      title: [r.ae_item_base_info_dto.subject, variant].filter(Boolean).join(' | '),\n      category_raw: String(r.ae_item_base_info_dto.category_id),\n      cost: Number(sku.offer_sale_price || sku.sku_price), stock: Number(sku.sku_available_stock),\n      ships_from: shipsFrom || r.ae_store_info?.store_country_code || '',\n      image_url: (sku.ae_sku_property_dtos?.ae_sku_property_d_t_o || []).find(p => p.sku_image)?.sku_image || images[0] || '',\n      block_reason: sku.currency_code === s.currency ? '' : `priced in ${sku.currency_code}`,\n    } });\n  }\n}\nreturn out;"
+      },
+      "id": "72493bdb-e24c-5b19-a5fa-c897e69c1f64",
+      "name": "Pick variants",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Parameters and string to sign for aliexpress.ds.freight.query, one request per variant\nconst s = $('AliExpress settings').first().json;\nconst auth = $('Get token').first().json;\nreturn $input.all().map(({ json: row }) => {\n  const params = {\n    method: 'aliexpress.ds.freight.query',\n    app_key: auth.app_key,\n    access_token: auth.access_token,\n    timestamp: String(Date.now()),\n    sign_method: 'sha256',\n    queryDeliveryReq: JSON.stringify({ quantity: 1, shipToCountry: s.ship_to_country, productId: row.item_id,\n      selectedSkuId: row.sku_id, language: 'en_US', locale: 'en_US', currency: s.currency }),\n  };\n  const toSign = Object.keys(params).sort().map(k => k + params[k]).join('');\n  return { json: { ...row, params, toSign } };\n});"
+      },
+      "id": "963a301e-d708-5aa7-b415-9697ee63d824",
+      "name": "Build freight request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.toSign }}",
+        "dataPropertyName": "sign",
+        "encoding": "hex"
+      },
+      "id": "3a52f8c6-c8f0-5555-b0f1-3f5c52b480cd",
+      "name": "Sign freight request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        860
+      ],
+      "notes": "Same AliExpress credential.",
+      "credentials": {
+        "crypto": {
+          "name": "AliExpress App Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-sg.aliexpress.com/sync",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ ...$json.params, sign: $json.sign.toUpperCase() }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 1000
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "60535306-669e-5710-b00c-35d779f092b2",
+      "name": "Get freight quote",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// shipping_fee_cent is in currency units, not cents (\"172.71\" = US $172.71)\nconst s = $('AliExpress settings').first().json;\nconst sent = $('Sign freight request').all(0, $runIndex); // this run's requests, in the same order as the replies\nreturn $input.all().map(({ json }, i) => {\n  const { params, toSign, sign, retry_freight, ...offer } = sent[i].json;\n  const res = json.aliexpress_ds_freight_query_response?.result;\n  if (res?.msg === 'DELIVERY_RATE_LIMIT_FOR_SINGLE_PRODUCT' && $runIndex === 0) return { json: { ...offer, retry_freight: true } };\n  if (String(res?.success) !== 'true') return { json: { ...offer, shipping_cost: null,\n    block_reason: offer.block_reason || `no freight quote: ${res?.msg || json.error_response?.msg || 'request failed'}` } };\n  const best = (res.delivery_options?.delivery_option_d_t_o || [])\n    .filter(o => String(o.tracking) === 'true' && Number(o.max_delivery_days) <= s.max_delivery_days)\n    .map(o => ({ ...o, fee: String(o.free_shipping) === 'true' ? 0 : Number(o.shipping_fee_cent) }))\n    .sort((a, b) => a.fee - b.fee || a.max_delivery_days - b.max_delivery_days)[0];\n  if (!best) return { json: { ...offer, shipping_cost: null, block_reason: offer.block_reason || `no tracked shipping within ${s.max_delivery_days} days` } };\n  return { json: { ...offer, shipping_cost: best.fee, freight_method: best.company, delivery_days: Number(best.max_delivery_days) } };\n});"
+      },
+      "id": "d882f1dc-fd0c-5275-a8ff-9ae6dcf87b2d",
+      "name": "Apply freight",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8675eac2-66af-5a4c-a7e3-c778f41f43a3",
+              "leftValue": "={{ $json.retry_freight === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "16e33032-a311-5132-9b39-8e59a6b74f4b",
+      "name": "Retry freight?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "id": "d35fafe1-b8b0-5c22-9372-74502a845fbf",
+      "name": "Wait 60 seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "source",
+              "condition": "eq",
+              "keyValue": "={{ $json.source }}"
+            },
+            {
+              "keyName": "source_sku",
+              "condition": "eq",
+              "keyValue": "={{ $json.source_sku }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source": "={{ $json.source }}",
+            "source_sku": "={{ $json.source_sku }}",
+            "item_id": "={{ $json.item_id }}",
+            "sku_id": "={{ $json.sku_id }}",
+            "brand": "={{ $json.brand }}",
+            "gtin": "={{ $json.gtin }}",
+            "mpn": "={{ $json.mpn }}",
+            "title": "={{ $json.title }}",
+            "category_raw": "={{ $json.category_raw }}",
+            "cost": "={{ $json.cost }}",
+            "stock": "={{ $json.stock }}",
+            "ships_from": "={{ $json.ships_from }}",
+            "image_url": "={{ $json.image_url }}",
+            "block_reason": "={{ $json.block_reason }}",
+            "shipping_cost": "={{ $json.shipping_cost }}",
+            "freight_method": "={{ $json.freight_method }}",
+            "delivery_days": "={{ $json.delivery_days }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source_sku",
+              "displayName": "source_sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "item_id",
+              "displayName": "item_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sku_id",
+              "displayName": "sku_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "gtin",
+              "displayName": "gtin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "mpn",
+              "displayName": "mpn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "category_raw",
+              "displayName": "category_raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "cost",
+              "displayName": "cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "stock",
+              "displayName": "stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ships_from",
+              "displayName": "ships_from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "block_reason",
+              "displayName": "block_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "shipping_cost",
+              "displayName": "shipping_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "freight_method",
+              "displayName": "freight_method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "delivery_days",
+              "displayName": "delivery_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "af336724-5a53-5ade-b6b1-3a6bdf898d2a",
+      "name": "Save AliExpress rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2880,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Token (every 6 hours)\nRefreshes the AliExpress access token in `aliexpress_auth` when fewer than 12 hours are left. The README covers the first authorisation.",
+        "width": 2500,
+        "height": 340,
+        "color": 7
+      },
+      "id": "84021af0-80c4-5b65-be42-c248a4c83626",
+      "name": "Lane Token",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "1ed909b2-1732-526d-ba7a-ba5d57eb4fab",
+      "name": "Every 6 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1340
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"currency\": \"USD\",\n  \"prices_include_tax\": false,\n  \"tax_rate\": 0,\n  \"markup\": 1.6,\n  \"min_margin\": 0.15,\n  \"round_to\": 0.95,\n  \"ship_to_country\": \"US\",\n  \"ships_from_allowed\": [\"china\", \"china mainland\", \"united states\"],\n  \"max_delivery_days\": 20,\n  \"batch_limit\": 15,\n  \"aliexpress_pre_approved\": true,\n  \"slack_channel\": \"C0123456789\",\n  \"location_id\": \"gid://shopify/Location/...\",\n  \"online_store_publication_id\": \"gid://shopify/Publication/...\",\n  \"default_vendor\": \"Your Store\",\n  \"dry_run\": true,\n  \"source_name\": \"wholesaler\",\n  \"price_list_url\": \"https://example.com/price-list.csv\",\n  \"columns\": {\n    \"source_sku\": \"Stock Code\", \"brand\": \"Manufacturer\", \"mpn\": \"Part No\", \"gtin\": \"EAN\",\n    \"title\": \"Description\", \"description\": \"Long Description\", \"category\": \"Category\",\n    \"cost\": \"Dealer Ex Tax\", \"rrp\": \"RRP\", \"stock\": \"Stock\", \"image\": \"Image URL\"\n  },\n  \"cost_includes_tax\": false,\n  \"shipping_per_unit\": 0,\n  \"ships_from\": \"united states\"\n}",
+        "options": {}
+      },
+      "id": "a92bba87-bdca-5d57-893a-7f851ddd9e06",
+      "name": "Token settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1340
+      ],
+      "notes": "Your settings. Every lane has a copy of the same JSON."
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "aliexpress_auth"
+        },
+        "returnAll": true
+      },
+      "id": "a1106944-cbc2-5838-81c3-705c8e4ec7c5",
+      "name": "Read token",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        1340
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0bcc0202-b41b-523c-acb8-afff4c7857cb",
+              "leftValue": "={{ Date.parse($json.access_expires_at) - Date.now() < 12 * 3600 * 1000 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e89059ed-bf28-563c-9e5a-312b0520d6df",
+      "name": "Needs refresh?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        1340
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Token refresh is a system call: the API path goes in front of the string to sign\nconst a = $('Read token').first().json;\nconst params = { app_key: a.app_key, refresh_token: a.refresh_token, timestamp: String(Date.now()), sign_method: 'sha256' };\nconst toSign = '/auth/token/refresh' + Object.keys(params).sort().map(k => k + params[k]).join('');\n// POST https://api-sg.aliexpress.com/rest/auth/token/refresh\nreturn [{ json: { params, toSign } }];"
+      },
+      "id": "f6d85b39-df53-5778-a932-ddd392da5a0e",
+      "name": "Build refresh request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1340
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.toSign }}",
+        "dataPropertyName": "sign",
+        "encoding": "hex"
+      },
+      "id": "b205565a-1add-5550-a59a-5e04d0ffc170",
+      "name": "Sign refresh request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1340
+      ],
+      "notes": "Same AliExpress credential.",
+      "credentials": {
+        "crypto": {
+          "name": "AliExpress App Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-sg.aliexpress.com/rest/auth/token/refresh",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ ...$json.params, sign: $json.sign.toUpperCase() }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "f295f1de-68d3-5f46-9caa-2374614cd9b3",
+      "name": "Refresh token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        1340
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "47e511d0-2b65-5e7d-b39e-ba4472ba4af1",
+              "leftValue": "={{ !!$json.access_token }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "057642ec-f8fb-5d7a-82ba-b8912875272b",
+      "name": "Got a new token?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        1340
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "aliexpress_auth"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "app_key",
+              "condition": "eq",
+              "keyValue": "={{ $('Read token').first().json.app_key }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "access_token": "={{ $json.access_token }}",
+            "refresh_token": "={{ $json.refresh_token || $('Read token').first().json.refresh_token }}",
+            "access_expires_at": "={{ new Date(Number($json.expire_time)).toISOString() }}",
+            "refresh_expires_at": "={{ new Date(Number($json.refresh_token_valid_time)).toISOString() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "access_expires_at",
+              "displayName": "access_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "refresh_expires_at",
+              "displayName": "refresh_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a9063356-ae1d-585d-a601-cfd95e69bf6a",
+      "name": "Save new token",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        1340
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Detect (daily)\nApplies `category_map`, checks Shopify by barcode and SKU, prices from landed cost, and posts up to `batch_limit` Slack cards. Hand-picked AliExpress rows skip the card and go straight to Draft.",
+        "width": 2960,
+        "height": 560,
+        "color": 7
+      },
+      "id": "09026d6a-8baf-5b5c-8274-d6fde98555ce",
+      "name": "Lane Detect",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1560
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "id": "5c41786d-069d-5389-ba52-2fabc0174cfd",
+      "name": "Every day at 06:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1760
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"currency\": \"USD\",\n  \"prices_include_tax\": false,\n  \"tax_rate\": 0,\n  \"markup\": 1.6,\n  \"min_margin\": 0.15,\n  \"round_to\": 0.95,\n  \"ship_to_country\": \"US\",\n  \"ships_from_allowed\": [\"china\", \"china mainland\", \"united states\"],\n  \"max_delivery_days\": 20,\n  \"batch_limit\": 15,\n  \"aliexpress_pre_approved\": true,\n  \"slack_channel\": \"C0123456789\",\n  \"location_id\": \"gid://shopify/Location/...\",\n  \"online_store_publication_id\": \"gid://shopify/Publication/...\",\n  \"default_vendor\": \"Your Store\",\n  \"dry_run\": true,\n  \"source_name\": \"wholesaler\",\n  \"price_list_url\": \"https://example.com/price-list.csv\",\n  \"columns\": {\n    \"source_sku\": \"Stock Code\", \"brand\": \"Manufacturer\", \"mpn\": \"Part No\", \"gtin\": \"EAN\",\n    \"title\": \"Description\", \"description\": \"Long Description\", \"category\": \"Category\",\n    \"cost\": \"Dealer Ex Tax\", \"rrp\": \"RRP\", \"stock\": \"Stock\", \"image\": \"Image URL\"\n  },\n  \"cost_includes_tax\": false,\n  \"shipping_per_unit\": 0,\n  \"ships_from\": \"united states\"\n}",
+        "options": {}
+      },
+      "id": "9988fba2-abb1-5d97-8575-ca3d747567c8",
+      "name": "Detect settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1760
+      ],
+      "notes": "Your settings. Every lane has a copy of the same JSON."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Detect settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1a70c63-41e9-57f3-b45e-ce61c53e9f6a",
+      "name": "Get Shopify token for Detect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        1760
+      ],
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "category_map"
+        },
+        "returnAll": true
+      },
+      "id": "fb8a302c-4627-5406-88e1-fddbe2120770",
+      "name": "Get category map",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        1760
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "isEmpty"
+            }
+          ]
+        }
+      },
+      "id": "67113983-3d4c-53dc-ae85-9da7ad77edbc",
+      "name": "Get new offers",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        1760
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Title rules beat category rules. Nothing is dropped: every row leaves with a status.\nconst rules = $('Get category map').all().map(i => i.json).filter(r => r.pattern)\n  .sort((a, b) => (a.match_field === 'title' ? 0 : 1) - (b.match_field === 'title' ? 0 : 1));\nreturn $('Get new offers').all().map(({ json: o }) => {\n  const rule = rules.find(r => r.source === o.source &&\n    (r.match_field === 'title' ? new RegExp(r.pattern, 'i').test(o.title) : r.pattern === o.category_raw));\n  if (o.block_reason) return { json: { ...o, status: 'blocked' } };\n  if (!rule) return { json: { ...o, status: 'unmapped', block_reason: `no rule for \"${o.category_raw}\"` } };\n  if (rule.action === 'block') return { json: { ...o, status: 'blocked', block_reason: rule.reason } };\n  return { json: { ...o, status: 'candidate', product_type: rule.product_type, shopify_category_id: rule.shopify_category_id } };\n});"
+      },
+      "id": "c2a27898-764a-5d17-b384-7483451f7c5b",
+      "name": "Apply category rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1760
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b7cf5ec0-93aa-53c6-b715-e9a42c6b7fb3",
+              "leftValue": "={{ $json.status === 'candidate' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5705240d-5ef1-5387-8f2a-20fcf006b6fb",
+      "name": "Candidates only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "23daeff8-bb0d-5b3c-936e-4accb1fbcbd3",
+              "leftValue": "={{ $json.status !== 'candidate' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c9c99021-e9a8-5730-86d2-124916779620",
+      "name": "Not candidates",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        1900
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.status }}",
+            "block_reason": "={{ $json.block_reason }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "block_reason",
+              "displayName": "block_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "7a5d5191-f57b-5f6a-9d8c-cbafd6019df9",
+      "name": "Save rule results",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        1900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Detect settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Detect').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: `query AlreadySold($q: String!) {\n  productVariants(first: 5, query: $q) {\n    nodes { id sku product { id title status } }\n  }\n}`,\n  variables: { q: [ $json.gtin && 'barcode:' + $json.gtin, $json.mpn && 'sku:\"' + $json.mpn + '\"', 'sku:\"' + $json.source_sku + '\"' ].filter(Boolean).join(' OR ') }\n}) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 10,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "271dcffc-2859-58eb-a28c-70c6dfc05a4f",
+      "name": "Already on store?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        1680
+      ],
+      "notes": "Barcode first, then MPN and supplier SKU."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Detect settings').first().json;\nconst taxFactor = s.prices_include_tax ? 1 + s.tax_rate : 1;\nconst out = [], byGtin = new Map();\n$input.all().forEach((res, i) => {\n  const o = { ...$('Candidates only').itemMatching(i).json, status: '' };\n  const hit = res.json.data?.productVariants?.nodes?.[0];\n  if (hit) return out.push({ ...o, status: 'on_store', product_id: hit.product.id });\n  if (o.shipping_cost == null || o.shipping_cost === '') return out.push({ ...o, status: 'blocked', block_reason: o.block_reason || 'no shipping cost' });\n  const landed = o.cost + o.shipping_cost;\n  const floor = landed * (1 + s.min_margin) * taxFactor;\n  let price = landed * s.markup * taxFactor;\n  if (o.rrp && o.rrp >= floor) price = Math.min(price, o.rrp); // don't price above the brand's RRP\n  o.est_price = Math.ceil(price - s.round_to) + s.round_to;    // 54.20 -> 54.95\n  o.landed = landed;\n  const prev = o.gtin && byGtin.get(o.gtin);                   // same barcode from two sources\n  if (prev && prev.landed <= landed) return out.push({ ...o, status: 'duplicate' });\n  if (prev) prev.status = 'duplicate';\n  if (o.gtin) byGtin.set(o.gtin, o);\n  out.push(o);\n});\nout.filter(o => !o.status).sort((a, b) => (b.stock > 0) - (a.stock > 0)).slice(0, s.batch_limit).forEach(o => {\n  if (o.source === 'aliexpress' && s.aliexpress_pre_approved) o.status = 'approved';\n  else { o.status = 'pending_review'; o.card_nonce = Math.random().toString(36).slice(2, 10); }\n});\nreturn out.map(json => ({ json }));"
+      },
+      "id": "42abc80e-9c1b-5f34-bf38-196a52eb8b40",
+      "name": "Pick batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.status }}",
+            "product_id": "={{ $json.product_id || '' }}",
+            "block_reason": "={{ $json.block_reason || '' }}",
+            "product_type": "={{ $json.product_type }}",
+            "shopify_category_id": "={{ $json.shopify_category_id }}",
+            "est_price": "={{ $json.est_price ?? null }}",
+            "card_nonce": "={{ $json.card_nonce || '' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "block_reason",
+              "displayName": "block_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_type",
+              "displayName": "product_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "shopify_category_id",
+              "displayName": "shopify_category_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "est_price",
+              "displayName": "est_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "card_nonce",
+              "displayName": "card_nonce",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a347ea5c-b63b-5f8a-8d29-a3c2b3938e46",
+      "name": "Save detect results",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Needs review",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ec428b4d-2a0f-5e88-8ae7-e0a982e19083",
+                    "leftValue": "={{ $json.status === 'pending_review' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Approved",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8e1f1e0e-c34f-5293-904e-70f652c56777",
+                    "leftValue": "={{ $json.status === 'approved' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "23ba7fa8-fc37-57f1-81f8-7f388113b85e",
+      "name": "Route by status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2200,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  channel: $('Detect settings').first().json.slack_channel,\n  text: 'New product candidate: ' + $json.title,\n  unfurl_links: false,\n  blocks: [\n    {\n      type: 'section',\n      text: { type: 'mrkdwn', text: '*' + $json.title.replace(/\\*/g, '') + '*\\nSource: `' + $json.source + '` | Brand: *' + ($json.brand || 'unknown') + '*\\n'\n        + 'Landed cost: ' + ($json.cost + $json.shipping_cost).toFixed(2) + ' | Suggested price: ' + $json.est_price.toFixed(2) + ' ' + $('Detect settings').first().json.currency\n        + ' | Stock: ' + $json.stock + ' (' + $json.ships_from + ')' },\n      ...(/^https:\\/\\//.test($json.image_url) ? { accessory: { type: 'image', image_url: $json.image_url, alt_text: $json.title.slice(0, 100) } } : {})\n    },\n    {\n      type: 'actions',\n      elements: [\n        { type: 'button', text: { type: 'plain_text', text: 'Approve' }, style: 'primary', action_id: 'product_approve', value: $json.id + ':' + $json.card_nonce },\n        { type: 'button', text: { type: 'plain_text', text: 'Reject' }, style: 'danger', action_id: 'product_reject', value: $json.id + ':' + $json.card_nonce },\n        { type: 'button', text: { type: 'plain_text', text: 'Skip' }, action_id: 'product_skip', value: $json.id + ':' + $json.card_nonce }\n      ]\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "d85040f6-8891-52ae-a25c-214b7bbf310e",
+      "name": "Post offer card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2440,
+        1600
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Route by status').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "card_ts": "={{ $json.ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "card_ts",
+              "displayName": "card_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a33a0090-9f59-507a-b6a7-e879f7c006f8",
+      "name": "Save card ts",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2660,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lane": "draft",
+            "row_id": "={{ $json.id }}",
+            "channel": "={{ '' }}",
+            "thread_ts": "={{ '' }}",
+            "user": "={{ 'auto' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "lane",
+              "displayName": "lane",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "row_id",
+              "displayName": "row_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "user",
+              "displayName": "user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "744c5344-1c58-5190-ab20-31eabccea8ce",
+      "name": "Send to Draft lane",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2440,
+        1800
+      ],
+      "notes": "Calls this same workflow ({{ $workflow.id }}), so it still works after import."
+    },
+    {
+      "parameters": {
+        "content": "## Review (Slack buttons)\nChecks Slack's signature, ignores old or repeated clicks, saves the decision, then sends approved rows to Draft and approved drafts to Go live.",
+        "width": 2560,
+        "height": 600,
+        "color": 7
+      },
+      "id": "42e26c04-0041-5dd5-9c4e-a76923e3c5bd",
+      "name": "Lane Review",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2180
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "product-review",
+        "responseMode": "onReceived",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "8c4580eb-be1c-5c56-81f1-dd559b30a345",
+      "name": "Slack button click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        2360
+      ],
+      "notes": "Your Slack app's Interactivity Request URL. Responds at once, inside Slack's 3 seconds."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nif (Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) > 300) throw new Error('Stale request');\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || ''; // no URLSearchParams in the Code node\nconst p = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' ')));\nconst a = p.actions[0];\nconst [row_id, nonce] = String(a.value).split(':');\nreturn [{ json: { base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'],\n  action: a.action_id, row_id, nonce, user: p.user.username, channel: p.channel.id, ts: p.message.ts,\n  blocks: (p.message.blocks || []).filter(b => b.type !== 'actions') } }];"
+      },
+      "id": "f382c2b1-70ba-5cb1-a77b-80709f7eefc8",
+      "name": "Parse click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        2360
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "id": "63957698-7686-5a22-86e9-27ebd402a2d0",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        440,
+        2360
+      ],
+      "notes": "Crypto credential: Hmac Secret = your Slack app's Signing Secret.",
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "aa015f62-4f88-534d-8a50-6ec284ee0554",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3e2d2124-8db5-5e8b-980a-d2155969cd11",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        2360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"currency\": \"USD\",\n  \"prices_include_tax\": false,\n  \"tax_rate\": 0,\n  \"markup\": 1.6,\n  \"min_margin\": 0.15,\n  \"round_to\": 0.95,\n  \"ship_to_country\": \"US\",\n  \"ships_from_allowed\": [\"china\", \"china mainland\", \"united states\"],\n  \"max_delivery_days\": 20,\n  \"batch_limit\": 15,\n  \"aliexpress_pre_approved\": true,\n  \"slack_channel\": \"C0123456789\",\n  \"location_id\": \"gid://shopify/Location/...\",\n  \"online_store_publication_id\": \"gid://shopify/Publication/...\",\n  \"default_vendor\": \"Your Store\",\n  \"dry_run\": true,\n  \"source_name\": \"wholesaler\",\n  \"price_list_url\": \"https://example.com/price-list.csv\",\n  \"columns\": {\n    \"source_sku\": \"Stock Code\", \"brand\": \"Manufacturer\", \"mpn\": \"Part No\", \"gtin\": \"EAN\",\n    \"title\": \"Description\", \"description\": \"Long Description\", \"category\": \"Category\",\n    \"cost\": \"Dealer Ex Tax\", \"rrp\": \"RRP\", \"stock\": \"Stock\", \"image\": \"Image URL\"\n  },\n  \"cost_includes_tax\": false,\n  \"shipping_per_unit\": 0,\n  \"ships_from\": \"united states\"\n}",
+        "options": {}
+      },
+      "id": "6e68d0e2-30dd-5a6f-838a-9c5063f5caba",
+      "name": "Review settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        2320
+      ],
+      "notes": "Your settings. Every lane has a copy of the same JSON."
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Parse click').first().json.row_id }}"
+            }
+          ]
+        }
+      },
+      "id": "3b26bfeb-6e5a-5cfa-93d2-9028463e25c3",
+      "name": "Get clicked offer",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        2320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "34d58524-1a25-5698-85fb-fa4cd25c3d20",
+              "leftValue": "={{ $json.card_nonce === $('Parse click').first().json.nonce && $json.status === ($('Parse click').first().json.action.startsWith('product_') ? 'pending_review' : 'drafted') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2f1eaff5-876d-5921-9996-1a4adab92fd0",
+      "name": "Still pending?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        2320
+      ],
+      "notes": "Same nonce and still waiting: a second click, or a click on an old card, stops here."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Approve",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "16e3b8f1-7343-5b17-a038-9b0bb7545d50",
+                    "leftValue": "={{ $('Parse click').first().json.action === 'product_approve' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Go live",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b7fb9c15-6a93-5441-88d9-cf10c1456a0c",
+                    "leftValue": "={{ $('Parse click').first().json.action === 'draft_golive' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Reject or skip"
+        }
+      },
+      "id": "93c9763d-f78d-5549-8dd2-47cd8249db2f",
+      "name": "Route click",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1540,
+        2320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved",
+            "reviewed_by": "={{ $('Parse click').first().json.user }}",
+            "card_nonce": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reviewed_by",
+              "displayName": "reviewed_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "card_nonce",
+              "displayName": "card_nonce",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5099de5f-eebe-5cdd-92d7-bc0eb1ab26c2",
+      "name": "Mark approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1780,
+        2220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Parse click').first().json.channel, ts: $('Parse click').first().json.ts, text: 'Approved', blocks: [ ...$('Parse click').first().json.blocks, { type: 'context', elements: [ { type: 'mrkdwn', text: ':white_check_mark: Approved by @' + $('Parse click').first().json.user + '. Writing the draft now.' } ] } ] }) }}",
+        "options": {}
+      },
+      "id": "6ea3da51-55db-594d-b864-f5f9cd898286",
+      "name": "Show approval on card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        2220
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lane": "draft",
+            "row_id": "={{ Number($('Parse click').first().json.row_id) }}",
+            "channel": "={{ $('Parse click').first().json.channel }}",
+            "thread_ts": "={{ $('Parse click').first().json.ts }}",
+            "user": "={{ $('Parse click').first().json.user }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "lane",
+              "displayName": "lane",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "row_id",
+              "displayName": "row_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "user",
+              "displayName": "user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "9a0ac4ef-61d2-5a86-a15f-aab7dc54d2bc",
+      "name": "Send approved row to Draft",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2220,
+        2220
+      ],
+      "notes": "Calls this same workflow ({{ $workflow.id }}), so it still works after import."
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lane": "go_live",
+            "row_id": "={{ Number($('Parse click').first().json.row_id) }}",
+            "channel": "={{ $('Parse click').first().json.channel }}",
+            "thread_ts": "={{ $('Parse click').first().json.ts }}",
+            "user": "={{ $('Parse click').first().json.user }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "lane",
+              "displayName": "lane",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "row_id",
+              "displayName": "row_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "user",
+              "displayName": "user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "e986ce3d-5a48-5f7d-859a-dcf029b7ed0a",
+      "name": "Send to Go live lane",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1780,
+        2380
+      ],
+      "notes": "Calls this same workflow ({{ $workflow.id }}), so it still works after import."
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ { product_reject: 'rejected', product_skip: '', draft_reject: 'rejected' }[$('Parse click').first().json.action] }}",
+            "reviewed_by": "={{ $('Parse click').first().json.user }}",
+            "card_nonce": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reviewed_by",
+              "displayName": "reviewed_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "card_nonce",
+              "displayName": "card_nonce",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5391e66e-ea7c-5887-99bb-5d04e24b09ef",
+      "name": "Save decision",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1780,
+        2560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Parse click').first().json.channel, ts: $('Parse click').first().json.ts, text: 'Decision saved', blocks: [ ...$('Parse click').first().json.blocks, { type: 'context', elements: [ { type: 'mrkdwn', text: { product_reject: ':no_entry: Rejected by @', product_skip: ':fast_forward: Skipped by @', draft_reject: ':no_entry: Draft rejected by @' }[$('Parse click').first().json.action] + $('Parse click').first().json.user + ({ product_skip: '. It comes back on the next Detect run.', draft_reject: '. The draft stays in Shopify: delete or archive it there.' }[$('Parse click').first().json.action] || '.') } ] } ] }) }}",
+        "options": {}
+      },
+      "id": "2f0bd385-60c1-5fea-bcc0-54892b6df5dd",
+      "name": "Show decision on card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        2560
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Draft (called by Detect and Review)\nWrites the title and short description, checks them in code, creates a DRAFT product with `productSet` and posts the second card. With `dry_run` on, nothing is created in Shopify.",
+        "width": 3300,
+        "height": 520,
+        "color": 7
+      },
+      "id": "a9526caa-c1c4-59f4-8d31-078e0e995896",
+      "name": "Lane Draft",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2820
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "lane",
+              "type": "string"
+            },
+            {
+              "name": "row_id",
+              "type": "number"
+            },
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "thread_ts",
+              "type": "string"
+            },
+            {
+              "name": "user",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "a55921ca-12f3-5219-b929-f70d58c9f127",
+      "name": "When called by another lane",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        3060
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Draft",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e72b5ce4-75fd-51db-a53b-8c9a0bf10947",
+                    "leftValue": "={{ $json.lane === 'draft' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Go live",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "49d28e80-1f15-508e-b53f-45d5fe15d3b1",
+                    "leftValue": "={{ $json.lane === 'go_live' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b5331d86-b806-5c1b-9556-07bcfb874431",
+      "name": "Route to lane",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        220,
+        3060
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"currency\": \"USD\",\n  \"prices_include_tax\": false,\n  \"tax_rate\": 0,\n  \"markup\": 1.6,\n  \"min_margin\": 0.15,\n  \"round_to\": 0.95,\n  \"ship_to_country\": \"US\",\n  \"ships_from_allowed\": [\"china\", \"china mainland\", \"united states\"],\n  \"max_delivery_days\": 20,\n  \"batch_limit\": 15,\n  \"aliexpress_pre_approved\": true,\n  \"slack_channel\": \"C0123456789\",\n  \"location_id\": \"gid://shopify/Location/...\",\n  \"online_store_publication_id\": \"gid://shopify/Publication/...\",\n  \"default_vendor\": \"Your Store\",\n  \"dry_run\": true,\n  \"source_name\": \"wholesaler\",\n  \"price_list_url\": \"https://example.com/price-list.csv\",\n  \"columns\": {\n    \"source_sku\": \"Stock Code\", \"brand\": \"Manufacturer\", \"mpn\": \"Part No\", \"gtin\": \"EAN\",\n    \"title\": \"Description\", \"description\": \"Long Description\", \"category\": \"Category\",\n    \"cost\": \"Dealer Ex Tax\", \"rrp\": \"RRP\", \"stock\": \"Stock\", \"image\": \"Image URL\"\n  },\n  \"cost_includes_tax\": false,\n  \"shipping_per_unit\": 0,\n  \"ships_from\": \"united states\"\n}",
+        "options": {}
+      },
+      "id": "ca004b8d-f3c5-5406-ae75-4bd12af46d3f",
+      "name": "Draft settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        3000
+      ],
+      "notes": "Your settings. Every lane has a copy of the same JSON."
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('When called by another lane').first().json.row_id }}"
+            }
+          ]
+        }
+      },
+      "id": "8b1df80d-65b0-5961-847c-9d7f58b13e4c",
+      "name": "Get offer",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Raw title: {{ $json.title.replace(/[{}]/g, '') }}\nBrand: {{ $json.brand || 'unknown' }}\nMPN: {{ $json.mpn || 'none' }}\nCategory: {{ $json.product_type }}\nSupplier description: {{ ($json.description || 'none').replace(/[{}]/g, '') }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You write product titles and short descriptions for an online store. You get the supplier's data for one product. Reply with exactly two lines and nothing else:\nTitle: the product title\nShort description: the short description\n\nTitle rules:\n- Brand first, then the model number exactly as supplied, then the key spec, then what the product is.\n- If the brand is unknown, start with the model or product type.\n- Never infer a brand from an AliExpress seller name.\n- 70 characters or fewer.\n- Only facts in the supplier data. Never add a spec, model number or feature.\n- Ignore keyword lists and marketing phrases in the raw title.\n- No supplier codes, prices, stock words, sales words, emojis or quote marks.\n\nShort description rules:\n- One or two sentences, 20 to 45 words, plain text.\n- What it does for the buyer, then one concrete spec from the data.\n- Only facts from the supplier data."
+            }
+          ]
+        }
+      },
+      "id": "4eab956c-45c7-53a1-9669-b69b180c609e",
+      "name": "Write copy",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        880,
+        3000
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "model": "gemma4:31b",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "34e6aaf3-31bf-5909-af99-1289f9fffa90",
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        900,
+        3200
+      ],
+      "notes": "Ollama Cloud: an Ollama credential with Base URL https://ollama.com and your API key. Swap for any chat model.",
+      "credentials": {
+        "ollamaApi": {
+          "name": "Ollama Cloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const o = $('Get offer').first().json;\nconst out = String($json.text || '');\nlet title = (out.match(/^\\s*title\\s*:\\s*(.+)$/im) || [])[1]?.trim() || '';\nlet desc = (out.match(/short description\\s*:\\s*([\\s\\S]+)/i) || [])[1]?.trim() || '';\nconst words = s => String(s).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().split(' ');\nconst source = new Set(words([o.title, o.brand, o.mpn, o.description].join(' ')));\n// every token with a digit must exist in the source, whole: \"SDCS/256GB\" fails against \"SDCS3/256GB\"\nconst invented = title.split(/\\s+/).filter(t => /\\d/.test(t)).filter(t => !words(t).every(w => source.has(w)));\nlet reason = !title ? 'no title' : title.length > 80 ? 'too long' : invented.length ? 'not in source: ' + invented.join(', ') : null;\nif (reason) title = [o.brand, o.title.split(' | ')[0]].filter(Boolean).join(' ').replace(/\\s+/g, ' ').slice(0, 70);\nif (desc.length < 40 || desc.length > 400 || /<[a-z]/i.test(desc)) desc = '';\nreturn [{ json: { title, short_description: desc, title_source: reason ? 'fallback' : 'ai', title_reject_reason: reason } }];"
+      },
+      "id": "a17b80e0-4796-5756-9d54-e5eee3a9d5c3",
+      "name": "Check copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const o = $('Get offer').first().json, c = $('Check copy').first().json, s = $('Draft settings').first().json;\nconst esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst variant = {\n  optionValues: [{ optionName: 'Title', name: 'Default Title' }],\n  sku: o.mpn || o.source_sku,\n  price: o.est_price.toFixed(2),\n  inventoryItem: { cost: (o.cost + (o.shipping_cost || 0)).toFixed(2), tracked: true },\n  inventoryQuantities: [{ locationId: s.location_id, name: 'available', quantity: o.stock }],\n};\nif (o.gtin) variant.barcodes = [{ value: o.gtin }];\nreturn [{ json: { input: {\n  title: c.title,\n  descriptionHtml: c.short_description ? `<p>${esc(c.short_description)}</p>` : '',\n  vendor: o.brand || s.default_vendor,\n  productType: o.product_type,\n  ...(o.shopify_category_id ? { category: `gid://shopify/TaxonomyCategory/${o.shopify_category_id}` } : {}),\n  status: 'DRAFT',\n  tags: ['auto-import', `source-${o.source}`],\n  productOptions: [{ name: 'Title', values: [{ name: 'Default Title' }] }],\n  variants: [variant],\n  files: o.image_url ? [{ originalSource: o.image_url, contentType: 'IMAGE', alt: c.title }] : [],\n  metafields: [\n    { namespace: 'sourcing', key: 'source', type: 'single_line_text_field', value: o.source },\n    { namespace: 'sourcing', key: 'source_sku', type: 'single_line_text_field', value: o.source_sku },\n  ],\n} } }];"
+      },
+      "id": "c5f9d5fa-7bf4-5d17-aacd-58c954ffada4",
+      "name": "Build product",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1460,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2b3845f0-2ebc-575c-ac0c-8cecf72ad0d1",
+              "leftValue": "={{ $('Draft settings').first().json.dry_run === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9e8b54de-2f7e-5042-8bef-9057c13e73ba",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Draft settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c24b5ace-6981-5291-8b43-7cb7d7652b0a",
+      "name": "Get Shopify token for Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        3100
+      ],
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Draft settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Draft').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: `mutation CreateDraft($input: ProductSetInput!) {\n  productSet(synchronous: true, input: $input) {\n    product { id legacyResourceId status onlineStorePreviewUrl }\n    userErrors { field message code }\n  }\n}`,\n  variables: { input: $('Build product').first().json.input }\n}) }}",
+        "options": {}
+      },
+      "id": "584e4983-9053-5098-9f06-8efe52a847cc",
+      "name": "Create draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2120,
+        3100
+      ],
+      "notes": "Not retried: after a timeout, look the SKU up first, because Shopify may have created it anyway."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The second card: the AI copy over the supplier's title, a preview link and the go-live buttons\nconst o = $('Get offer').first().json, c = $('Check copy').first().json, s = $('Draft settings').first().json;\nconst v = $('Build product').first().json.input.variants[0];\nconst sent = $('Create draft').isExecuted ? $('Create draft').first().json : null;\nconst product = sent?.data?.productSet?.product;\nconst errors = [...(sent?.data?.productSet?.userErrors || []), ...(sent?.errors || [])].map(e => e.message).join('; ');\nconst nonce = Math.random().toString(36).slice(2, 10);\nlet status = o.status, note;\nif (!sent) note = 'Dry run: nothing was created in Shopify. Set dry_run to false in the settings to create drafts.';\nelse if (product) { status = 'drafted'; note = 'Draft created. Check it in Shopify, then put it live here.'; }\nelse { status = 'draft_failed'; note = `Shopify refused the draft: ${errors || 'no product returned'}`; }\nconst main = { type: 'section', text: { type: 'mrkdwn', text: [\n  `*${c.title}*`, c.short_description || '_No short description: the reply failed the check._', '',\n  `Supplier title: ${o.title}`,\n  `Price: ${v.price} ${s.currency} | Landed cost: ${v.inventoryItem.cost} | Copy: ${c.title_source}${c.title_reject_reason ? ` (${c.title_reject_reason})` : ''}`,\n].join('\\n').slice(0, 2900) } };\nif (/^https:\\/\\//.test(o.image_url)) main.accessory = { type: 'image', image_url: o.image_url, alt_text: c.title.slice(0, 100) };\nconst blocks = [main, { type: 'context', elements: [{ type: 'mrkdwn', text: note.slice(0, 2900) }] }];\nif (status === 'drafted') {\n  const value = `${o.id}:${nonce}`;\n  const buttons = [\n    { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Approve and go live' }, action_id: 'draft_golive', value },\n    { type: 'button', style: 'danger', text: { type: 'plain_text', text: 'Reject' }, action_id: 'draft_reject', value },\n  ];\n  if (product.onlineStorePreviewUrl) buttons.push({ type: 'button', text: { type: 'plain_text', text: 'Preview' }, url: product.onlineStorePreviewUrl, action_id: 'draft_preview' });\n  buttons.push({ type: 'button', text: { type: 'plain_text', text: 'Open in Shopify' }, url: `https://${s.store_domain}/admin/products/${product.legacyResourceId}`, action_id: 'draft_admin' });\n  blocks.push({ type: 'actions', elements: buttons });\n}\nreturn [{ json: { row_id: o.id, status, product_id: product?.id || '', card_nonce: status === 'drafted' ? nonce : '',\n  block_reason: status === 'draft_failed' ? errors.slice(0, 300) : (o.block_reason || ''), text: `Draft ready: ${c.title}`, blocks } }];"
+      },
+      "id": "df2abab0-1076-59e1-a60a-b4b155ac5f6b",
+      "name": "Build draft card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Draft settings').first().json.slack_channel, text: '' + $json.text, blocks: $json.blocks, unfurl_links: false }) }}",
+        "options": {}
+      },
+      "id": "7e4c0b4b-4d2e-5f65-8abe-0f77056bea61",
+      "name": "Post draft card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        3000
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2d55c00b-62fc-59b6-9d3e-3f79cc77cc9f",
+              "leftValue": "={{ !$('Draft settings').first().json.dry_run }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8629082b-4b23-5ac9-8089-834b86f15213",
+      "name": "Created in Shopify?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        2780,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Build draft card').first().json.row_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $('Build draft card').first().json.status }}",
+            "product_id": "={{ $('Build draft card').first().json.product_id }}",
+            "card_nonce": "={{ $('Build draft card').first().json.card_nonce }}",
+            "block_reason": "={{ $('Build draft card').first().json.block_reason }}",
+            "draft_card_ts": "={{ $json.ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "card_nonce",
+              "displayName": "card_nonce",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "block_reason",
+              "displayName": "block_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "draft_card_ts",
+              "displayName": "draft_card_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5a311892-46f1-5ed5-a256-79d2c5bceed4",
+      "name": "Save draft",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3000,
+        3000
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Writes to Shopify\nCreates a draft product. Keep `dry_run` on until the cards look right, and test on a development store first.",
+        "width": 440,
+        "height": 120,
+        "color": 3
+      },
+      "id": "2922ef85-f28c-5f41-919c-811d4d01f32b",
+      "name": "Risk Create draft",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        3140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Go live (called by Review)\nReads the draft back from Shopify, in case you edited it there, checks image, type, category and price, then sets it ACTIVE and publishes it to the Online Store.",
+        "width": 2720,
+        "height": 520,
+        "color": 7
+      },
+      "id": "1f5cfdcc-4391-5f6a-b933-32f6536ccc1e",
+      "name": "Lane Go live",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        3360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"currency\": \"USD\",\n  \"prices_include_tax\": false,\n  \"tax_rate\": 0,\n  \"markup\": 1.6,\n  \"min_margin\": 0.15,\n  \"round_to\": 0.95,\n  \"ship_to_country\": \"US\",\n  \"ships_from_allowed\": [\"china\", \"china mainland\", \"united states\"],\n  \"max_delivery_days\": 20,\n  \"batch_limit\": 15,\n  \"aliexpress_pre_approved\": true,\n  \"slack_channel\": \"C0123456789\",\n  \"location_id\": \"gid://shopify/Location/...\",\n  \"online_store_publication_id\": \"gid://shopify/Publication/...\",\n  \"default_vendor\": \"Your Store\",\n  \"dry_run\": true,\n  \"source_name\": \"wholesaler\",\n  \"price_list_url\": \"https://example.com/price-list.csv\",\n  \"columns\": {\n    \"source_sku\": \"Stock Code\", \"brand\": \"Manufacturer\", \"mpn\": \"Part No\", \"gtin\": \"EAN\",\n    \"title\": \"Description\", \"description\": \"Long Description\", \"category\": \"Category\",\n    \"cost\": \"Dealer Ex Tax\", \"rrp\": \"RRP\", \"stock\": \"Stock\", \"image\": \"Image URL\"\n  },\n  \"cost_includes_tax\": false,\n  \"shipping_per_unit\": 0,\n  \"ships_from\": \"united states\"\n}",
+        "options": {}
+      },
+      "id": "10bdede4-6c95-5c87-8c0c-4da0d0fcc474",
+      "name": "Go live settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        3560
+      ],
+      "notes": "Your settings. Every lane has a copy of the same JSON."
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('When called by another lane').first().json.row_id }}"
+            }
+          ]
+        }
+      },
+      "id": "620b5473-ebb0-548b-ae03-fb3a2d077215",
+      "name": "Get offer to publish",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        3560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Go live settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5818d728-0764-5bcf-a1d3-40952d66df45",
+      "name": "Get Shopify token for Go live",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        3560
+      ],
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Go live settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Go live').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: `query DraftCheck($id: ID!) {\n  product(id: $id) {\n    id title status productType category { id }\n    media(first: 10) { nodes { mediaContentType status } }\n    variants(first: 1) { nodes { price inventoryItem { unitCost { amount } } } }\n  }\n}`,\n  variables: { id: $('Get offer to publish').first().json.product_id }\n}) }}",
+        "options": {}
+      },
+      "id": "2c9f1e33-f5da-5fe3-af14-c52feedae849",
+      "name": "Read the draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        3560
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const p = $json.data.product, s = $('Go live settings').first().json;\nconst v = p.variants.nodes[0] || {};\nconst price = Number(v.price), landed = Number(v.inventoryItem?.unitCost?.amount || 0);\nconst floor = landed * (s.prices_include_tax ? 1 + s.tax_rate : 1);\n// mediaCount counts images Shopify failed to fetch, so check each image's status\nconst images = p.media.nodes.filter(m => m.mediaContentType === 'IMAGE');\nconst missing = [];\nif (!images.some(m => m.status === 'READY')) missing.push(images.some(m => m.status === 'FAILED') ? 'a working image (Shopify could not fetch the supplier image)' : 'an image');\nif (!p.productType) missing.push('a product type');\nif (!p.category) missing.push('a category');\nif (!(landed > 0 && price > floor)) missing.push(`a price above ${floor.toFixed(2)}`);\nreturn [{ json: { id: p.id, ready: missing.length === 0, missing } }];"
+      },
+      "id": "245996d6-cc8a-58c8-95ad-51709838d337",
+      "name": "Check the draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        3560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d8eabe17-85f4-5646-bd12-482bba673928",
+              "leftValue": "={{ $json.ready === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "55bb4c27-51fd-57c2-8e51-d34fd7e5827c",
+      "name": "Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        3560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9eba7371-b7a6-55f1-b6ee-0d7e30c4a2e4",
+              "leftValue": "={{ $('Go live settings').first().json.dry_run === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44116629-a9a7-5816-9e10-8b8ba3206d54",
+      "name": "Dry run on Go live?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        3480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Go live settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Go live').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: `mutation GoLive($id: ID!, $publications: [PublicationInput!]!) {\n  productUpdate(product: { id: $id, status: ACTIVE }) {\n    product { id status handle onlineStoreUrl }\n    userErrors { field message }\n  }\n  publishablePublish(id: $id, input: $publications) {\n    userErrors { field message }\n  }\n}`,\n  variables: { id: $json.id, publications: [{ publicationId: $('Go live settings').first().json.online_store_publication_id }] }\n}) }}",
+        "options": {}
+      },
+      "id": "7343f4cc-c364-5039-855e-620fcf34e51a",
+      "name": "Put it live",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        3560
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "offers"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get offer to publish').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ ($('Put it live').first().json.errors || $('Put it live').first().json.data?.productUpdate?.userErrors?.length || $('Put it live').first().json.data?.publishablePublish?.userErrors?.length) ? 'drafted' : 'live' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "6c102572-07ea-5697-beeb-764f8fd852e1",
+      "name": "Mark live",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        3560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  channel: $('When called by another lane').first().json.channel || $('Go live settings').first().json.slack_channel,\n  thread_ts: $('When called by another lane').first().json.thread_ts || $('Get offer to publish').first().json.draft_card_ts,\n  text: '' + (() => {\n    const c = $('Check the draft').first().json;\n    if (!c.ready) return ':warning: Not live yet. The draft still needs ' + c.missing.join(', ') + '. Fix it in Shopify, then tap Approve and go live again.';\n    if (!$('Put it live').isExecuted) return 'Dry run: the draft passed every check. Set dry_run to false to put it live.';\n    const r = $('Put it live').first().json;\n    const errors = [ ...(r.errors || []), ...(r.data?.productUpdate?.userErrors || []), ...(r.data?.publishablePublish?.userErrors || []) ].map(e => e.message);\n    if (errors.length) return ':x: Shopify refused: ' + errors.join('; ');\n    const p = r.data.productUpdate.product;\n    return ':white_check_mark: Live: ' + (p.onlineStoreUrl || p.handle);\n  })()\n}) }}",
+        "options": {}
+      },
+      "id": "e7bcecf0-1ec7-5497-a0f2-924c44e37210",
+      "name": "Reply in thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2440,
+        3660
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### Puts products live\nSets the product ACTIVE and publishes it. Runs only after the second tap in Slack, with `dry_run` off.",
+        "width": 440,
+        "height": 120,
+        "color": 3
+      },
+      "id": "4ec23676-6533-507f-837c-a998a10662fa",
+      "name": "Risk Put it live",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1940,
+        3740
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Replaces your token\nEach refresh issues a new token pair. Don't run it against an app that another workflow relies on.",
+        "width": 400,
+        "height": 160,
+        "color": 3
+      },
+      "id": "66b70047-840d-5af1-9df2-873d09385449",
+      "name": "Risk Refresh token",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        1280
+      ]
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Setup settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup settings": {
+      "main": [
+        [
+          {
+            "node": "Create offers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create offers": {
+      "main": [
+        [
+          {
+            "node": "Create category_map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create category_map": {
+      "main": [
+        [
+          {
+            "node": "Create aliexpress_items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create aliexpress_items": {
+      "main": [
+        [
+          {
+            "node": "Create aliexpress_auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create aliexpress_auth": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Get publication and location IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day at 05:00": {
+      "main": [
+        [
+          {
+            "node": "Ingest settings",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AliExpress settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload a price list": {
+      "main": [
+        [
+          {
+            "node": "Ingest settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest settings": {
+      "main": [
+        [
+          {
+            "node": "Uploaded a file?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Uploaded a file?": {
+      "main": [
+        [
+          {
+            "node": "Use the uploaded file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download price list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use the uploaded file": {
+      "main": [
+        [
+          {
+            "node": "Read price list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download price list": {
+      "main": [
+        [
+          {
+            "node": "Read price list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read price list": {
+      "main": [
+        [
+          {
+            "node": "Map price list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map price list": {
+      "main": [
+        [
+          {
+            "node": "Save price list rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AliExpress settings": {
+      "main": [
+        [
+          {
+            "node": "Get token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get token": {
+      "main": [
+        [
+          {
+            "node": "Get AliExpress items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get AliExpress items": {
+      "main": [
+        [
+          {
+            "node": "Build product request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build product request": {
+      "main": [
+        [
+          {
+            "node": "Sign product request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign product request": {
+      "main": [
+        [
+          {
+            "node": "Get AliExpress product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get AliExpress product": {
+      "main": [
+        [
+          {
+            "node": "Pick variants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick variants": {
+      "main": [
+        [
+          {
+            "node": "Build freight request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build freight request": {
+      "main": [
+        [
+          {
+            "node": "Sign freight request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign freight request": {
+      "main": [
+        [
+          {
+            "node": "Get freight quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get freight quote": {
+      "main": [
+        [
+          {
+            "node": "Apply freight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply freight": {
+      "main": [
+        [
+          {
+            "node": "Retry freight?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry freight?": {
+      "main": [
+        [
+          {
+            "node": "Wait 60 seconds",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save AliExpress rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 60 seconds": {
+      "main": [
+        [
+          {
+            "node": "Build freight request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 6 hours": {
+      "main": [
+        [
+          {
+            "node": "Token settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token settings": {
+      "main": [
+        [
+          {
+            "node": "Read token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read token": {
+      "main": [
+        [
+          {
+            "node": "Needs refresh?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs refresh?": {
+      "main": [
+        [
+          {
+            "node": "Build refresh request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build refresh request": {
+      "main": [
+        [
+          {
+            "node": "Sign refresh request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign refresh request": {
+      "main": [
+        [
+          {
+            "node": "Refresh token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh token": {
+      "main": [
+        [
+          {
+            "node": "Got a new token?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got a new token?": {
+      "main": [
+        [
+          {
+            "node": "Save new token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day at 06:00": {
+      "main": [
+        [
+          {
+            "node": "Detect settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Detect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Detect": {
+      "main": [
+        [
+          {
+            "node": "Get category map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get category map": {
+      "main": [
+        [
+          {
+            "node": "Get new offers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get new offers": {
+      "main": [
+        [
+          {
+            "node": "Apply category rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply category rules": {
+      "main": [
+        [
+          {
+            "node": "Candidates only",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Not candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not candidates": {
+      "main": [
+        [
+          {
+            "node": "Save rule results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Candidates only": {
+      "main": [
+        [
+          {
+            "node": "Already on store?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already on store?": {
+      "main": [
+        [
+          {
+            "node": "Pick batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick batch": {
+      "main": [
+        [
+          {
+            "node": "Save detect results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save detect results": {
+      "main": [
+        [
+          {
+            "node": "Route by status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by status": {
+      "main": [
+        [
+          {
+            "node": "Post offer card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to Draft lane",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post offer card": {
+      "main": [
+        [
+          {
+            "node": "Save card ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Parse click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse click": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review settings": {
+      "main": [
+        [
+          {
+            "node": "Get clicked offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get clicked offer": {
+      "main": [
+        [
+          {
+            "node": "Still pending?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still pending?": {
+      "main": [
+        [
+          {
+            "node": "Route click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Review settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark approved": {
+      "main": [
+        [
+          {
+            "node": "Show approval on card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Show approval on card": {
+      "main": [
+        [
+          {
+            "node": "Send approved row to Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route click": {
+      "main": [
+        [
+          {
+            "node": "Mark approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to Go live lane",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save decision": {
+      "main": [
+        [
+          {
+            "node": "Show decision on card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When called by another lane": {
+      "main": [
+        [
+          {
+            "node": "Route to lane",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft settings": {
+      "main": [
+        [
+          {
+            "node": "Get offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to lane": {
+      "main": [
+        [
+          {
+            "node": "Draft settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Go live settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write copy",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get offer": {
+      "main": [
+        [
+          {
+            "node": "Write copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write copy": {
+      "main": [
+        [
+          {
+            "node": "Check copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check copy": {
+      "main": [
+        [
+          {
+            "node": "Build product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build product": {
+      "main": [
+        [
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Build draft card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Shopify token for Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Draft": {
+      "main": [
+        [
+          {
+            "node": "Create draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create draft": {
+      "main": [
+        [
+          {
+            "node": "Build draft card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build draft card": {
+      "main": [
+        [
+          {
+            "node": "Post draft card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post draft card": {
+      "main": [
+        [
+          {
+            "node": "Created in Shopify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Created in Shopify?": {
+      "main": [
+        [
+          {
+            "node": "Save draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Go live settings": {
+      "main": [
+        [
+          {
+            "node": "Get offer to publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get offer to publish": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Go live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Go live": {
+      "main": [
+        [
+          {
+            "node": "Read the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the draft": {
+      "main": [
+        [
+          {
+            "node": "Check the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the draft": {
+      "main": [
+        [
+          {
+            "node": "Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready?": {
+      "main": [
+        [
+          {
+            "node": "Dry run on Go live?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply in thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run on Go live?": {
+      "main": [
+        [
+          {
+            "node": "Reply in thread",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Put it live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Put it live": {
+      "main": [
+        [
+          {
+            "node": "Mark live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark live": {
+      "main": [
+        [
+          {
+            "node": "Reply in thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

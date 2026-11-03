@@ -1,0 +1,2236 @@
+{
+  "name": "Competitor price monitoring",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Competitor price monitoring\n\nFinds who else sells your exact products, reads their prices politely, and posts a weekly Slack report of every product where a competitor is cheaper. No AI model: every price is read by plain code.\n\n### How it works\n1. **Setup** (run once) creates three data tables.\n2. **Discover** (daily) searches Google through DataForSEO for each model number or barcode and keeps exact matches only.\n3. **Recapture** (every 6 hours) checks robots.txt, re-reads each page and takes the price from its JSON-LD. Pages that block a plain request go to Firecrawl.\n4. **Report** (Mondays) compares the freshest trusted prices with yours and posts the undercuts.\n\n### Setup\n1. Credentials: a Custom Auth credential with your Shopify app's client ID and secret (needs `read_products`) on both **Get Shopify token** nodes; Basic Auth with your DataForSEO login on **Search Google**; Header Auth (`Authorization: Bearer <key>`) on **Firecrawl scrape**; a Slack bot on the two Slack nodes.\n2. Copy your values into **Discover settings**, then paste the same JSON into **Recapture settings** and **Report settings**.\n3. Run **Run once to set up**.\n4. Set `discovery_batch` to 10, run each lane by hand and check the tables, then publish.\n\n### Customisation\n- No DataForSEO? Import competitor URLs into `competitor_listings` and skip Discover.\n- Email instead of Slack: swap **Send report** for Gmail.\n- Data tables share a 200 MiB limit per instance. Past about 5,000 products, move the tables to Postgres.\n",
+        "height": 600,
+        "width": 800,
+        "color": 1
+      },
+      "id": "070fd127-c57d-5250-80fe-030b5271cd8e",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -940,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup (run once)\nCreates the three data tables the other lanes share. Safe to run again: existing tables are reused.",
+        "height": 360,
+        "width": 920,
+        "color": 7
+      },
+      "id": "29ed7aeb-f5d5-5bee-acb8-8d83c553bdd4",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Discover (daily)\nPulls your active variants, searches Google for each model number or barcode that's due, and saves only exact-match competitor listings. Searches repeat after 14 or 30 days.",
+        "height": 560,
+        "width": 2280,
+        "color": 7
+      },
+      "id": "7b270d89-4dd6-5401-8b6f-a5f64ee65f1a",
+      "name": "Lane Discover",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Recapture (every 6 hours)\nRe-reads due listings politely: robots.txt first, a gap between visits to each site, the price from the page's structured data, and Firecrawl only for pages that block a plain request.",
+        "height": 660,
+        "width": 2920,
+        "color": 7
+      },
+      "id": "9e896dda-2c2f-5e59-a444-ffb01e81b603",
+      "name": "Lane Recapture",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Report (Mondays)\nCompares the freshest trusted competitor prices with yours and posts every undercut to Slack, with a health line counting blocked pages.",
+        "height": 360,
+        "width": 1600,
+        "color": 7
+      },
+      "id": "697756bd-0ad6-5d06-bb1f-66a7ee878875",
+      "name": "Lane Report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Costs money\nAbout US$0.002 to 0.004 a search. Set `discovery_batch` to 10 for your first run.",
+        "height": 160,
+        "width": 280,
+        "color": 3
+      },
+      "id": "23ea5933-604f-53ca-8b15-defe3ff436d9",
+      "name": "Risk Search",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Visits competitor sites\nNames your store in `user_agent` and follows robots.txt. Keep `min_delay_seconds` at 10 or more.",
+        "height": 170,
+        "width": 300,
+        "color": 3
+      },
+      "id": "354fd62b-27a3-5fea-8474-39417639c97d",
+      "name": "Risk Fetch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        1320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Uses Firecrawl credits\nOne credit a page, at most `firecrawl_per_run` a run. Set `use_firecrawl` to false to turn it off.",
+        "height": 170,
+        "width": 300,
+        "color": 3
+      },
+      "id": "3fc076cb-a6b2-57e7-95b4-27c702034bb1",
+      "name": "Risk Firecrawl",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        1320
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "078dca50-beda-57c0-9421-b3e3ea2bf573",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "competitor_listings",
+        "columns": {
+          "column": [
+            {
+              "name": "listing_key",
+              "type": "string"
+            },
+            {
+              "name": "product_key",
+              "type": "string"
+            },
+            {
+              "name": "sku",
+              "type": "string"
+            },
+            {
+              "name": "mpn",
+              "type": "string"
+            },
+            {
+              "name": "gtin",
+              "type": "string"
+            },
+            {
+              "name": "product_title",
+              "type": "string"
+            },
+            {
+              "name": "url",
+              "type": "string"
+            },
+            {
+              "name": "domain",
+              "type": "string"
+            },
+            {
+              "name": "seller",
+              "type": "string"
+            },
+            {
+              "name": "listing_title",
+              "type": "string"
+            },
+            {
+              "name": "matched_by",
+              "type": "string"
+            },
+            {
+              "name": "confidence",
+              "type": "number"
+            },
+            {
+              "name": "last_price",
+              "type": "number"
+            },
+            {
+              "name": "currency",
+              "type": "string"
+            },
+            {
+              "name": "in_stock",
+              "type": "boolean"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "method",
+              "type": "string"
+            },
+            {
+              "name": "last_checked_at",
+              "type": "date"
+            },
+            {
+              "name": "last_change",
+              "type": "number"
+            },
+            {
+              "name": "pending_price",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "f0adf31e-228c-5e0f-b2d0-cca8412b2b6f",
+      "name": "Create competitor_listings",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "competitor_prices",
+        "columns": {
+          "column": [
+            {
+              "name": "listing_key",
+              "type": "string"
+            },
+            {
+              "name": "product_key",
+              "type": "string"
+            },
+            {
+              "name": "domain",
+              "type": "string"
+            },
+            {
+              "name": "price",
+              "type": "number"
+            },
+            {
+              "name": "in_stock",
+              "type": "boolean"
+            },
+            {
+              "name": "method",
+              "type": "string"
+            },
+            {
+              "name": "captured_at",
+              "type": "date"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "390313aa-9b6b-5e2f-b561-06e0b3f8247f",
+      "name": "Create competitor_prices",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "competitor_searches",
+        "columns": {
+          "column": [
+            {
+              "name": "product_key",
+              "type": "string"
+            },
+            {
+              "name": "query",
+              "type": "string"
+            },
+            {
+              "name": "last_searched_at",
+              "type": "date"
+            },
+            {
+              "name": "listings_found",
+              "type": "number"
+            },
+            {
+              "name": "rejected",
+              "type": "number"
+            },
+            {
+              "name": "cost_usd",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "bed503c0-e7c2-5bbb-a3d7-2b81d8f0dd95",
+      "name": "Create competitor_searches",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "id": "7fff29a1-4940-5390-92e6-bd32e6ece6e1",
+      "name": "Every day at 03:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"own_domain\": \"yourstore.com\",\n  \"exclude_domains\": [],\n  \"currency\": \"USD\",\n  \"locale\": \"en-US\",\n  \"country\": \"US\",\n  \"search_location\": \"United States\",\n  \"language_code\": \"en\",\n  \"search_depth\": 20,\n  \"prices_include_tax\": false,\n  \"market_shows_tax\": false,\n  \"tax_rate\": 0,\n  \"tax_exclusive_domains\": [],\n  \"mpn_source\": \"metafield\",\n  \"mpn_metafield_namespace\": \"custom\",\n  \"mpn_metafield_key\": \"mpn\",\n  \"user_agent\": \"YourStorePriceCheck/1.0 (+https://yourstore.com/price-check)\",\n  \"robots_agent\": \"YourStorePriceCheck\",\n  \"discovery_batch\": 100,\n  \"research_with_listings_days\": 30,\n  \"research_without_listings_days\": 14,\n  \"recapture_every_hours\": 120,\n  \"recapture_batch\": 300,\n  \"min_delay_seconds\": 10,\n  \"max_price_move\": 0.6,\n  \"use_firecrawl\": true,\n  \"firecrawl_per_run\": 8,\n  \"min_confidence\": 0.9,\n  \"max_price_age_days\": 7,\n  \"min_price_ratio\": 0.5,\n  \"undercut_threshold\": 0.02,\n  \"report_limit\": 20,\n  \"slack_channel\": \"#pricing\"\n}",
+        "options": {}
+      },
+      "id": "74f1e680-75c3-53d0-bdeb-b714b42916b4",
+      "name": "Discover settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "765e895c-011f-5aeb-a8db-9974d7d4e69c",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        460
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Discover settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: `query Variants($cursor: String, $ns: String, $key: String!) {\n    productVariants(first: 100, after: $cursor, query: \"product_status:active\") {\n      pageInfo { hasNextPage endCursor }\n      nodes {\n        id\n        sku\n        price\n        title\n        barcodes(first: 5) { nodes { value } }\n        mpn: metafield(namespace: $ns, key: $key) { value }\n        product {\n          title\n          vendor\n          mpn: metafield(namespace: $ns, key: $key) { value }\n        }\n      }\n    }\n  }`,\n  variables: { cursor: null, ns: $('Discover settings').first().json.mpn_metafield_namespace, key: $('Discover settings').first().json.mpn_metafield_key }\n}) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { cursor: $response.body.data.productVariants.pageInfo.endCursor, ns: $('Discover settings').first().json.mpn_metafield_namespace, key: $('Discover settings').first().json.mpn_metafield_key } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.productVariants.pageInfo.hasNextPage }}"
+            }
+          }
+        }
+      },
+      "id": "139668b3-328d-54ba-88ea-d57cc95d4507",
+      "name": "Get my products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "competitor_searches"
+        },
+        "returnAll": true
+      },
+      "id": "0c166d93-cd95-55d4-8243-8beab6996330",
+      "name": "Get search log",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        460
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per variant that has a model number or barcode and is due a search.\nconst s = $('Discover settings').first().json;\nconst day = 864e5;\nconst log = {};\nfor (const r of $('Get search log').all()) log[r.json.product_key] = r.json;\n\nconst due = [];\nfor (const page of $('Get my products').all()) {\n  for (const v of page.json.data.productVariants.nodes) {\n    const mpn = String((s.mpn_source === 'sku' ? v.sku : (v.mpn?.value || v.product.mpn?.value)) || '').trim();\n    const gtin = v.barcodes.nodes.map(b => String(b.value).replace(/\\D/g, '')).find(b => b.length >= 8) || '';\n    if (!mpn && gtin.length < 8) continue;                       // nothing to match on: see \"Make it your own\"\n    const last = log[v.id];\n    const age = last ? (Date.now() - new Date(last.last_searched_at)) / day : 9999;\n    const every = last?.listings_found > 0 ? s.research_with_listings_days : s.research_without_listings_days;\n    if (age < every) continue;\n    const strong = /\\d/.test(mpn) && !/\\s/.test(mpn) && mpn.replace(/[^A-Za-z0-9]/g, '').length >= 6;\n    due.push({ json: { product_key: v.id, sku: v.sku, mpn, gtin, brand: v.product.vendor, age,\n      title: v.product.title + (v.title === 'Default Title' ? '' : ' ' + v.title),\n      query: mpn ? (strong ? mpn : `${v.product.vendor} ${mpn}`) : gtin } });\n  }\n}\nreturn due.sort((a, b) => b.json.age - a.json.age).slice(0, s.discovery_batch);\n"
+      },
+      "id": "3444661d-4cc6-590f-8cc0-de23569df6c1",
+      "name": "Pick products to search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/serp/google/organic/live/advanced",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify([{\n  keyword: $json.query,\n  location_name: $('Discover settings').first().json.search_location,\n  language_code: $('Discover settings').first().json.language_code,\n  depth: $('Discover settings').first().json.search_depth\n}]) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "ba781a19-18f8-5244-a4f1-c413faf3ff36",
+      "name": "Search Google",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        460
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "name": "DataForSEO"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn each search into competitor listings, keeping only exact matches.\nconst s = $('Discover settings').first().json;\nconst sent = $('Pick products to search').all();\nconst results = $input.all();\nconst skip = [s.own_domain, ...s.exclude_domains].map(d => d.toLowerCase().replace(/^www\\./, ''));\nconst host = u => (String(u).match(/^https?:\\/\\/([^/?#:]+)/i) || [])[1]?.toLowerCase().replace(/^www\\./, '');\nconst DROP = /^(srsltid|utm_[a-z]+|gclid|variant|currency|country)$/i;\nconst cleanUrl = u => {\n  const [base, q = ''] = String(u).split('#')[0].split('?');\n  const kept = q.split('&').filter(kv => kv && !DROP.test(kv.split('=')[0]));\n  return base + (kept.length ? '?' + kept.join('&') : '');\n};\n\n// Model number as a whole token, any separator: DS-2CD2366G2-I matches \"ds 2cd2366g2 i\", not DS-2CD2366G2-IU.\nconst chars = m => String(m).toUpperCase().replace(/[^A-Z0-9]/g, '').split('');\nconst titleRe = m => new RegExp('(^|[^A-Z0-9])' + chars(m).join('[\\\\s\\\\-_/.]?') + '(?![A-Z0-9]|-[A-Z0-9])');\nconst slugRe = m => new RegExp('(^|[^A-Z0-9])' + chars(m).join('[\\\\-_.]?') + '(?![A-Z0-9])');\nconst PACK = /\\b(\\d+|two|three|four|twin)[\\s-]*(pack|pk)\\b|\\bpack of \\d+|\\bbundle\\b|\\bkit\\b/i;\n\nfunction match(q, title, url) {\n  const T = String(title || '').toUpperCase(), U = String(url || '').split('?')[0].toUpperCase(); // path only: Google links carry the query\n  if (PACK.test(title) && !PACK.test(q.title)) return null;          // a 2-pack isn't your single camera\n  if (q.gtin && (T + ' ' + U).includes(q.gtin)) return { by: 'gtin', confidence: 1 };\n  if (!q.mpn) return null;\n  const strong = /\\d/.test(q.mpn) && !/\\s/.test(q.mpn) && q.mpn.replace(/[^A-Za-z0-9]/g, '').length >= 6;\n  if (!strong && !T.includes(String(q.brand).toUpperCase())) return null; // short names need the brand\n  if (titleRe(q.mpn).test(T)) return { by: 'mpn', confidence: strong ? 1 : 0.9 };\n  if (slugRe(q.mpn).test(U)) return { by: 'mpn_url', confidence: strong ? 0.85 : 0.75 };\n  return null;\n}\n\nfunction offersFrom(items = []) {\n  const out = [];\n  for (const it of items) {\n    if (it.type === 'organic' && it.price?.current)\n      out.push({ seller: it.website_name || it.domain, url: it.url, title: it.title, price: it.price.current, currency: it.price.currency });\n    if (it.type === 'knowledge_graph')\n      for (const sub of it.items || []) for (const el of sub.items || [])\n        if (el.type === 'knowledge_graph_shopping_element' && el.price?.current)\n          out.push({ seller: el.source, url: el.url, title: el.title, price: el.price.current, currency: el.price.currency });\n    if ((it.type === 'popular_products' || it.type === 'shopping') && Array.isArray(it.items))\n      for (const el of it.items) if (el.price?.current)\n        out.push({ seller: el.seller || el.source, url: el.url, title: el.title, price: el.price.current, currency: el.price.currency });\n  }\n  return out;\n}\n\nconst out = [];\nconst now = new Date().toISOString();\nsent.forEach((p, i) => {\n  const q = p.json;\n  const task = results[i]?.json?.tasks?.[0];\n  if (task?.status_code !== 20000) {\n    out.push({ json: { kind: 'failed', query: q.query, error: task?.status_message || String(results[i]?.json?.error?.message || 'no response').slice(0, 200) } });\n    return;\n  }\n  let kept = 0, rejected = 0;\n  for (const o of offersFrom(task.result?.[0]?.items)) {\n    const d = host(o.url);\n    const m = d && o.currency === s.currency && !skip.some(x => d === x || d.endsWith('.' + x)) && match(q, o.title, o.url);\n    if (!m) { rejected++; continue; }\n    kept++;\n    const url = cleanUrl(o.url);\n    out.push({ json: { kind: 'listing', listing_key: q.product_key + '|' + url, product_key: q.product_key,\n      sku: q.sku, mpn: q.mpn, gtin: q.gtin, product_title: q.title, url, domain: d,\n      seller: String(o.seller || d).slice(0, 80), listing_title: o.title, matched_by: m.by, confidence: m.confidence,\n      last_price: Number(o.price), currency: o.currency, in_stock: null, status: 'ok', method: 'search',\n      last_checked_at: now, last_change: 0, pending_price: 0 } });\n  }\n  out.push({ json: { kind: 'search', product_key: q.product_key, query: q.query, last_searched_at: now,\n    listings_found: kept, rejected, cost_usd: Number(task.cost || 0) } });\n});\nreturn out;\n"
+      },
+      "id": "cc9e86c4-5260-54bd-ba01-064c50cba515",
+      "name": "Keep exact matches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5e3b652d-7e19-54f7-a860-4302ae8e30be",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "listing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "listing"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7c8f1be8-e193-5ace-b170-6ab99b086547",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "search",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "search"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "65fad607-1f61-568f-a67f-bf713512c5ef",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "failed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "91d4f643-da90-5951-86df-5f3253442ac4",
+      "name": "Route by kind",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1760,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "competitor_listings"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "listing_key",
+              "condition": "eq",
+              "keyValue": "={{ $json.listing_key }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "listing_key": "={{ $json.listing_key }}",
+            "product_key": "={{ $json.product_key }}",
+            "sku": "={{ $json.sku }}",
+            "mpn": "={{ $json.mpn }}",
+            "gtin": "={{ $json.gtin }}",
+            "product_title": "={{ $json.product_title }}",
+            "url": "={{ $json.url }}",
+            "domain": "={{ $json.domain }}",
+            "seller": "={{ $json.seller }}",
+            "listing_title": "={{ $json.listing_title }}",
+            "matched_by": "={{ $json.matched_by }}",
+            "confidence": "={{ $json.confidence }}",
+            "last_price": "={{ $json.last_price }}",
+            "currency": "={{ $json.currency }}",
+            "in_stock": "={{ $json.in_stock }}",
+            "status": "={{ $json.status }}",
+            "method": "={{ $json.method }}",
+            "last_checked_at": "={{ $json.last_checked_at }}",
+            "last_change": "={{ $json.last_change }}",
+            "pending_price": "={{ $json.pending_price }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "listing_key",
+              "displayName": "listing_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_key",
+              "displayName": "product_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sku",
+              "displayName": "sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "mpn",
+              "displayName": "mpn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "gtin",
+              "displayName": "gtin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_title",
+              "displayName": "product_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "seller",
+              "displayName": "seller",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "listing_title",
+              "displayName": "listing_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "matched_by",
+              "displayName": "matched_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_price",
+              "displayName": "last_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "in_stock",
+              "displayName": "in_stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_checked_at",
+              "displayName": "last_checked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_change",
+              "displayName": "last_change",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "pending_price",
+              "displayName": "pending_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a9f8943b-0efe-52d8-a581-75075c9469f3",
+      "name": "Save listing",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "competitor_searches"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "product_key",
+              "condition": "eq",
+              "keyValue": "={{ $json.product_key }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "product_key": "={{ $json.product_key }}",
+            "query": "={{ $json.query }}",
+            "last_searched_at": "={{ $json.last_searched_at }}",
+            "listings_found": "={{ $json.listings_found }}",
+            "rejected": "={{ $json.rejected }}",
+            "cost_usd": "={{ $json.cost_usd }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "product_key",
+              "displayName": "product_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "query",
+              "displayName": "query",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_searched_at",
+              "displayName": "last_searched_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "listings_found",
+              "displayName": "listings_found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rejected",
+              "displayName": "rejected",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "cost_usd",
+              "displayName": "cost_usd",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4d7c9ffc-c5a2-53f3-b145-19660c85695e",
+      "name": "Save search",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2000,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Discover settings').first().json.slack_channel }}"
+        },
+        "text": "=:warning: {{ $input.all().length }} competitor searches failed. First error: {{ $json.error }} (query: {{ $json.query }}). Check your DataForSEO balance.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "id": "d0947189-87f9-5fae-a7bd-3c6f6052c32f",
+      "name": "Alert failed searches",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2000,
+        620
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "b9686204-1c5b-5a6a-8604-c532cd283e16",
+      "name": "Every 6 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"own_domain\": \"yourstore.com\",\n  \"exclude_domains\": [],\n  \"currency\": \"USD\",\n  \"locale\": \"en-US\",\n  \"country\": \"US\",\n  \"search_location\": \"United States\",\n  \"language_code\": \"en\",\n  \"search_depth\": 20,\n  \"prices_include_tax\": false,\n  \"market_shows_tax\": false,\n  \"tax_rate\": 0,\n  \"tax_exclusive_domains\": [],\n  \"mpn_source\": \"metafield\",\n  \"mpn_metafield_namespace\": \"custom\",\n  \"mpn_metafield_key\": \"mpn\",\n  \"user_agent\": \"YourStorePriceCheck/1.0 (+https://yourstore.com/price-check)\",\n  \"robots_agent\": \"YourStorePriceCheck\",\n  \"discovery_batch\": 100,\n  \"research_with_listings_days\": 30,\n  \"research_without_listings_days\": 14,\n  \"recapture_every_hours\": 120,\n  \"recapture_batch\": 300,\n  \"min_delay_seconds\": 10,\n  \"max_price_move\": 0.6,\n  \"use_firecrawl\": true,\n  \"firecrawl_per_run\": 8,\n  \"min_confidence\": 0.9,\n  \"max_price_age_days\": 7,\n  \"min_price_ratio\": 0.5,\n  \"undercut_threshold\": 0.02,\n  \"report_limit\": 20,\n  \"slack_channel\": \"#pricing\"\n}",
+        "options": {}
+      },
+      "id": "d492815e-72b9-5e9f-8f7c-1ec131ac6659",
+      "name": "Recapture settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "competitor_listings"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "last_checked_at",
+              "condition": "lt",
+              "keyValue": "={{ $now.minus({ hours: $json.recapture_every_hours }).toISO() }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "neq",
+              "keyValue": "robots_disallowed"
+            }
+          ]
+        },
+        "limit": "={{ $json.recapture_batch }}",
+        "orderBy": true,
+        "orderByColumn": "last_checked_at",
+        "orderByDirection": "ASC"
+      },
+      "id": "97b15b10-d5a8-5c47-bc40-0e0eb77aecc1",
+      "name": "Get listings due a check",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fetch robots.txt once per site, drop what it disallows, and plan a polite gap per site.\n// RFC 9309: a 4xx means no rules; a 5xx or no answer means treat the whole site as disallowed.\nconst s = $('Recapture settings').first().json;\nconst token = s.robots_agent.toLowerCase();\nconst originOf = u => (String(u).match(/^(https?:\\/\\/[^/?#]+)/i) || [])[1]?.toLowerCase();\nconst pathOf = u => String(u).replace(/^https?:\\/\\/[^/?#]+/i, '').split('#')[0] || '/';\n\nfunction parseRobots(txt) {\n  const groups = [];\n  let cur = null, lastWasAgent = false;\n  for (const raw of String(txt).split(/\\r?\\n/)) {\n    const m = raw.replace(/#.*$/, '').trim().match(/^([A-Za-z-]+)\\s*:\\s*(.*)$/);\n    if (!m) continue;\n    const key = m[1].toLowerCase(), val = m[2].trim();\n    if (key === 'user-agent') {\n      if (!lastWasAgent) groups.push(cur = { agents: [], rules: [], delay: null });\n      cur.agents.push(val.toLowerCase());\n      lastWasAgent = true;\n      continue;\n    }\n    lastWasAgent = false;\n    if (!cur) continue;\n    if ((key === 'allow' || key === 'disallow') && val) cur.rules.push({ allow: key === 'allow', path: val });\n    if (key === 'crawl-delay' && !isNaN(Number(val))) cur.delay = Number(val);\n  }\n  const mine = groups.filter(g => g.agents.some(a => a !== '*' && token.includes(a)));\n  const chosen = mine.length ? mine : groups.filter(g => g.agents.includes('*'));\n  return { rules: chosen.flatMap(g => g.rules), delay: chosen.map(g => g.delay).find(d => d != null) ?? null };\n}\nconst toRegex = p => {\n  const end = p.endsWith('$');\n  const body = (end ? p.slice(0, -1) : p).split('*').map(x => x.replace(/[.+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('.*');\n  return new RegExp('^' + body + (end ? '$' : ''));\n};\nfunction allowed(rules, path) {\n  let best = null;                       // the longest matching rule wins; Allow wins a tie\n  for (const r of rules) if (toRegex(r.path).test(path) &&\n      (!best || r.path.length > best.path.length || (r.path.length === best.path.length && r.allow))) best = r;\n  return !best || best.allow;\n}\n\nconst rows = $input.all().map(i => i.json);\nconst robots = {};\nfor (const origin of [...new Set(rows.map(r => originOf(r.url)))]) {\n  try {\n    const res = await this.helpers.httpRequest({ url: origin + '/robots.txt', returnFullResponse: true,\n      ignoreHttpStatusErrors: true, timeout: 15000, headers: { 'User-Agent': s.user_agent } });\n    robots[origin] = res.statusCode >= 500 ? { rules: [{ allow: false, path: '/' }] }\n      : res.statusCode >= 400 ? { rules: [] } : parseRobots(res.body);\n  } catch (e) {\n    robots[origin] = { rules: [{ allow: false, path: '/' }] };\n  }\n}\n\n// Interleave sites so one site is never hit twice inside its gap (min_delay_seconds or its Crawl-delay).\nconst queues = {};\nconst out = [];\nfor (const r of rows) {\n  const origin = originOf(r.url);\n  if (allowed(robots[origin].rules, pathOf(r.url))) (queues[origin] ||= []).push(r);\n  else out.push({ json: { ...r, fetch: false } });\n}\nlet clock = 0;\nconst lastHit = {};\nwhile (Object.values(queues).some(q => q.length)) {\n  for (const [origin, q] of Object.entries(queues)) {\n    if (!q.length) continue;\n    const gap = Math.max(s.min_delay_seconds, robots[origin].delay || 0);\n    const ready = origin in lastHit ? Math.max(clock, lastHit[origin] + gap) : clock;\n    out.push({ json: { ...q.shift(), fetch: true, wait_seconds: Math.ceil(ready - clock) } });\n    clock = lastHit[origin] = ready;\n  }\n}\nreturn out;\n"
+      },
+      "id": "e81b23c1-fae7-53a2-8d1c-21cf312c11e2",
+      "name": "Check robots.txt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f2e9c9c9-fb04-58ba-ad4d-ca521bf98cb1",
+              "leftValue": "={{ $json.fetch }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f058fd0-00f3-5473-9fe3-b69760146a6c",
+      "name": "Allowed by robots.txt?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "competitor_listings"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "listing_key",
+              "condition": "eq",
+              "keyValue": "={{ $json.listing_key }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "robots_disallowed"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d6024fbc-5995-58c3-8fb3-ad6e9e4b999d",
+      "name": "Mark disallowed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        1260
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ec9ed774-ff0e-5256-b854-338362f0fe29",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1100,
+        1020
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.max(1, $json.wait_seconds) }}",
+        "unit": "seconds"
+      },
+      "id": "863d029c-ca4b-519f-b34a-0f0f0a1acd61",
+      "name": "Wait between requests",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "={{ $('Recapture settings').first().json.user_agent }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "1534ec60-776d-5de6-b325-baeb4ab5ac3f",
+      "name": "Fetch page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        1040
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read the price from one page: JSON-LD Product offers first, then price meta tags, then itemprop.\n// Reads a plain HTTP Request response or a Firecrawl /v2/scrape response.\nconst s = $('Recapture settings').first().json;\nconst src = $('Loop Over Items').first().json;           // the listing being read\nconst r = $input.first().json;\nconst fc = $prevNode.name === 'Firecrawl scrape';        // which request fed this run\nconst via = fc ? 'firecrawl' : 'http';\nconst html = String((fc ? r.data?.rawHtml : (r.body ?? r.data)) || '');\nconst status = Number(fc ? r.data?.metadata?.statusCode : r.statusCode) || 0;\nconst errMsg = String(r.error?.message ?? r.error ?? '');\nconst num = v => { const n = Number(String(v ?? '').replace(/[^0-9.]/g, '')); return n > 0 ? n : null; };\nconst clean = v => String(v).toUpperCase().replace(/[^A-Z0-9]/g, '');\nconst ours = [src.mpn, src.gtin, src.sku].filter(Boolean).map(clean);\nconst idsOf = o => ['sku', 'mpn', 'gtin', 'gtin8', 'gtin12', 'gtin13', 'gtin14'].map(k => o?.[k]).filter(Boolean).map(clean);\n\nfunction fromJsonLd(h) {\n  const re = /<script[^>]*type=[\"']application\\/ld\\+json[\"'][^>]*>([\\s\\S]*?)<\\/script>/gi;\n  const found = [];\n  let m;\n  while ((m = re.exec(h))) {\n    let data;\n    try { data = JSON.parse(m[1].trim()); } catch (e) { continue; }\n    for (const n of [].concat(data).flatMap(d => d?.['@graph'] || [d])) {\n      if (![].concat(n?.['@type'] || []).some(t => /Product/i.test(t))) continue;\n      for (const o of [].concat(n.offers || [])) {\n        for (const x of o?.offers ? [].concat(o.offers) : [o]) {      // AggregateOffer holds nested offers\n          const price = num(x?.price ?? x?.lowPrice ?? x?.priceSpecification?.price);\n          if (!price) continue;\n          const avail = String(x?.availability || o?.availability || '');\n          found.push({ price, how: 'jsonld', ids: [...idsOf(x), ...idsOf(n)],\n            currency: x?.priceCurrency || o?.priceCurrency || x?.priceSpecification?.priceCurrency || null,\n            in_stock: avail ? /InStock|LimitedAvailability|PreOrder|BackOrder/i.test(avail) : null });\n        }\n      }\n    }\n  }\n  // On a page with several variants, prefer the offer that carries your model number or barcode.\n  return found.find(f => f.ids.some(id => ours.includes(id))) || found[0] || null;\n}\nfunction fromMeta(h) {\n  const p = h.match(/<meta[^>]+(?:property|name)=[\"'](?:product|og):price:amount[\"'][^>]*content=[\"']([^\"']+)[\"']/i)\n         || h.match(/<meta[^>]+content=[\"']([^\"']+)[\"'][^>]*(?:property|name)=[\"'](?:product|og):price:amount[\"']/i);\n  if (p && num(p[1])) {\n    const c = h.match(/(?:product|og):price:currency[\"'][^>]*content=[\"']([^\"']+)[\"']/i);\n    return { price: num(p[1]), currency: c ? c[1] : null, in_stock: null, how: 'meta' };\n  }\n  const ip = h.match(/itemprop=[\"']price[\"'][^>]*content=[\"']([^\"']+)[\"']/i);\n  return ip && num(ip[1]) ? { price: num(ip[1]), currency: null, in_stock: null, how: 'itemprop' } : null;\n}\n\nconst found = html ? (fromJsonLd(html) || fromMeta(html)) : null;\nconst head = html.slice(0, 6000).toLowerCase();\nconst walls = ['just a moment', 'verify you are human', 'checking your browser', 'access denied', 'captcha',\n               'cf-chl', 'attention required', 'request unsuccessful', 'are you a robot', 'pardon our interruption'];\nconst blocked = !found && (fc || [302, 303, 307, 401, 403, 503].includes(status) || /403|access denied|ECONNRESET/i.test(errMsg)\n                           || walls.some(w => head.includes(w)));\n\n// Fetch page doesn't follow redirects. A permanent one (301, 308) saves the new address, which goes back through\n// the robots check on the next run; a temporary one (302, 303, 307) is usually a bot check, so it counts as blocked.\nconst loc = !fc && [301, 308].includes(status) && (r.headers?.location || r.headers?.Location);\nconst moved = loc && (/^https?:/i.test(loc) ? loc : src.url.match(/^https?:\\/\\/[^/]+/i)[0] + (loc.startsWith('/') ? '' : '/') + loc);\n// A 429 asks you to slow down: wait out Retry-After (seconds or a date; an hour if it's missing), no Firecrawl.\nconst ra = r.headers?.['retry-after'];\nconst raSec = ra ? (isNaN(Number(ra)) ? (Date.parse(ra) - Date.now()) / 1000 : Number(ra)) : NaN;\nconst retrySec = Number.isFinite(raSec) ? raSec : 3600;\n\n// Start from what the table already holds, so a failed read never wipes the last good price.\nconst row = { status: 'ok', method: via, url: src.url, last_checked_at: new Date().toISOString(), last_price: src.last_price,\n              in_stock: src.in_stock, last_change: 0, pending_price: src.pending_price || 0 };\nconst last = Number(src.last_price) || 0;\nif (moved) Object.assign(row, { status: 'moved', url: moved, last_checked_at: new Date(0).toISOString() });\nelse if (!fc && status === 429) Object.assign(row, { status: 'rate_limited',\n  last_checked_at: new Date(Date.now() + Math.max(retrySec, 60) * 1000 - s.recapture_every_hours * 36e5).toISOString() });\nelse if (blocked) row.status = 'blocked';\nelse if (!found) row.status = html ? 'no_price' : 'error';\nelse if (found.currency && found.currency !== s.currency) row.status = 'wrong_currency';\nelse {\n  row.method = via + ':' + found.how;\n  const jump = last && Math.abs(found.price - last) / last > s.max_price_move;\n  const confirmed = row.pending_price && Math.abs(found.price - row.pending_price) / row.pending_price < 0.02;\n  if (jump && !confirmed) Object.assign(row, { status: 'suspect', pending_price: found.price }); // wait for a second reading\n  else Object.assign(row, { last_price: found.price, in_stock: found.in_stock, pending_price: 0,\n                            last_change: last ? Math.round((found.price - last) * 100) / 100 : 0 });\n}\n\n// Firecrawl only for blocked pages, and only up to firecrawl_per_run pages a run.\nlet try_firecrawl = false;\nif (row.status === 'blocked' && !fc && s.use_firecrawl) {\n  const st = $getWorkflowStaticData('global');\n  if (st.run !== $execution.id) Object.assign(st, { run: $execution.id, firecrawl: 0 });\n  try_firecrawl = st.firecrawl++ < s.firecrawl_per_run;\n}\nreturn [{ json: { listing_key: src.listing_key, row, try_firecrawl } }];\n"
+      },
+      "id": "cebb9903-a480-57b8-a479-a2693bfe800b",
+      "name": "Read price",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5fe6dad5-2c3c-5785-827f-5373ade72daf",
+              "leftValue": "={{ $json.try_firecrawl }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "73b4999d-4780-567c-a794-f91f2a7aefe1",
+      "name": "Try Firecrawl?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/scrape",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  url: $('Loop Over Items').first().json.url,\n  formats: ['rawHtml'],\n  onlyMainContent: false,\n  location: { country: $('Recapture settings').first().json.country },\n  proxy: 'auto',\n  maxAge: 3600000\n}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 90000
+        }
+      },
+      "id": "aa3b6813-8cd0-50a2-86ae-2555dc6514a9",
+      "name": "Firecrawl scrape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        1280
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Firecrawl"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "competitor_listings"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "listing_key",
+              "condition": "eq",
+              "keyValue": "={{ $json.listing_key }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.row.status }}",
+            "method": "={{ $json.row.method }}",
+            "url": "={{ $json.row.url }}",
+            "last_checked_at": "={{ $json.row.last_checked_at }}",
+            "last_price": "={{ $json.row.last_price }}",
+            "in_stock": "={{ $json.row.in_stock }}",
+            "last_change": "={{ $json.row.last_change }}",
+            "pending_price": "={{ $json.row.pending_price }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_checked_at",
+              "displayName": "last_checked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_price",
+              "displayName": "last_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "in_stock",
+              "displayName": "in_stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_change",
+              "displayName": "last_change",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "pending_price",
+              "displayName": "pending_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "809cf024-5fd2-5694-a58e-340f6fe19083",
+      "name": "Update listing",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        1040
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "210a2425-a707-5e89-afd5-8ef7e93235f6",
+              "leftValue": "={{ $('Read price').first().json.row.status === 'ok' && $('Read price').first().json.row.last_change !== 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f02d91f7-e081-5d93-b83b-aefdd48b849b",
+      "name": "Price changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "competitor_prices"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "listing_key": "={{ $('Read price').first().json.listing_key }}",
+            "product_key": "={{ $('Loop Over Items').first().json.product_key }}",
+            "domain": "={{ $('Loop Over Items').first().json.domain }}",
+            "price": "={{ $('Read price').first().json.row.last_price }}",
+            "in_stock": "={{ $('Read price').first().json.row.in_stock }}",
+            "method": "={{ $('Read price').first().json.row.method }}",
+            "captured_at": "={{ $('Read price').first().json.row.last_checked_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "listing_key",
+              "displayName": "listing_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_key",
+              "displayName": "product_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "in_stock",
+              "displayName": "in_stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "captured_at",
+              "displayName": "captured_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "94637698-0adf-5476-a27d-b41868d86eb3",
+      "name": "Save price change",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        1020
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "b593dfe1-aed3-59e7-8c5e-f82375b063f4",
+      "name": "Mondays at 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"own_domain\": \"yourstore.com\",\n  \"exclude_domains\": [],\n  \"currency\": \"USD\",\n  \"locale\": \"en-US\",\n  \"country\": \"US\",\n  \"search_location\": \"United States\",\n  \"language_code\": \"en\",\n  \"search_depth\": 20,\n  \"prices_include_tax\": false,\n  \"market_shows_tax\": false,\n  \"tax_rate\": 0,\n  \"tax_exclusive_domains\": [],\n  \"mpn_source\": \"metafield\",\n  \"mpn_metafield_namespace\": \"custom\",\n  \"mpn_metafield_key\": \"mpn\",\n  \"user_agent\": \"YourStorePriceCheck/1.0 (+https://yourstore.com/price-check)\",\n  \"robots_agent\": \"YourStorePriceCheck\",\n  \"discovery_batch\": 100,\n  \"research_with_listings_days\": 30,\n  \"research_without_listings_days\": 14,\n  \"recapture_every_hours\": 120,\n  \"recapture_batch\": 300,\n  \"min_delay_seconds\": 10,\n  \"max_price_move\": 0.6,\n  \"use_firecrawl\": true,\n  \"firecrawl_per_run\": 8,\n  \"min_confidence\": 0.9,\n  \"max_price_age_days\": 7,\n  \"min_price_ratio\": 0.5,\n  \"undercut_threshold\": 0.02,\n  \"report_limit\": 20,\n  \"slack_channel\": \"#pricing\"\n}",
+        "options": {}
+      },
+      "id": "066a4960-6ae8-5e2a-84e3-4b63eb05db57",
+      "name": "Report settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0f44938f-1d77-5224-b3d7-fa8916489d84",
+      "name": "Get Shopify token for report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        1700
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Report settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for report').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: `query Variants($cursor: String, $ns: String, $key: String!) {\n    productVariants(first: 100, after: $cursor, query: \"product_status:active\") {\n      pageInfo { hasNextPage endCursor }\n      nodes {\n        id\n        sku\n        price\n        title\n        barcodes(first: 5) { nodes { value } }\n        mpn: metafield(namespace: $ns, key: $key) { value }\n        product {\n          title\n          vendor\n          mpn: metafield(namespace: $ns, key: $key) { value }\n        }\n      }\n    }\n  }`,\n  variables: { cursor: null, ns: $('Report settings').first().json.mpn_metafield_namespace, key: $('Report settings').first().json.mpn_metafield_key }\n}) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { cursor: $response.body.data.productVariants.pageInfo.endCursor, ns: $('Report settings').first().json.mpn_metafield_namespace, key: $('Report settings').first().json.mpn_metafield_key } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.productVariants.pageInfo.hasNextPage }}"
+            }
+          }
+        }
+      },
+      "id": "25b84745-e0d7-5f8f-97b2-f75eeb27c2f1",
+      "name": "Get my prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "competitor_listings"
+        },
+        "returnAll": true
+      },
+      "id": "5a3920ed-0840-54a5-a996-b950c8f9f0d9",
+      "name": "Get all listings",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        1700
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cheapest trusted competitor per product, compared with your current price, plus a health check.\nconst s = $('Report settings').first().json;\nconst day = 864e5, now = Date.now();\nconst mine = {};\nfor (const page of $('Get my prices').all())\n  for (const v of page.json.data.productVariants.nodes) mine[v.id] = { price: Number(v.price), title: v.product.title };\n// Compare like with like: tax-inclusive against tax-inclusive.\nconst comparable = p => s.market_shows_tax === s.prices_include_tax ? p\n  : s.market_shows_tax ? p * (1 + s.tax_rate) : p / (1 + s.tax_rate);\nconst money = n => new Intl.NumberFormat(s.locale, { style: 'currency', currency: s.currency }).format(n);\n// Trade and B2B sites often put ex-tax prices in their JSON-LD even where shoppers see tax included.\nconst theirs = l => s.market_shows_tax && (s.tax_exclusive_domains || []).includes(l.domain)\n  ? l.last_price * (1 + s.tax_rate) : l.last_price;\n\nconst listings = $input.all().map(i => i.json);\nconst best = {}, odd = [];\nfor (const l of listings) {\n  const me = mine[l.product_key];\n  // robots_disallowed keeps its last price (often a Google Shopping offer) until it's too old to trust.\n  if (!me || !['ok', 'robots_disallowed'].includes(l.status) || l.in_stock === false || l.confidence < s.min_confidence) continue;\n  if (now - new Date(l.last_checked_at) > s.max_price_age_days * day) continue;\n  const price = theirs(l);\n  if (price < comparable(me.price) * s.min_price_ratio) { odd.push(l); continue; } // too cheap to be the same thing\n  if (!best[l.product_key] || price < best[l.product_key].price) best[l.product_key] = { ...l, price };\n}\nconst undercuts = Object.values(best).map(l => {\n  const my = comparable(mine[l.product_key].price);\n  return { ...l, title: mine[l.product_key].title, my, gap: my - l.price, pct: (my - l.price) / my };\n}).filter(u => u.pct >= s.undercut_threshold).sort((a, b) => b.gap - a.gap);\n\nconst week = listings.filter(l => now - new Date(l.last_checked_at) < 7 * day);\nconst count = st => week.filter(l => l.status === st).length;\nconst unhealthy = count('ok') === 0 || count('blocked') > week.length / 2;\n\nconst blocks = [{ type: 'header', text: { type: 'plain_text', text: `${undercuts.length} products where a competitor is cheaper` } }];\nif (unhealthy) blocks.push({ type: 'section', text: { type: 'mrkdwn',\n  text: `:warning: Only ${count('ok')} of ${week.length} pages read a price this week (${count('blocked')} blocked). Check the Recapture lane before trusting this report.` } });\nfor (const u of undercuts.slice(0, s.report_limit)) blocks.push({ type: 'section', text: { type: 'mrkdwn',\n  text: `*${u.title}*\\n<${u.url}|${u.seller}> ${money(u.price)} vs yours ${money(u.my)}: ${money(u.gap)} (${Math.round(u.pct * 100)}%) cheaper` } });\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn',\n  text: `${week.length} pages checked this week: ${count('ok')} ok, ${count('robots_disallowed')} search only, ${count('blocked')} blocked, ${count('no_price')} no price, ${count('suspect')} held back. ${odd.length} prices under ${s.min_price_ratio * 100}% of yours skipped as likely mismatches.` }] });\nreturn [{ json: { blocks, text: `${undercuts.length} competitor undercuts`, undercuts: undercuts.length } }];\n"
+      },
+      "id": "81b6862a-b653-5192-b394-cb842584dec7",
+      "name": "Find undercuts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Report settings').first().json.slack_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ JSON.stringify({ blocks: $json.blocks }) }}",
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "id": "3ab1982b-7b21-5354-be93-71552bd0db52",
+      "name": "Send report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1320,
+        1700
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Create competitor_listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create competitor_listings": {
+      "main": [
+        [
+          {
+            "node": "Create competitor_prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create competitor_prices": {
+      "main": [
+        [
+          {
+            "node": "Create competitor_searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day at 03:00": {
+      "main": [
+        [
+          {
+            "node": "Discover settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discover settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Get my products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get my products": {
+      "main": [
+        [
+          {
+            "node": "Get search log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get search log": {
+      "main": [
+        [
+          {
+            "node": "Pick products to search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick products to search": {
+      "main": [
+        [
+          {
+            "node": "Search Google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Google": {
+      "main": [
+        [
+          {
+            "node": "Keep exact matches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep exact matches": {
+      "main": [
+        [
+          {
+            "node": "Route by kind",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by kind": {
+      "main": [
+        [
+          {
+            "node": "Save listing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert failed searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 6 hours": {
+      "main": [
+        [
+          {
+            "node": "Recapture settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recapture settings": {
+      "main": [
+        [
+          {
+            "node": "Get listings due a check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get listings due a check": {
+      "main": [
+        [
+          {
+            "node": "Check robots.txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check robots.txt": {
+      "main": [
+        [
+          {
+            "node": "Allowed by robots.txt?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait between requests": {
+      "main": [
+        [
+          {
+            "node": "Fetch page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch page": {
+      "main": [
+        [
+          {
+            "node": "Read price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read price": {
+      "main": [
+        [
+          {
+            "node": "Try Firecrawl?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firecrawl scrape": {
+      "main": [
+        [
+          {
+            "node": "Read price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update listing": {
+      "main": [
+        [
+          {
+            "node": "Price changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save price change": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed by robots.txt?": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark disallowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait between requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try Firecrawl?": {
+      "main": [
+        [
+          {
+            "node": "Firecrawl scrape",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update listing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price changed?": {
+      "main": [
+        [
+          {
+            "node": "Save price change",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mondays at 08:00": {
+      "main": [
+        [
+          {
+            "node": "Report settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for report": {
+      "main": [
+        [
+          {
+            "node": "Get my prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get my prices": {
+      "main": [
+        [
+          {
+            "node": "Get all listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all listings": {
+      "main": [
+        [
+          {
+            "node": "Find undercuts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find undercuts": {
+      "main": [
+        [
+          {
+            "node": "Send report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

@@ -1,0 +1,2915 @@
+{
+  "name": "Category page SEO",
+  "nodes": [
+    {
+      "id": "cf1fb2be-dc2d-5eb1-84b5-727160ccba35",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        -140
+      ],
+      "parameters": {
+        "content": "## Category page SEO\n\nWrites the intro and meta tags for each collection from its live products, links it to its parent, children and siblings in code, and asks you in Slack before anything changes. Sorts every collection daily so in-stock products come first, and audits internal links weekly.\n\n### How it works\n1. **Setup** (run once) creates `collection_copy` and `link_audit`. Import your keywords into `collection_copy`.\n2. **Write** (every 4 hours) picks collections with no copy, or queued for a refresh, reads their products and their place in the menu, writes the copy (AI for head terms, a template for the long tail), checks it and adds links in code, then posts a card.\n3. **Review** (Slack buttons) checks Slack's signature. Approve re-reads the live description and writes the copy with `collectionUpdate`; Redraft queues it again; Skip leaves it.\n4. **Sort** (daily) puts relevant, buyable products first and sold-out, draft or image-less ones last. Starts as a dry run.\n5. **Audit** (weekly) finds orphan collections, menu links to empty ones and children their parent doesn't link to, and queues those parents for a redraft.\n\n### Setup\n1. Credentials: Custom Auth with your Shopify client ID and secret on every **Get Shopify token** node, Slack API on the Slack nodes, Crypto with your Slack signing secret on **Sign the request**, Ollama on **Ollama Chat Model**.\n2. Fill in each lane's settings node.\n3. Run **Run once to set up** and import your keywords.\n4. Point your Slack app's Interactivity URL at **Slack button click**, then publish.\n\n### Customisation\n- Swap **Ollama Chat Model** for any chat model sub-node.\n- Change `voice`, `store_facts` and `examples` in **Write settings**.\n- Set `dry_run` to false in **Sort settings** once the report looks right.",
+        "width": 880,
+        "height": 800,
+        "color": 1
+      }
+    },
+    {
+      "id": "9e6f5646-d28b-5d5f-993f-eae90e35f2c2",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -140
+      ],
+      "parameters": {
+        "content": "## Setup (run once)\nCreates the two data tables. Safe to run again. Then import your keyword rows into `collection_copy`: handle, keyword, other_searches, volume.",
+        "width": 760,
+        "height": 360,
+        "color": 7
+      }
+    },
+    {
+      "id": "e37d7376-1af2-5d9a-b63f-4df31b371efd",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        40
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c0e15f93-8a53-55bf-9409-5787b0392aa0",
+      "name": "Create collection_copy",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        40
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "collection_copy",
+        "columns": {
+          "column": [
+            {
+              "name": "handle",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "name": "keyword",
+              "type": "string"
+            },
+            {
+              "name": "other_searches",
+              "type": "string"
+            },
+            {
+              "name": "volume",
+              "type": "number"
+            },
+            {
+              "name": "gid",
+              "type": "string"
+            },
+            {
+              "name": "parent_handle",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "intro",
+              "type": "string"
+            },
+            {
+              "name": "body_html",
+              "type": "string"
+            },
+            {
+              "name": "meta_title",
+              "type": "string"
+            },
+            {
+              "name": "meta_description",
+              "type": "string"
+            },
+            {
+              "name": "flags",
+              "type": "string"
+            },
+            {
+              "name": "reviewed_by",
+              "type": "string"
+            },
+            {
+              "name": "live_html",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      }
+    },
+    {
+      "id": "570fdc5d-d921-5b40-8556-546a039a66aa",
+      "name": "Create link_audit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        40
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "link_audit",
+        "columns": {
+          "column": [
+            {
+              "name": "run_date",
+              "type": "date"
+            },
+            {
+              "name": "handle",
+              "type": "string"
+            },
+            {
+              "name": "issue",
+              "type": "string"
+            },
+            {
+              "name": "parent_handle",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      }
+    },
+    {
+      "id": "677cacd5-5cfc-5558-93f9-cc52ef6305dc",
+      "name": "Lane Write",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        300
+      ],
+      "parameters": {
+        "content": "## Write (every 4 hours)\nPicks collections that need copy, builds the context from their live products and menu, writes with AI or a template, checks it, adds links in code and posts a review card.",
+        "width": 4900,
+        "height": 760,
+        "color": 7
+      }
+    },
+    {
+      "id": "b270214c-9904-5aea-b495-efb9b0f9e377",
+      "name": "Every 4 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        550
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "15a01ab6-00d8-515f-b9f6-540b5963b87e",
+      "name": "Run Write now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        730
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "0b4de879-414b-55ae-b4a0-788c38979df6",
+      "name": "Write settings",
+      "notes": "Your settings for the Write lane. The examples carry your voice until you have approved intros of your own.",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        640
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"store_name\": \"Your Store\",\n  \"tree_menu\": \"main-menu\",\n  \"max_per_run\": 5,\n  \"ai_min_volume\": 100,\n  \"rewrite_existing\": false,\n  \"skip_handles\": [\n    \"frontpage\"\n  ],\n  \"intro_words\": [\n    55,\n    75\n  ],\n  \"max_links\": 6,\n  \"model\": \"gemma4:31b\",\n  \"slack_channel\": \"#review-copy\",\n  \"keyword_namespace\": \"seo\",\n  \"spec_keys\": [\n    \"custom.channels\",\n    \"custom.storage_bays\"\n  ],\n  \"spec_labels\": {\n    \"custom.channels\": \"Channels\",\n    \"custom.storage_bays\": \"Drive bays\"\n  },\n  \"voice\": \"Plain, practical and specific. Contractions are fine. Explain a technical term the first time it appears.\",\n  \"store_facts\": \"Free shipping over $100. 30-day returns.\",\n  \"examples\": [\n    {\n      \"title\": \"Bulk Cable\",\n      \"intro\": \"Cut your own cable from the box and every camera gets exactly the length it needs, with no joins in the roof and no spare loops in the ceiling. Run it from the switch to each spot along the eaves, finish the ends with plugs or wall sockets, and test every run before the cornice goes back on.\"\n    }\n  ]\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "adbe1ffe-ae38-57c2-a827-a0a4ca101e6f",
+      "name": "Get Shopify token",
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "position": [
+        440,
+        640
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Write settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "f3a7489d-d990-5aae-88e8-1aa6e6356a85",
+      "name": "Read store",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        660,
+        640
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Write settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Store($after: String, $ns: String!) {\n  collections(first: 100, after: $after, query: \"published_status:published\") {\n    pageInfo { hasNextPage endCursor }\n    nodes { id handle title descriptionHtml sortOrder productsCount { count }\n      ruleSet { appliedDisjunctively rules { column relation condition } }\n      keyword: metafield(namespace: $ns, key: \"target_keyword\") { value }\n      volume: metafield(namespace: $ns, key: \"keyword_volume\") { value } }\n  }\n  menus(first: 25) {\n    nodes { handle items { title resourceId url\n      items { title resourceId url items { title resourceId url } } } }\n  }\n  productVendors(first: 250) { nodes }\n}`, variables: { after: null, ns: $('Write settings').first().json.keyword_namespace } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { after: $response.body.data.collections.pageInfo.endCursor, ns: $('Write settings').first().json.keyword_namespace } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.collections.pageInfo.hasNextPage }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "c26fac07-1dbb-51b9-a933-5090e3d41139",
+      "name": "Get copy rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "position": [
+        880,
+        640
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "c8e85264-0f3d-5244-83ec-04b0f4a6be40",
+      "name": "Pick collections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        640
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const cols = $('Read store').all().flatMap(i => i.json.data.collections.nodes);\nconst menus = $('Read store').first().json.data.menus.nodes;\nconst handleById = Object.fromEntries(cols.map(c => [c.id, c.handle]));\nconst handleOf = it => handleById[it.resourceId] || (it.url || '').match(/\\/collections\\/([^/?#]+)/)?.[1];\nconst s = $('Write settings').first().json;\nconst rows = Object.fromEntries($('Get copy rows').all().filter(i => i.json.handle).map(i => [i.json.handle, i.json]));\nconst titleOf = Object.fromEntries(cols.map(c => [c.handle, c.title]));\n\n// Parent, children and siblings come from how the main menu is nested...\nconst parent = {}, kids = {};\nconst adopt = (h, up) => { if (h && up && h !== up && !parent[h]) { parent[h] = up; (kids[up] = kids[up] || []).push(h); } };\nconst walk = (items, up) => {\n  for (const it of items || []) {\n    const h = handleOf(it);\n    adopt(h, up);\n    walk(it.items, h && h !== up ? h : up);\n  }\n};\nwalk(menus.find(m => m.handle === s.tree_menu)?.items, null);\n// ...and, for collections not in the menu, from their rules: \"type is X and ...\" sits under the collection whose only rule is \"type is X\".\nconst typePage = Object.fromEntries(cols.filter(c => c.ruleSet?.rules.length === 1 && c.ruleSet.rules[0].column === 'TYPE')\n  .map(c => [c.ruleSet.rules[0].condition.toLowerCase(), c.handle]));\nfor (const c of cols) if (!parent[c.handle] && c.ruleSet && !c.ruleSet.appliedDisjunctively && c.ruleSet.rules.length > 1) {\n  const t = c.ruleSet.rules.find(r => r.column === 'TYPE' && r.relation === 'EQUALS');\n  if (t) adopt(c.handle, typePage[t.condition.toLowerCase()]);\n}\n\nconst ref = h => (h && titleOf[h]) ? { handle: h, title: titleOf[h] } : null;\nconst empty = html => !(html || '').replace(/<[^>]+>/g, '').trim();\nconst vol = (c, r) => Number(r.volume || c.volume?.value || 0);\n\nreturn cols\n  .map(c => ({ c, r: rows[c.handle] || {} }))\n  .filter(({ c, r }) => !s.skip_handles.includes(c.handle))\n  .filter(({ c, r }) => ['refresh', 'failed'].includes(r.status) || (!r.status && (s.rewrite_existing || empty(c.descriptionHtml))))\n  .sort((a, b) => (b.r.status === 'refresh') - (a.r.status === 'refresh') || vol(b.c, b.r) - vol(a.c, a.r))   // refreshes first, then by volume\n  .slice(0, s.max_per_run)\n  .map(({ c, r }) => ({ json: {\n    gid: c.id, handle: c.handle, title: c.title,\n    keyword: r.keyword || c.keyword?.value || c.title.toLowerCase(), other_searches: r.other_searches || '', volume: vol(c, r),\n    use_ai: vol(c, r) >= s.ai_min_volume, live_html: c.descriptionHtml,\n    parent: ref(parent[c.handle]),\n    children: (kids[c.handle] || []).map(ref).filter(Boolean),\n    siblings: (kids[parent[c.handle]] || []).filter(h => h !== c.handle).map(ref).filter(Boolean),\n    vendors_all: $('Read store').first().json.data.productVendors.nodes,\n  } }));"
+      }
+    },
+    {
+      "id": "0baf46cb-2c62-52fe-bef2-b8d553d6ce83",
+      "name": "Read products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        640
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Write settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query($id: ID!, $keys: [String!]) { collection(id: $id) { products(first: 100) { nodes {\n    title vendor status totalInventory tracksInventory\n    options { name values }\n    metafields(first: 20, keys: $keys) { nodes { namespace key value } } } } } }`, variables: { id: $json.gid, keys: $('Write settings').first().json.spec_keys } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b738d642-89a1-5da2-be08-900fc5dc4491",
+      "name": "Build context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        640
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Write settings').first().json;\nconst picks = $('Pick collections').all().map(i => i.json);\nconst tally = xs => Object.entries(xs.reduce((m, x) => (m[x] = (m[x] || 0) + 1, m), {})).sort((a, b) => b[1] - a[1]);\n\nreturn $input.all().map((it, i) => {\n  const c = picks[i];\n  const all = it.json.data?.collection?.products?.nodes || [];\n  const live = all.filter(p => p.status === 'ACTIVE' && (!p.tracksInventory || p.totalInventory > 0));\n  const specs = tally(live.flatMap(p => [\n    ...p.metafields.nodes.map(m => `${s.spec_labels[m.key] || m.key}: ${m.value}`),   // with keys:, Shopify returns key as namespace.key\n    ...p.options.filter(o => o.name !== 'Title').map(o => `${o.name}: ${o.values.join(' / ')}`),\n  ])).filter(([, n]) => n >= 2).slice(0, 12).map(([spec, n]) => `${spec} (${n} products)`);\n  return { json: { ...c, live: live.length, specs,\n    brands: tally(live.map(p => p.vendor).filter(Boolean)).slice(0, 6).map(([v]) => v),\n    products: live.slice(0, 8).map(p => p.title),\n    family: [...c.children, ...(c.parent ? [c.parent] : []), ...c.siblings] } };\n});"
+      }
+    },
+    {
+      "id": "a3cd766a-fa87-5ada-82dd-449303ad9b0e",
+      "name": "Head term?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        640
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "head-term",
+              "leftValue": "={{ $json.use_ai }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "85d64ad7-21e1-5271-9b6f-1bd45c0ebca3",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        520
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Write settings').first().json;\nconst approved = $('Get copy rows').all().map(i => i.json).filter(r => r.status === 'approved' && r.intro);\nconst list = xs => xs.length ? xs.join(', ') : '(none)';\n\nreturn $input.all().map(({ json: c }) => {\n  const others = approved.filter(r => r.handle !== c.handle);\n  const ex = [...others.filter(r => r.parent_handle && r.parent_handle === c.parent?.handle),\n              ...others.filter(r => !r.parent_handle || r.parent_handle !== c.parent?.handle)].slice(0, 3);\n  const examples = (ex.length ? ex : s.examples).map(e => `${e.title || e.handle}: ${e.intro}`).join('\\n\\n');\n  const system = `You write category page copy for ${s.store_name}, an online store.\n${s.voice}\n- Describe the range. Never name a product model, model number or size.\n- Open with what the buyer gets from this range. Never open with a definition.\n- Name only brands from BRANDS and specs from COMMON SPECS.\n- Never write a URL or a link.\n- No em dashes.\n- Shipping, returns and payment claims come only from STORE FACTS: ${s.store_facts}\n\nEXAMPLE INTROS, for voice only. Never copy their sentences, brands or specs.\n${examples}`;\n  const prompt = `COLLECTION: ${c.title}\nTarget keyword: ${c.keyword}\nOther searches: ${c.other_searches || '(none)'}\nParent: ${c.parent?.title || '(top level)'}\nChildren: ${list(c.children.map(k => k.title))}\nSiblings: ${list(c.siblings.map(k => k.title))}\nLive products: ${c.live}\nBRANDS: ${list(c.brands)}\nCOMMON SPECS:\n${c.specs.join('\\n') || '(none)'}\nPRODUCTS:\n${c.products.join('\\n') || '(none yet)'}\n\nWrite:\n- intro: one paragraph, ${s.intro_words[0]} to ${s.intro_words[1]} words. Target keyword in the first or second sentence. Name children and siblings by their exact titles where it reads naturally.\n- meta_title: 20 to 48 characters. The keyword as a plural category in Title Case, then an optional modifier from this context. No store name.\n- meta_description: 130 to 155 characters. Start with Shop, Buy or Compare. End with one store fact.`;\n  return { json: { ...c, system, prompt } };\n});"
+      }
+    },
+    {
+      "id": "a64af89a-fa8c-528e-b3c8-be7e9dd5f071",
+      "name": "Write the copy",
+      "notes": "A failed call comes out as an error item, so Check and link marks that collection failed and the rest carry on.",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        2200,
+        620
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "={{ $json.system }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6fdd5575-047e-58f7-ab66-c49c7efd8e24",
+      "name": "Ollama Chat Model",
+      "notes": "Ollama Cloud: an Ollama credential with Base URL https://ollama.com and your API key. Output Format JSON stops stray commas breaking the parser. Swap for any chat model.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        2140,
+        840
+      ],
+      "parameters": {
+        "model": "={{ $('Write settings').first().json.model }}",
+        "options": {
+          "temperature": 0.5,
+          "format": "json"
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "name": "Ollama Cloud"
+        }
+      }
+    },
+    {
+      "id": "093f9eba-cc2c-595f-ac28-60b1938b56e8",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        2280,
+        840
+      ],
+      "parameters": {
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{\n  \"intro\": \"One paragraph.\",\n  \"meta_title\": \"NVRs | TP-LINK & Ubiquiti\",\n  \"meta_description\": \"Shop NVRs from TP-LINK and Ubiquiti ...\"\n}"
+      }
+    },
+    {
+      "id": "65c349df-cba6-5375-8c0a-5f5d9d886551",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2480,
+        520
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "ed662f58-50c2-5509-9a95-1e5d79aa048f",
+      "name": "Template copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        800
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Write settings').first().json;\nconst and = xs => xs.length > 1 ? xs.slice(0, -1).join(', ') + ' and ' + xs.at(-1) : xs.join('');\nreturn $input.all().map(({ json: c }) => {\n  const brands = c.brands.filter(b => b.toLowerCase() !== c.title.toLowerCase());   // a brand page names no other brand\n  return { json: { ...c, output: {\n    intro: brands.length ? `Shop our ${c.title} from ${and(brands)}.` : `Shop the ${c.title} range.`,\n    meta_title: brands.length ? `${c.title} | ${and(brands.slice(0, 2))}` : c.title,\n    meta_description: `Shop ${brands.length ? c.title + ' from ' + and(brands.slice(0, 3)) : 'the ' + c.title + ' range'} at ${s.store_name}. ${s.store_facts}`,\n  } } };\n});"
+      }
+    },
+    {
+      "id": "1388fae1-bc27-501e-8a47-e337fe47eb18",
+      "name": "Check and link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        640
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Write settings').first().json;\nconst fix = t => String(t || '').replace(/\\s*[\\u2014\\u2013]\\s*/g, ', ').replace(/\\s+/g, ' ').trim();\nconst esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst rx = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst has = (text, word) => new RegExp(`(^|[^\\\\w])${rx(word)}(?![\\\\w])`, 'i').test(text);\n\nreturn $input.all().map((it) => {\n  const c = it.json, d = it.json.output || {};\n  const intro = fix(d.intro), metaDesc = fix(d.meta_description);\n  const metaTitle = fix(d.meta_title).replace(new RegExp(`\\\\s*[|-]\\\\s*${rx(s.store_name)}$`, 'i'), '');\n  const base = { gid: c.gid, handle: c.handle, title: c.title, keyword: c.keyword, other_searches: c.other_searches, volume: c.volume,\n    parent_handle: c.parent?.handle || '', live_html: c.live_html, written_by: c.use_ai ? 'the model' : 'the template' };\n  if (!intro) return { json: { ...base, intro: '', body_html: '', meta_title: '', meta_description: '', links: [],\n    flags: ['no draft: ' + (c.error || 'the model returned nothing')], status: 'failed' } };   // tried again next run\n  const flags = [];\n  const words = intro.split(' ').filter(Boolean).length;\n  if ((words < s.intro_words[0] - 10 || words > s.intro_words[1] + 10)) flags.push(`intro is ${words} words`);\n\n  const stray = c.vendors_all.filter(v => !c.brands.includes(v) && has(intro, v));\n  if (stray.length) flags.push('brands not in this collection: ' + stray.join(', '));\n  const codes = [...new Set(c.products.join(' ').match(/\\b(?=[A-Z0-9-]*\\d)(?=[A-Z0-9-]*[A-Z])[A-Z0-9-]{4,}\\b/g) || [])];\n  const models = codes.filter(m => has(intro, m));\n  if (models.length) flags.push('names a model: ' + models.join(', '));\n  // Numbers are fine when they come from the titles, specs, brands or store facts, never from a product.\n  const known = JSON.stringify([c.title, c.keyword, c.other_searches, c.family.map(f => f.title), c.specs, c.brands, s.store_facts]);\n  const nums = [...new Set(intro.match(/[\\w.]*\\d[\\w.]*/g) || [])].map(n => n.replace(/\\.$/, '')).filter(n => !has(known, n));\n  if (nums.length) flags.push('names a size or number: ' + nums.join(', '));\n  if (metaTitle.length > 48) flags.push(`meta title is ${metaTitle.length} characters`);\n  if (/\\b(guide|tips|how to|explained|options)\\b/i.test(metaTitle)) flags.push('meta title reads like an article');\n  if (metaDesc.length < 120 || metaDesc.length > 160) flags.push(`meta description is ${metaDesc.length} characters`);\n\n  // First mention of a related collection becomes a link; children not mentioned get a line of their own.\n  let html = esc(intro), budget = s.max_links;\n  const linked = [];\n  for (const f of [...c.family].sort((a, b) => b.title.length - a.title.length)) {   // longest first: 4K Security Cameras before Security Cameras\n    const re = new RegExp(`(^|[^\\\\w>])(${rx(esc(f.title))})(?![\\\\w<])`, 'i');\n    if (budget > 0 && re.test(html)) {\n      html = html.replace(re, `$1<a href=\"/collections/${f.handle}\">$2</a>`);\n      linked.push(f.handle); budget--;\n    }\n  }\n  const missing = c.children.filter(k => !linked.includes(k.handle));\n  const body = `<p>${html}</p>` + (missing.length ? `<p>Shop by type: ${missing.map(k =>\n    `<a href=\"/collections/${k.handle}\">${esc(k.title)}</a>`).join(', ')}.</p>` : '');\n  const seoTitle = (metaTitle + ' | ' + s.store_name).length <= 60 ? `${metaTitle} | ${s.store_name}` : metaTitle;\n\n  return { json: { ...base, intro, body_html: body, meta_title: seoTitle, meta_description: metaDesc,\n    links: [...linked, ...missing.map(k => k.handle)], flags, status: 'review' } };\n});"
+      }
+    },
+    {
+      "id": "8ab7dfdb-9e9f-5275-878f-cc26a5c85b64",
+      "name": "Save the draft",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2920,
+        640
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "handle",
+              "condition": "eq",
+              "keyValue": "={{ $json.handle }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "handle": "={{ $json.handle }}",
+            "title": "={{ $json.title }}",
+            "keyword": "={{ $json.keyword }}",
+            "other_searches": "={{ $json.other_searches }}",
+            "volume": "={{ $json.volume }}",
+            "gid": "={{ $json.gid }}",
+            "parent_handle": "={{ $json.parent_handle }}",
+            "status": "={{ $json.status }}",
+            "intro": "={{ $json.intro }}",
+            "body_html": "={{ $json.body_html }}",
+            "meta_title": "={{ $json.meta_title }}",
+            "meta_description": "={{ $json.meta_description }}",
+            "live_html": "={{ $json.live_html }}",
+            "flags": "={{ $json.flags.join('; ') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "handle",
+              "displayName": "handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "other_searches",
+              "displayName": "other_searches",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "volume",
+              "displayName": "volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "gid",
+              "displayName": "gid",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "parent_handle",
+              "displayName": "parent_handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "intro",
+              "displayName": "intro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "body_html",
+              "displayName": "body_html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "meta_title",
+              "displayName": "meta_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "meta_description",
+              "displayName": "meta_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "live_html",
+              "displayName": "live_html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "flags",
+              "displayName": "flags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "425ee17c-ef41-5cb1-b7d5-a624a7e71c52",
+      "name": "Drafted?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        3140,
+        640
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "drafted",
+              "leftValue": "={{ $json.status === 'review' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "10d40245-49ac-5411-b039-d84949000d0e",
+      "name": "Post the card",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        3360,
+        640
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Write settings').first().json.slack_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ JSON.stringify({ blocks: [\n  { type: 'header', text: { type: 'plain_text', text: 'Copy to review: ' + $json.title } },\n  { type: 'section', text: { type: 'mrkdwn', text: '*Meta title* (' + $json.meta_title.length + ')\\n' + $json.meta_title + '\\n*Meta description* (' + $json.meta_description.length + ')\\n' + $json.meta_description } },\n  { type: 'section', text: { type: 'mrkdwn', text: '*Intro*\\n' + $json.intro } },\n  { type: 'context', elements: [{ type: 'mrkdwn', text: '`/collections/' + $json.handle + '` · keyword `' + $json.keyword + '` · written by ' + $('Check and link').item.json.written_by +\n    ' · links: ' + ($('Check and link').item.json.links.join(', ') || 'none') + ($json.flags ? '\\n:warning: ' + $json.flags : '') }] },\n  { type: 'actions', elements: [\n    { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Approve' }, action_id: 'copy_approve', value: $json.handle },\n    { type: 'button', text: { type: 'plain_text', text: 'Redraft' }, action_id: 'copy_redraft', value: $json.handle },\n    { type: 'button', text: { type: 'plain_text', text: 'Skip' }, action_id: 'copy_skip', value: $json.handle } ] }\n] }) }}",
+        "text": "=Copy to review: {{ $json.title }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "9e7d651b-75c1-5fc5-8741-f8f4d82d7ee9",
+      "name": "Lane Review",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1120
+      ],
+      "parameters": {
+        "content": "## Review (Slack buttons)\nChecks Slack's signature and ignores old cards. Approve re-reads the live description so a hand edit is never overwritten, then writes the copy. Redraft queues it again; Skip leaves it.",
+        "width": 3500,
+        "height": 640,
+        "color": 7
+      }
+    },
+    {
+      "id": "062bb3d8-e172-5641-8650-556c184fcb76",
+      "name": "Slack button click",
+      "notes": "Your Slack app's Interactivity Request URL.",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1360
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "copy-review",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      }
+    },
+    {
+      "id": "559c6021-1c6e-507a-8b2e-e5fcfe201ea2",
+      "name": "Respond to Slack",
+      "notes": "An empty 200 at once, inside Slack's 3 seconds.",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        1360
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      }
+    },
+    {
+      "id": "0e050944-06e5-5f0b-8c8e-6499600a419c",
+      "name": "Read the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1360
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nif (Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) > 300) throw new Error('Stale request');\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || ''; // no URLSearchParams in the Code node\nconst p = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' ')));\nconst a = p.actions[0];\nreturn [{ json: { base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'],\n  action: a.action_id, handle: a.value, user: p.user.username, channel: p.channel.id, ts: p.message.ts } }];"
+      }
+    },
+    {
+      "id": "81534f76-9c96-5f52-b848-eab1eed98431",
+      "name": "Sign the request",
+      "notes": "Crypto credential: Hmac Secret = your Slack app's Signing Secret.",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1360
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "id": "d453b4f0-c5bf-564f-9adf-8fabbe793779",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        1360
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sig-check",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6f97c4a0-e845-5be8-b416-537e615a2af4",
+      "name": "Get draft",
+      "notes": "A second tap, or a tap on an old card, finds nothing and stops here.",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        1360
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "handle",
+              "condition": "eq",
+              "keyValue": "={{ $('Read the click').first().json.handle }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "review"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "7f85a39c-f4a0-53c3-ace4-92122715cd02",
+      "name": "Route the click",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1320,
+        1360
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Approve",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r0-approve",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'copy_approve' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Redraft",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1-redraft",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'copy_redraft' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Skip",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r2-skip",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'copy_skip' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5d2d3bfb-34b8-5baf-ac77-2136495443f4",
+      "name": "Review settings",
+      "notes": "Your settings for the Review lane.",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1540,
+        1200
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b98ca1a0-873e-5b39-a23b-bf91dea8e90a",
+      "name": "Get Shopify token for Review",
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "position": [
+        1760,
+        1200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Review settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "2b1b82b7-e96d-5c14-aefe-540ed916a354",
+      "name": "Read live description",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        1200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Review settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Review').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'query($id: ID!) { collection(id: $id) { descriptionHtml } }', variables: { id: $('Get draft').first().json.gid } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b799f05e-66d2-519c-81cd-1019aa063d57",
+      "name": "Unchanged?",
+      "notes": "If someone edited the page in Shopify since the draft, the draft is queued again instead of overwriting their change.",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        1200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "unchanged",
+              "leftValue": "={{ String($json.data?.collection?.descriptionHtml || '').replace(/\\s+/g, ' ').trim() === String($('Get draft').first().json.live_html || '').replace(/\\s+/g, ' ').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2f1c141d-5bb0-5d41-a074-c81042b6bfed",
+      "name": "Update the collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        1110
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Review settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Review').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: `mutation($c: CollectionUpdateInput!) { collectionUpdate(collection: $c) {\n    collection { handle } userErrors { field message } } }`,\n  variables: { c: { id: $('Get draft').first().json.gid, descriptionHtml: $('Get draft').first().json.body_html,\n    seo: { title: $('Get draft').first().json.meta_title, description: $('Get draft').first().json.meta_description } } }\n}) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "4440814c-42a3-52f6-81c6-f74337e04e73",
+      "name": "Saved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        1110
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "saved",
+              "leftValue": "={{ !$json.errors && !$json.data?.collectionUpdate?.userErrors?.length }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b7d99f2e-18d3-5a46-a15a-0e7e79571c72",
+      "name": "Mark approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2860,
+        1020
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "handle",
+              "condition": "eq",
+              "keyValue": "={{ $('Get draft').first().json.handle }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved",
+            "reviewed_by": "={{ $('Read the click').first().json.user }}",
+            "live_html": "={{ $('Get draft').first().json.body_html }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reviewed_by",
+              "displayName": "reviewed_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "live_html",
+              "displayName": "live_html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "af37eb08-2d95-5d9d-bc0d-95ceec5b1830",
+      "name": "Mark failed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2860,
+        1200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "handle",
+              "condition": "eq",
+              "keyValue": "={{ $('Get draft').first().json.handle }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "failed",
+            "flags": "={{ [...($json.errors || []), ...($json.data?.collectionUpdate?.userErrors || [])].map(e => e.message).join('; ') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "flags",
+              "displayName": "flags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2835123f-fcbb-5a3e-8d6e-f1f18564983f",
+      "name": "Mark refresh",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        1380
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "handle",
+              "condition": "eq",
+              "keyValue": "={{ $('Get draft').first().json.handle }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "refresh",
+            "reviewed_by": "={{ $('Read the click').first().json.user }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reviewed_by",
+              "displayName": "reviewed_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f42439c5-17a4-58ee-b1ed-34c0226fc163",
+      "name": "Mark skipped",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        1540
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "handle",
+              "condition": "eq",
+              "keyValue": "={{ $('Get draft').first().json.handle }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "skipped",
+            "reviewed_by": "={{ $('Read the click').first().json.user }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reviewed_by",
+              "displayName": "reviewed_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "82ee07a8-db15-5bd5-a40f-60d2a50c2c18",
+      "name": "Update the card",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        3100,
+        1360
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "update",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Read the click').first().json.channel }}"
+        },
+        "ts": "={{ $('Read the click').first().json.ts }}",
+        "messageType": "block",
+        "blocksUi": "={{ (() => {\n  const d = $('Get draft').first().json, c = $('Read the click').first().json, st = $json.status;\n  const note = st === 'approved' ? ':white_check_mark: Approved by @' + c.user + '. Shopify updated: <https://' + $('Review settings').first().json.store_domain + '/collections/' + d.handle + '|view the page>'\n    : st === 'refresh' && c.action === 'copy_approve' ? ':warning: Someone edited this page in Shopify since the draft, so it was left alone and queued for a fresh draft.'\n    : st === 'refresh' ? ':repeat: @' + c.user + ' asked for a redraft. It is queued for the next Write run.'\n    : st === 'skipped' ? ':heavy_minus_sign: Skipped by @' + c.user + '.'\n    : ':x: Shopify refused it: ' + $json.flags;\n  return JSON.stringify({ blocks: [\n    { type: 'section', text: { type: 'mrkdwn', text: '*' + d.title + '*\\n' + d.meta_title + '\\n' + d.intro } },\n    { type: 'context', elements: [{ type: 'mrkdwn', text: note }] } ] });\n})() }}",
+        "text": "=Copy reviewed",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        },
+        "updateFields": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "4002f5b5-f30b-59d4-bb2b-d6dcaf29deae",
+      "name": "Risk Update the collection",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        1560
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify\nReplaces the collection description and SEO title and description. Test on a development store first.",
+        "width": 420,
+        "height": 150,
+        "color": 3
+      }
+    },
+    {
+      "id": "3a86e926-9c64-562d-9cf3-6c7a3d0d9e5d",
+      "name": "Lane Sort",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1820
+      ],
+      "parameters": {
+        "content": "## Sort (daily)\nScores each collection's products against its keyword and puts sold-out, draft, image-less and unpriced products last. Reports only while `dry_run` is true.",
+        "width": 3080,
+        "height": 560,
+        "color": 7
+      }
+    },
+    {
+      "id": "9931e597-22cf-510a-a2f9-a124ba953f92",
+      "name": "Every day",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1970
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "caa760d3-d921-5850-b959-f2cd388a4c05",
+      "name": "Run Sort now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2150
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "9a3db7c6-7a70-596e-af71-a95833d03520",
+      "name": "Sort settings",
+      "notes": "Your settings for the Sort lane. Keep dry_run on until you have read the first report.",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        2060
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"keyword_namespace\": \"seo\",\n  \"skip_handles\": [\n    \"frontpage\",\n    \"new-arrivals\",\n    \"sale\"\n  ],\n  \"min_secondary\": 0.5,\n  \"stopwords\": [\n    \"for\",\n    \"with\",\n    \"and\",\n    \"the\",\n    \"a\"\n  ],\n  \"synonyms\": {\n    \"wireless\": \"wifi\",\n    \"recorder\": \"nvr\"\n  },\n  \"dry_run\": true,\n  \"slack_channel\": \"#log-sort\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "ad5fc93b-9609-546a-afad-2e745ac2f930",
+      "name": "Get Shopify token for Sort",
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "position": [
+        440,
+        2060
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Sort settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "7b49b740-26b5-5a1d-8e2d-428f464553cf",
+      "name": "Sort read store",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        660,
+        2060
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Sort settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Sort').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Store($after: String, $ns: String!) {\n  collections(first: 100, after: $after, query: \"published_status:published\") {\n    pageInfo { hasNextPage endCursor }\n    nodes { id handle title descriptionHtml sortOrder productsCount { count }\n      ruleSet { appliedDisjunctively rules { column relation condition } }\n      keyword: metafield(namespace: $ns, key: \"target_keyword\") { value }\n      volume: metafield(namespace: $ns, key: \"keyword_volume\") { value } }\n  }\n  menus(first: 25) {\n    nodes { handle items { title resourceId url\n      items { title resourceId url items { title resourceId url } } } }\n  }\n  productVendors(first: 250) { nodes }\n}`, variables: { after: null, ns: $('Sort settings').first().json.keyword_namespace } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { after: $response.body.data.collections.pageInfo.endCursor, ns: $('Sort settings').first().json.keyword_namespace } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.collections.pageInfo.hasNextPage }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "1608f73f-7249-5420-9fc8-897b0986aea4",
+      "name": "Sort copy rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "position": [
+        880,
+        2060
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "33d525e8-e694-5637-8795-f21b6872914d",
+      "name": "Collections to sort",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        2060
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Sort settings').first().json;\nconst rows = Object.fromEntries($('Sort copy rows').all().filter(i => i.json.handle).map(i => [i.json.handle, i.json]));\nreturn $('Sort read store').all().flatMap(i => i.json.data.collections.nodes)\n  .map(c => ({ c, kw: rows[c.handle]?.keyword || c.keyword?.value }))\n  .filter(({ c, kw }) => kw && !s.skip_handles.includes(c.handle))\n  .map(({ c, kw }) => ({ json: { gid: c.id, handle: c.handle, keyword: kw,\n    other_searches: (rows[c.handle]?.other_searches || '').split(',').map(x => x.trim()).filter(Boolean) } }));"
+      }
+    },
+    {
+      "id": "cb04e7f4-ff41-5871-89b3-dd7e65709c20",
+      "name": "Read collection products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        2060
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Sort settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Sort').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query($id: ID!) { collection(id: $id) { sortOrder products(first: 250, sortKey: COLLECTION_DEFAULT) { nodes {\n    id title status totalInventory tracksInventory featuredMedia { id } priceRangeV2 { minVariantPrice { amount } } } } } }`, variables: { id: $json.gid } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "2b8fdb8d-99ad-5877-bfc7-33a735b5b250",
+      "name": "Order products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        2060
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Sort settings').first().json;\nconst cols = $('Collections to sort').all().map(i => i.json);\nconst tokens = t => [...new Set(String(t).toLowerCase().replace(/wi-?fi/g, 'wifi').split(/[^a-z0-9]+/)\n  .filter(w => w && !s.stopwords.includes(w))\n  .map(w => w.length > 4 && w.endsWith('ies') ? w.slice(0, -3) + 'y' : (w.length > 3 && /[^siu]s$/.test(w) ? w.slice(0, -1) : w))\n  .map(w => s.synonyms[w] || w))];\nconst score = (kw, title) => { const k = tokens(kw), t = tokens(title); return k.length ? k.filter(w => t.includes(w)).length / k.length : 0; };\nconst buyable = p => p.status === 'ACTIVE' && p.featuredMedia && Number(p.priceRangeV2.minVariantPrice.amount) > 0\n  && (!p.tracksInventory || p.totalInventory > 0);\n\nreturn $input.all().map((it, i) => {\n  const c = cols[i], col = it.json.data.collection, now = col.products.nodes;\n  const ids = now.map(p => p.id);\n  const byKeyword = list => list.map(p => ({ p, sc: score(c.keyword, p.title), at: ids.indexOf(p.id) }))\n    .sort((a, b) => b.sc - a.sc || a.at - b.at).map(x => x.p);\n  const ready = now.filter(buyable), placed = [];\n  for (const kw of c.other_searches) {       // one best product per other search, in your order\n    const best = ready.filter(p => !placed.includes(p)).map(p => ({ p, sc: score(kw, p.title) })).sort((a, b) => b.sc - a.sc)[0];\n    if (best && best.sc >= s.min_secondary) placed.push(best.p);\n  }\n  const order = [...placed, ...byKeyword(ready.filter(p => !placed.includes(p))), ...byKeyword(now.filter(p => !buyable(p)))];\n\n  // Shopify re-sorts a collection after it switches to Manual, so a switch gets this run and the moves wait for the next.\n  if (col.sortOrder !== 'MANUAL') return { json: { gid: c.gid, handle: c.handle, was: col.sortOrder, switch: true, moves: [],\n    page1: order.slice(0, 8).map(p => p.title), last: order.filter(p => !buyable(p)).map(p => p.title) } };\n  const arr = ids.slice(), moves = [];\n  order.forEach((p, pos) => {                // only the moves that change the live order\n    if (arr[pos] === p.id) return;\n    const at = arr.indexOf(p.id);\n    if (at >= 0) arr.splice(at, 1);\n    arr.splice(pos, 0, p.id);\n    moves.push({ id: p.id, newPosition: String(pos) });\n  });\n  return { json: { gid: c.gid, handle: c.handle, was: col.sortOrder, switch: false, moves: moves.slice(0, 250), page1: order.slice(0, 8).map(p => p.title),\n    last: order.filter(p => !buyable(p)).map(p => p.title) } };\n});"
+      }
+    },
+    {
+      "id": "2afac8af-468c-57ce-aa8d-b81102dd3b42",
+      "name": "Live run?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        1970
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "live-run",
+              "leftValue": "={{ !$('Sort settings').first().json.dry_run && ($json.switch || $json.moves.length > 0) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "29fd403c-0d63-5bb5-bd2c-b49051269a1a",
+      "name": "Reorder products",
+      "notes": "Runs before the report: branches run top to bottom.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        1970
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Sort settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Sort').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.switch\n  ? { query: 'mutation($id: ID!) { collectionUpdate(collection: { id: $id, sortOrder: MANUAL }) { userErrors { message } } }', variables: { id: $json.gid } }\n  : { query: 'mutation($id: ID!, $moves: [MoveInput!]!) { collectionReorderProducts(id: $id, moves: $moves) { job { id } userErrors { field message } } }',\n      variables: { id: $json.gid, moves: $json.moves } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b326f097-ae1b-5e10-983f-f5beba8cb6f0",
+      "name": "Post sort report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        1980,
+        2150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((() => {\n  const s = $('Sort settings').first().json, all = $('Order products').all().map(i => i.json);\n  const moved = all.filter(r => r.switch || r.moves.length);\n  const errs = $('Reorder products').isExecuted ? $('Reorder products').all().flatMap(x => [...(x.json.errors || []),\n    ...(x.json.data?.collectionUpdate?.userErrors || []), ...(x.json.data?.collectionReorderProducts?.userErrors || [])]).map(e => e.message) : [];\n  // Short lines: Slack cuts a message at 4,000 characters.\n  const lines = moved.slice(0, 25).map(r => '*' + r.handle + '*: ' + (r.switch ? 'switches to Manual, products move on the next run' : r.moves.length + ' moves') +\n    '. First: ' + r.page1.slice(0, 3).map(t => t.slice(0, 40)).join(' / ') + (r.last.length ? '. ' + r.last.length + ' last (sold out, draft, no image or no price)' : ''));\n  return { channel: s.slack_channel, unfurl_links: false, text: (s.dry_run ? ':test_tube: Sort dry run, nothing changed.' : ':arrows_counterclockwise: Sort run.') + '\\n' +\n    lines.join('\\n') + (moved.length > 25 ? '\\n...and ' + (moved.length - 25) + ' more' : '') +\n    '\\n' + (all.length - moved.length) + ' collections already in order.' + (errs.length ? '\\n:x: Shopify errors: ' + errs.join('; ') : '') };\n})()) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "a9922ded-2365-5d35-8f6a-dc85c2200a5c",
+      "name": "Risk Reorder products",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        1900
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify\nSets the collection to Manual sort, then moves its products on the next run. Runs only when `dry_run` is false.",
+        "width": 420,
+        "height": 150,
+        "color": 3
+      }
+    },
+    {
+      "id": "4de71695-f9c1-5627-a5e4-e908db22125a",
+      "name": "Lane Audit",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2460
+      ],
+      "parameters": {
+        "content": "## Audit (weekly)\nFinds collections nothing links to, menu links to empty collections and children their parent page does not link to. Saves the findings, queues those parents for a redraft and posts a summary.",
+        "width": 2860,
+        "height": 560,
+        "color": 7
+      }
+    },
+    {
+      "id": "7ac81d86-147b-5383-ac5a-33161f781b92",
+      "name": "Every Monday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        2610
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b688a1b4-71d6-5870-817d-f3e0f54fe0f4",
+      "name": "Run Audit now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2790
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "60d9ef4d-d977-513f-8774-1b7376f0527c",
+      "name": "Audit settings",
+      "notes": "Your settings for the Audit lane. theme_linked: handles your theme links in code, such as a brands page.",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        2700
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"keyword_namespace\": \"seo\",\n  \"tree_menu\": \"main-menu\",\n  \"ignore\": [\n    \"frontpage\"\n  ],\n  \"theme_linked\": [],\n  \"slack_channel\": \"#log-seo\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "8dc94c93-57da-51a1-9f05-4ec432b2ed69",
+      "name": "Get Shopify token for Audit",
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "position": [
+        440,
+        2700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Audit settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "18e54326-d9f6-50e5-99c1-6479218a8a58",
+      "name": "Audit read store",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        660,
+        2700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Audit settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Audit').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Store($after: String, $ns: String!) {\n  collections(first: 100, after: $after, query: \"published_status:published\") {\n    pageInfo { hasNextPage endCursor }\n    nodes { id handle title descriptionHtml sortOrder productsCount { count }\n      ruleSet { appliedDisjunctively rules { column relation condition } }\n      keyword: metafield(namespace: $ns, key: \"target_keyword\") { value }\n      volume: metafield(namespace: $ns, key: \"keyword_volume\") { value } }\n  }\n  menus(first: 25) {\n    nodes { handle items { title resourceId url\n      items { title resourceId url items { title resourceId url } } } }\n  }\n  productVendors(first: 250) { nodes }\n}`, variables: { after: null, ns: $('Audit settings').first().json.keyword_namespace } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { after: $response.body.data.collections.pageInfo.endCursor, ns: $('Audit settings').first().json.keyword_namespace } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.collections.pageInfo.hasNextPage }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "5327c9d1-279d-53c8-9fd4-19a4813b154e",
+      "name": "Find orphans",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        2700
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Audit settings').first().json;   // { tree_menu, ignore: [\"frontpage\"], theme_linked: [] }\nconst cols = $('Audit read store').all().flatMap(i => i.json.data.collections.nodes).filter(c => !s.ignore.includes(c.handle));\nconst menus = $('Audit read store').first().json.data.menus.nodes;\nconst handleById = Object.fromEntries(cols.map(c => [c.id, c.handle]));\nconst handleOf = it => handleById[it.resourceId] || (it.url || '').match(/\\/collections\\/([^/?#]+)/)?.[1];\nconst linksTo = (html, h) => new RegExp(`href=\"[^\"]*/collections/${h}([\"?#/])`).test(html || '');\n\nconst inMenu = new Set(), parent = {};\nconst walk = (items, up, tree) => {\n  for (const it of items || []) {\n    const h = handleOf(it);\n    if (h) inMenu.add(h);\n    if (tree && h && up && h !== up && !parent[h]) parent[h] = up;\n    walk(it.items, h && h !== up ? h : up, tree);\n  }\n};\nfor (const m of menus) walk(m.items, null, m.handle === s.tree_menu);\n// Collections outside the menu sit under the page whose only rule is their type, as in the Write lane.\nconst typePage = Object.fromEntries(cols.filter(c => c.ruleSet?.rules.length === 1 && c.ruleSet.rules[0].column === 'TYPE')\n  .map(c => [c.ruleSet.rules[0].condition.toLowerCase(), c.handle]));\nfor (const c of cols) if (!parent[c.handle] && c.ruleSet && !c.ruleSet.appliedDisjunctively && c.ruleSet.rules.length > 1) {\n  const t = c.ruleSet.rules.find(r => r.column === 'TYPE' && r.relation === 'EQUALS');\n  const up = t && typePage[t.condition.toLowerCase()];\n  if (up && up !== c.handle) parent[c.handle] = up;\n}\n\nconst desc = Object.fromEntries(cols.map(c => [c.handle, c.descriptionHtml]));\nconst today = new Date().toISOString().slice(0, 10);\nconst orphans = cols.filter(c => !inMenu.has(c.handle) && !s.theme_linked.includes(c.handle)\n  && !cols.some(o => o.handle !== c.handle && linksTo(o.descriptionHtml, c.handle)));\nconst empty = cols.filter(c => inMenu.has(c.handle) && c.productsCount.count === 0);\nconst unlinked = Object.entries(parent).filter(([kid, up]) => kid in desc && up in desc && !linksTo(desc[up], kid));\n\nreturn [\n  ...orphans.map(c => ({ json: { run_date: today, handle: c.handle, issue: 'orphan', parent_handle: parent[c.handle] || '' } })),\n  ...empty.map(c => ({ json: { run_date: today, handle: c.handle, issue: 'menu links to empty collection', parent_handle: '' } })),\n  ...unlinked.map(([kid, up]) => ({ json: { run_date: today, handle: kid, issue: 'not linked from parent', parent_handle: up } })),\n];"
+      }
+    },
+    {
+      "id": "331fc42b-d6bc-5f5d-a9fd-7b3f0bed9c19",
+      "name": "Save findings",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        2610
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "link_audit"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_date": "={{ $json.run_date }}",
+            "handle": "={{ $json.handle }}",
+            "issue": "={{ $json.issue }}",
+            "parent_handle": "={{ $json.parent_handle }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "run_date",
+              "displayName": "run_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "handle",
+              "displayName": "handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "issue",
+              "displayName": "issue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "parent_handle",
+              "displayName": "parent_handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3a3d5667-1efc-5e1f-86dd-2aa85582c04a",
+      "name": "Parents to redraft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        2790
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Parents with copy that miss a child link go back to the Write lane, once each.\nconst ups = [...new Set($('Find orphans').all().filter(i => i.json.issue === 'not linked from parent').map(i => i.json.parent_handle))];\nreturn ups.map(h => ({ json: { handle: h } }));"
+      }
+    },
+    {
+      "id": "1624b971-aab4-5e38-a4bc-08109e261c91",
+      "name": "Queue a redraft",
+      "notes": "Only parents whose copy you approved. A parent with no row yet is picked up by Write anyway once its description is empty.",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "alwaysOutputData": true,
+      "position": [
+        1320,
+        2790
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_copy"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "handle",
+              "condition": "eq",
+              "keyValue": "={{ $json.handle }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "approved"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "refresh"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9a22c432-8203-5f9b-ae92-8f75691be0f7",
+      "name": "Post audit report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        1540,
+        2700
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((() => {\n  const f = $('Find orphans').all().map(i => i.json);\n  const by = k => f.filter(x => x.issue === k);\n  const line = (label, xs, fmt) => xs.length ? '*' + label + '* (' + xs.length + '): ' + xs.map(fmt).join(', ') + '\\n' : '';\n  const queued = $('Queue a redraft').all().filter(i => i.json.handle).map(i => i.json.handle);\n  return { channel: $('Audit settings').first().json.slack_channel, unfurl_links: false, text: ':mag: Weekly link audit\\n' +\n    line('Orphans, nothing links to them', by('orphan'), x => x.handle) +\n    line('Menu links to empty collections', by('menu links to empty collection'), x => x.handle) +\n    line('Not linked from their parent', by('not linked from parent'), x => x.handle + ' (parent ' + x.parent_handle + ')') +\n    (queued.length ? 'Queued for a redraft: ' + queued.join(', ') : 'No approved parents to redraft.') };\n})()) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Create collection_copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create collection_copy": {
+      "main": [
+        [
+          {
+            "node": "Create link_audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write the copy",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Write the copy",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 4 hours": {
+      "main": [
+        [
+          {
+            "node": "Write settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Write now": {
+      "main": [
+        [
+          {
+            "node": "Write settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Read store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read store": {
+      "main": [
+        [
+          {
+            "node": "Get copy rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get copy rows": {
+      "main": [
+        [
+          {
+            "node": "Pick collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick collections": {
+      "main": [
+        [
+          {
+            "node": "Read products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read products": {
+      "main": [
+        [
+          {
+            "node": "Build context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build context": {
+      "main": [
+        [
+          {
+            "node": "Head term?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Head term?": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Template copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "Write the copy",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the copy": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Check and link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template copy": {
+      "main": [
+        [
+          {
+            "node": "Check and link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check and link": {
+      "main": [
+        [
+          {
+            "node": "Save the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the draft": {
+      "main": [
+        [
+          {
+            "node": "Drafted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drafted?": {
+      "main": [
+        [
+          {
+            "node": "Post the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Respond to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Slack": {
+      "main": [
+        [
+          {
+            "node": "Read the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the click": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Get draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get draft": {
+      "main": [
+        [
+          {
+            "node": "Route the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route the click": {
+      "main": [
+        [
+          {
+            "node": "Review settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark refresh",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Review": {
+      "main": [
+        [
+          {
+            "node": "Read live description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read live description": {
+      "main": [
+        [
+          {
+            "node": "Unchanged?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unchanged?": {
+      "main": [
+        [
+          {
+            "node": "Update the collection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark refresh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update the collection": {
+      "main": [
+        [
+          {
+            "node": "Saved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Saved?": {
+      "main": [
+        [
+          {
+            "node": "Mark approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark approved": {
+      "main": [
+        [
+          {
+            "node": "Update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark failed": {
+      "main": [
+        [
+          {
+            "node": "Update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark refresh": {
+      "main": [
+        [
+          {
+            "node": "Update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark skipped": {
+      "main": [
+        [
+          {
+            "node": "Update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day": {
+      "main": [
+        [
+          {
+            "node": "Sort settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Sort now": {
+      "main": [
+        [
+          {
+            "node": "Sort settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Sort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Sort": {
+      "main": [
+        [
+          {
+            "node": "Sort read store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort read store": {
+      "main": [
+        [
+          {
+            "node": "Sort copy rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort copy rows": {
+      "main": [
+        [
+          {
+            "node": "Collections to sort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collections to sort": {
+      "main": [
+        [
+          {
+            "node": "Read collection products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read collection products": {
+      "main": [
+        [
+          {
+            "node": "Order products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order products": {
+      "main": [
+        [
+          {
+            "node": "Live run?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post sort report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live run?": {
+      "main": [
+        [
+          {
+            "node": "Reorder products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Monday": {
+      "main": [
+        [
+          {
+            "node": "Audit settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Audit now": {
+      "main": [
+        [
+          {
+            "node": "Audit settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Audit": {
+      "main": [
+        [
+          {
+            "node": "Audit read store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit read store": {
+      "main": [
+        [
+          {
+            "node": "Find orphans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find orphans": {
+      "main": [
+        [
+          {
+            "node": "Save findings",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parents to redraft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parents to redraft": {
+      "main": [
+        [
+          {
+            "node": "Queue a redraft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue a redraft": {
+      "main": [
+        [
+          {
+            "node": "Post audit report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
