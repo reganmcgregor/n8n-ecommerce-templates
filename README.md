@@ -1,6 +1,6 @@
 # n8n ecommerce templates
 
-Free n8n templates for running an online store: monitoring competitor prices, adding products, writing product titles and building collections. Each one is a single n8n canvas with a lane per job, keeps its state in n8n Data Tables, and asks you in Slack before it changes anything in your store.
+Free n8n templates for running an online store: monitoring competitor prices, adding products, writing product titles and building collections. Each one is a single n8n canvas with a lane per job, keeps its state in n8n Data Tables (or in Supabase, with the `workflow-supabase.json` version), and asks you in Slack before it changes anything in your store.
 
 | Template | What it does |
 | --- | --- |
@@ -14,11 +14,24 @@ Free n8n templates for running an online store: monitoring competitor prices, ad
 
 1. Read [SETUP.md](SETUP.md) for the credentials the templates share: a Shopify app, a Slack app and an AI model.
 2. Open a template's folder and follow its README: import `workflow.json`, add the credentials, fill in the settings node, run the Setup lane once, then test on a few products before turning on the schedules.
+   - To create the credentials without pasting secrets anywhere, run `python3 scripts/create-credentials.py <template-folder>` in your terminal ([how it works](SETUP.md#create-the-credentials-from-your-terminal)).
+   - To set a template up with Claude Code, Codex or Cursor, copy the prompt under **Set it up with an AI agent** in its README.
 3. Test anything that writes to Shopify on a development store first. Templates that change your store have a `dry_run` setting or a Slack approval step, and a red note on the nodes that write.
+
+## What's in each folder
+
+| File | What it is |
+| --- | --- |
+| `workflow.json` | The template, storing its data in n8n Data Tables |
+| `workflow-supabase.json` | The same template storing its data in Supabase (Postgres) instead ([setup](SETUP.md#supabase-optional)) |
+| `supabase/schema.sql` | The tables for the Supabase version, if you'd rather create them in Supabase's SQL editor |
+| `credentials.json` | The credentials the template needs and the nodes they go on, read by `scripts/create-credentials.py` |
+| `README.md` | Install, settings, testing, troubleshooting and the AI-agent setup prompt |
+| `screenshot.png` | The canvas |
 
 ## Requirements
 
-- n8n with Data Tables. Every template was built and tested on n8n 2.45. Self-hosting the free Community Edition is recommended: no execution limits, and the schedules cost nothing when there's nothing to do. n8n Cloud works too.
+- n8n with Data Tables, or a Supabase (or any Postgres) database for the Supabase versions. Every template was built and tested on n8n 2.45, in both versions. Self-hosting the free Community Edition is recommended: no execution limits, and the schedules cost nothing when there's nothing to do. n8n Cloud works too.
 - Shopify, through a Dev Dashboard app using the client credentials grant (Admin GraphQL API 2026-10).
 - Slack, for the review cards and reports.
 - An AI model for the templates that write copy. They default to Ollama Cloud, and any n8n chat model sub-node can replace it.

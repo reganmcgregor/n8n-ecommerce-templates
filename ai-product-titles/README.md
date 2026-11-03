@@ -95,3 +95,32 @@ Someone changed the title in Shopify after the draft was written, so Push left i
 ### Data table writes start failing
 
 All data tables on an instance share a 200 MiB limit by default. Self-hosters can raise `N8N_DATA_TABLES_MAX_SIZE_BYTES`; otherwise move the tables to Postgres.
+
+## Use Supabase instead of Data Tables
+
+`workflow-supabase.json` is the same workflow with every Data table node swapped for a Postgres node on your Supabase database, for when you'd rather keep the data in a database you can query, back up and share with other tools. The nodes keep their names, so everything above applies.
+
+1. Create a Supabase project and copy its **Session pooler** connection string (Connect > Session pooler). [SETUP.md](../SETUP.md#supabase-optional) has the details.
+2. Create the Postgres credential: run `python3 scripts/create-credentials.py ai-product-titles --supabase` from the repo root, or create it by hand as SETUP.md describes.
+3. Import `workflow-supabase.json` instead of `workflow.json`, and select the Postgres credential on every table node (the script lists them).
+4. Run **Run once to set up**. It creates the tables (`title_examples`, `title_drafts`) if they don't exist. You can also run [`supabase/schema.sql`](supabase/schema.sql) in Supabase's SQL editor first.
+
+Each table has the same columns as the data table, plus `id`, `createdAt` and `updatedAt`, and a unique key on the columns the workflow upserts on. The free plan includes a 500 MB database, and free projects pause after a week without activity; restore one from the Supabase dashboard if that happens.
+
+## Set it up with an AI agent
+
+Paste this into Claude Code, Codex or Cursor, opened in a clone of this repo. It never needs your secrets: you type those into a script in your own terminal.
+
+```text
+Help me set up the "AI product titles" n8n template in ./ai-product-titles.
+
+1. Read ai-product-titles/README.md, SETUP.md and ai-product-titles/workflow.json. Ask me whether I want n8n Data Tables (workflow.json) or Supabase (workflow-supabase.json).
+2. Import the workflow into my n8n. Use the n8n MCP server if one is connected; otherwise tell me exactly where to click in n8n.
+3. Never ask me for a password, token, API key or secret, and don't accept one if I paste it. Tell me to run this in my own terminal from the repo root:
+   python3 scripts/create-credentials.py ai-product-titles
+   (add --supabase for the Supabase version). Then put each credential it created on the nodes it lists.
+4. Walk me through every settings node one value at a time: say what the value does, suggest one for my store, and wait for my answer.
+5. Run the Setup lane and check its output with me.
+6. Test on about 5 products with nothing written to my store yet (dry_run on where the template has it, and no Slack card approved), show me what it produced and check it with me before anything writes to my store.
+7. Stop and ask me whenever something doesn't match the README.
+```

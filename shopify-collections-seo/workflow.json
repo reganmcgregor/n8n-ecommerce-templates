@@ -442,14 +442,13 @@
       ],
       "parameters": {
         "promptType": "define",
-        "text": "=You name a collection page for an online store.\n\nCategory: {{ $json.product_type }}\nAttribute: {{ $json.attr_label || 'brand' }}\nValue: {{ $json.attr_value || $json.vendor }}\nBrand for this page: {{ $json.source === 'brand_type' ? $json.vendor : 'none' }}\nProducts on the page: {{ $json.live_count }}\nSample product titles:\n{{ $json.sample_titles.join('\\n') }}\nExisting collections in this category:\n{{ $json.sibling_titles.join('\\n') || 'none' }}\n\nTitle:\n- The words a shopper would type to find these products, in Title Case, plural.\n- Value first, category noun last.\n- Units as shoppers write them: 8 Port, 4K, 2TB, 5m.\n- Name a brand only if \"Brand for this page\" is not none, spelled exactly as given.\n- No model numbers. No product names. No claims such as best or cheap.\n- 60 characters or fewer.\n\nKeywords:\n- 3 to 8 phrases a shopper would type into Google to find this page.\n- Lower case.\n- Every phrase contains the value or the brand.\n- No model numbers.\n\nskip_reason:\n- Explain in a few words when the value only works as a filter, not a page: pack quantities, internal codes, materials shoppers don't search for.\n- Explain when the page would repeat an existing collection.\n- Otherwise an empty string.",
-        "hasOutputParser": true
+        "text": "=You name a collection page for an online store.\n\nCategory: {{ $json.product_type }}\nAttribute: {{ $json.attr_label || 'brand' }}\nValue: {{ $json.attr_value || $json.vendor }}\nBrand for this page: {{ $json.source === 'brand_type' ? $json.vendor : 'none' }}\nProducts on the page: {{ $json.live_count }}\nSample product titles:\n{{ $json.sample_titles.join('\\n') }}\nExisting collections in this category:\n{{ $json.sibling_titles.join('\\n') || 'none' }}\n\nTitle:\n- The words a shopper would type to find these products, in Title Case, plural.\n- Value first, category noun last.\n- Units as shoppers write them: 8 Port, 4K, 2TB, 5m.\n- Name a brand only if \"Brand for this page\" is not none, spelled exactly as given.\n- No model numbers. No product names. No claims such as best or cheap.\n- 60 characters or fewer.\n\nKeywords:\n- 3 to 8 phrases a shopper would type into Google to find this page.\n- Lower case.\n- Every phrase contains the value or the brand.\n- No model numbers.\n\nskip_reason:\n- Explain in a few words when the value only works as a filter, not a page: pack quantities, internal codes, materials shoppers don't search for.\n- Explain when the page would repeat an existing collection.\n- Otherwise an empty string.\n\nReply with only this JSON object: {\"title\": \"...\", \"keywords\": [\"...\"], \"skip_reason\": \"\"}"
       }
     },
     {
       "id": "cd8624a0-ae56-5580-b13e-8e531ddd996b",
       "name": "Ollama Chat Model",
-      "notes": "Ollama Cloud: an Ollama credential with Base URL https://ollama.com and your API key. Output Format JSON stops stray commas breaking the parser. Swap for any chat model.",
+      "notes": "Ollama Cloud: an Ollama credential with Base URL https://ollama.com and your API key. Swap for any chat model.",
       "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
       "typeVersion": 1,
       "position": [
@@ -459,28 +458,13 @@
       "parameters": {
         "model": "=gpt-oss:120b",
         "options": {
-          "temperature": 0.2,
-          "format": "json"
+          "temperature": 0.2
         }
       },
       "credentials": {
         "ollamaApi": {
           "name": "Ollama Cloud"
         }
-      }
-    },
-    {
-      "id": "2e63c4d2-b593-5af5-a0b8-b16393bab01f",
-      "name": "Structured Output Parser",
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.3,
-      "position": [
-        1880,
-        820
-      ],
-      "parameters": {
-        "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\"\n    },\n    \"keywords\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"maxItems\": 8\n    },\n    \"skip_reason\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"title\",\n    \"keywords\",\n    \"skip_reason\"\n  ]\n}"
       }
     },
     {
@@ -495,7 +479,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const all = $('Find candidates').all().map(i => i.json);\nconst vendors = [...new Set($('Get products').all().flatMap(i => i.json.data.products.nodes.map(p => p.vendor)).filter(Boolean))];\nconst words = t => String(t).toLowerCase().split(/[^a-z0-9.+]+/).filter(Boolean);\nconst slug = t => t.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');\nconst seen = new Set();\n\nreturn $input.all().map((item, i) => {\n  const c = all[i];\n  const ai = item.json.output ?? {};\n  const own = c.source === 'brand_type' ? c.vendor.toLowerCase() : null;\n  const raw = c.source === 'brand_type' ? `${c.vendor} ${c.product_type}` : `${c.attr_value} ${c.product_type}`;\n  // Any word with a digit (a size, a spec, a model code) must come from the value or the category.\n  const allowed = new Set(words(raw));\n  const problems = (text) => {\n    const low = ` ${String(text).toLowerCase()} `;\n    const found = vendors.filter(v => v.toLowerCase() !== own && low.includes(` ${v.toLowerCase()} `)).map(v => 'brand ' + v);\n    return found.concat(words(text).filter(w => /\\d/.test(w) && !allowed.has(w)).map(w => 'not in the data: ' + w));\n  };\n  const aiOk = ai.title && ai.title.length <= 60 && problems(ai.title).length === 0;\n  const title = aiOk ? ai.title.trim() : raw;\n  let keywords = (ai.keywords ?? []).map(k => k.toLowerCase().replace(/[^a-z0-9 .+&'-]/g, ' ').replace(/\\s+/g, ' ').trim())\n    .filter(k => k && k.length <= 80 && k.split(' ').length <= 10 && problems(k).length === 0);\n  if (!keywords.length) keywords = [raw.toLowerCase()];\n  const handle = slug(title);\n  const dupe = seen.has(handle); seen.add(handle);\n  return { json: { ...c, raw_title: raw, title, handle, keywords: [...new Set(keywords)],\n    name_source: aiOk ? 'ai' : 'fallback', name_problems: aiOk ? [] : problems(ai.title ?? ''),\n    skip_reason: ai.skip_reason || (dupe ? 'same title as another proposal this week' : '') } };\n});"
+        "jsCode": "const all = $('Find candidates').all().map(i => i.json);\nconst vendors = [...new Set($('Get products').all().flatMap(i => i.json.data.products.nodes.map(p => p.vendor)).filter(Boolean))];\nconst words = t => String(t).toLowerCase().split(/[^a-z0-9.+]+/).filter(Boolean);\nconst slug = t => t.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');\nconst seen = new Set();\n// Models wrap JSON in code fences and leave trailing commas, so read it leniently.\nconst readJson = t => {\n  try { return JSON.parse(String(t || '').replace(/```(json)?/gi, '').replace(/,\\s*([}\\]])/g, '$1').trim()); }\n  catch (e) { return {}; }\n};\n\nreturn $input.all().map((item, i) => {\n  const c = all[i];\n  const ai = readJson(item.json.text);\n  const own = c.source === 'brand_type' ? c.vendor.toLowerCase() : null;\n  const raw = c.source === 'brand_type' ? `${c.vendor} ${c.product_type}` : `${c.attr_value} ${c.product_type}`;\n  // Any word with a digit (a size, a spec, a model code) must come from the value or the category.\n  const allowed = new Set(words(raw));\n  const problems = (text) => {\n    const low = ` ${String(text).toLowerCase()} `;\n    const found = vendors.filter(v => v.toLowerCase() !== own && low.includes(` ${v.toLowerCase()} `)).map(v => 'brand ' + v);\n    return found.concat(words(text).filter(w => /\\d/.test(w) && !allowed.has(w)).map(w => 'not in the data: ' + w));\n  };\n  const aiOk = ai.title && ai.title.length <= 60 && problems(ai.title).length === 0;\n  const title = aiOk ? ai.title.trim() : raw;\n  let keywords = (ai.keywords ?? []).map(k => k.toLowerCase().replace(/[^a-z0-9 .+&'-]/g, ' ').replace(/\\s+/g, ' ').trim())\n    .filter(k => k && k.length <= 80 && k.split(' ').length <= 10 && problems(k).length === 0);\n  if (!keywords.length) keywords = [raw.toLowerCase()];\n  const handle = slug(title);\n  const dupe = seen.has(handle); seen.add(handle);\n  return { json: { ...c, raw_title: raw, title, handle, keywords: [...new Set(keywords)],\n    name_source: aiOk ? 'ai' : 'fallback', name_problems: aiOk ? [] : problems(ai.title ?? ''),\n    skip_reason: ai.skip_reason || (dupe ? 'same title as another proposal this week' : '') } };\n});"
       }
     },
     {
@@ -3567,17 +3551,6 @@
           {
             "node": "Name the collection",
             "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Structured Output Parser": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "Name the collection",
-            "type": "ai_outputParser",
             "index": 0
           }
         ]

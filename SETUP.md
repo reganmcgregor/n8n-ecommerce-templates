@@ -1,6 +1,6 @@
 # Setup
 
-The credentials the templates in this repo use. Each template's README says which ones it needs and which nodes they go on. Create them once in n8n (Overview > Credentials > Create credential) and reuse them across templates.
+The credentials the templates in this repo use. Each template's README says which ones it needs and which nodes they go on. Create them once in n8n (Overview > Credentials > Create credential) and reuse them across templates. Or let [the script](#create-the-credentials-from-your-terminal) create them for you.
 
 ## Shopify
 
@@ -57,7 +57,7 @@ The templates with an AI step use one Chat Model sub-node, set to the Ollama nod
 
 To use another provider, swap the Chat Model sub-node for that provider's (OpenAI, Anthropic, OpenRouter and so on). The chain or agent it's attached to doesn't change.
 
-The competitor price monitoring template has no AI step. Add products to Shopify uses one Basic LLM Chain for the title and short description. AI product titles uses one Basic LLM Chain for the title. Shopify collections SEO uses one to name each proposed collection, and category page SEO one to write each intro and its meta tags; both set the Ollama node's Output Format to JSON so a stray comma can't break the structured output.
+The competitor price monitoring template has no AI step. Add products to Shopify uses one Basic LLM Chain for the title and short description. AI product titles uses one Basic LLM Chain for the title. Shopify collections SEO uses one to name each proposed collection, and category page SEO one to write each intro and its meta tags. Those two ask for a small JSON reply and read it in a Code node rather than a Structured Output Parser, because models on Ollama Cloud sometimes wrap JSON in a code fence or leave a trailing comma (even with Output Format set to JSON), and a parser rejects that.
 
 ## AliExpress Open Platform
 
@@ -89,3 +89,27 @@ Used only for pages that block a plain request.
 3. Select it on the template's `Firecrawl scrape` node.
 
 If you'd rather not use it, set `use_firecrawl` to false in the template's settings.
+
+## Create the credentials from your terminal
+
+`scripts/create-credentials.py` creates every credential a template needs through n8n's public API, so you never paste a secret into a chat or a file. It uses Python 3's standard library only. Run it in your own terminal from the repo root:
+
+```bash
+python3 scripts/create-credentials.py shopify-collections-seo
+```
+
+It asks for your n8n URL and an n8n API key, then for each credential in the template's `credentials.json`. Secrets are typed with nothing shown on screen and sent straight to your n8n. It prints only the names and IDs it created, and which nodes each one goes on. Add `--supabase` to create the Postgres credential for `workflow-supabase.json` too. If a credential with the same name and type already exists, it asks before creating another.
+
+You need an n8n API key: in n8n, open **Settings > n8n API**, create a key and copy it. Self-hosted n8n has the API on by default (unless `N8N_PUBLIC_API_DISABLED` is set). On n8n Cloud, the API [isn't available during the free trial](https://docs.n8n.io/api/authentication/), so on a trial create the credentials by hand as described above.
+
+## Supabase (optional)
+
+Every template also ships as `workflow-supabase.json`, which keeps its tables in a Supabase (Postgres) database instead of n8n Data Tables. Use it when you'd rather query, back up or share the data outside n8n, or you're near the Data Tables size limit.
+
+1. Create a project at [supabase.com](https://supabase.com). The [free plan](https://supabase.com/pricing) includes a 500 MB database; free projects pause after a week without activity, and you restore them from the dashboard.
+2. Click **Connect** and copy the **Session pooler** connection string (`postgresql://postgres.<project>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`), with your database password in place of `[YOUR-PASSWORD]`. If the password contains `/`, `?` or `#`, URL-encode those characters (or reset the password to letters and numbers). Use the session pooler rather than the direct connection, which is [IPv6 only unless you pay for the IPv4 add-on](https://supabase.com/docs/guides/database/connecting-to-postgres), or the transaction pooler (port 6543), which doesn't support the prepared statements n8n uses.
+3. Create the n8n credential with `python3 scripts/create-credentials.py <template> --supabase`, or by hand as a **Postgres** credential: Host, Database (`postgres`), User (`postgres.<project>`), Password and Port (5432) from the connection string, SSL **Require**, and **Ignore SSL Issues** on, because Supabase signs its database certificates with its own certificate authority and n8n rejects them otherwise.
+4. Run the template's Setup lane, or paste its `supabase/schema.sql` into Supabase's SQL editor.
+
+The table nodes run plain SQL with query parameters, so they also work on any other Postgres database.
+

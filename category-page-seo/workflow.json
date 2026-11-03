@@ -436,13 +436,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const s = $('Write settings').first().json;\nconst approved = $('Get copy rows').all().map(i => i.json).filter(r => r.status === 'approved' && r.intro);\nconst list = xs => xs.length ? xs.join(', ') : '(none)';\n\nreturn $input.all().map(({ json: c }) => {\n  const others = approved.filter(r => r.handle !== c.handle);\n  const ex = [...others.filter(r => r.parent_handle && r.parent_handle === c.parent?.handle),\n              ...others.filter(r => !r.parent_handle || r.parent_handle !== c.parent?.handle)].slice(0, 3);\n  const examples = (ex.length ? ex : s.examples).map(e => `${e.title || e.handle}: ${e.intro}`).join('\\n\\n');\n  const system = `You write category page copy for ${s.store_name}, an online store.\n${s.voice}\n- Describe the range. Never name a product model, model number or size.\n- Open with what the buyer gets from this range. Never open with a definition.\n- Name only brands from BRANDS and specs from COMMON SPECS.\n- Never write a URL or a link.\n- No em dashes.\n- Shipping, returns and payment claims come only from STORE FACTS: ${s.store_facts}\n\nEXAMPLE INTROS, for voice only. Never copy their sentences, brands or specs.\n${examples}`;\n  const prompt = `COLLECTION: ${c.title}\nTarget keyword: ${c.keyword}\nOther searches: ${c.other_searches || '(none)'}\nParent: ${c.parent?.title || '(top level)'}\nChildren: ${list(c.children.map(k => k.title))}\nSiblings: ${list(c.siblings.map(k => k.title))}\nLive products: ${c.live}\nBRANDS: ${list(c.brands)}\nCOMMON SPECS:\n${c.specs.join('\\n') || '(none)'}\nPRODUCTS:\n${c.products.join('\\n') || '(none yet)'}\n\nWrite:\n- intro: one paragraph, ${s.intro_words[0]} to ${s.intro_words[1]} words. Target keyword in the first or second sentence. Name children and siblings by their exact titles where it reads naturally.\n- meta_title: 20 to 48 characters. The keyword as a plural category in Title Case, then an optional modifier from this context. No store name.\n- meta_description: 130 to 155 characters. Start with Shop, Buy or Compare. End with one store fact.`;\n  return { json: { ...c, system, prompt } };\n});"
+        "jsCode": "const s = $('Write settings').first().json;\nconst approved = $('Get copy rows').all().map(i => i.json).filter(r => r.status === 'approved' && r.intro);\nconst list = xs => xs.length ? xs.join(', ') : '(none)';\n\nreturn $input.all().map(({ json: c }) => {\n  const others = approved.filter(r => r.handle !== c.handle);\n  const ex = [...others.filter(r => r.parent_handle && r.parent_handle === c.parent?.handle),\n              ...others.filter(r => !r.parent_handle || r.parent_handle !== c.parent?.handle)].slice(0, 3);\n  const examples = (ex.length ? ex : s.examples).map(e => `${e.title || e.handle}: ${e.intro}`).join('\\n\\n');\n  const system = `You write category page copy for ${s.store_name}, an online store.\n${s.voice}\n- Describe the range. Never name a product model, model number or size.\n- Open with what the buyer gets from this range. Never open with a definition.\n- Name only brands from BRANDS and specs from COMMON SPECS.\n- Never write a URL or a link.\n- No em dashes.\n- Shipping, returns and payment claims come only from STORE FACTS: ${s.store_facts}\n\nEXAMPLE INTROS, for voice only. Never copy their sentences, brands or specs.\n${examples}`;\n  const prompt = `COLLECTION: ${c.title}\nTarget keyword: ${c.keyword}\nOther searches: ${c.other_searches || '(none)'}\nParent: ${c.parent?.title || '(top level)'}\nChildren: ${list(c.children.map(k => k.title))}\nSiblings: ${list(c.siblings.map(k => k.title))}\nLive products: ${c.live}\nBRANDS: ${list(c.brands)}\nCOMMON SPECS:\n${c.specs.join('\\n') || '(none)'}\nPRODUCTS:\n${c.products.join('\\n') || '(none yet)'}\n\nWrite:\n- intro: one paragraph, ${s.intro_words[0]} to ${s.intro_words[1]} words. Target keyword in the first or second sentence. Name children and siblings by their exact titles where it reads naturally.\n- meta_title: 20 to 48 characters. The keyword as a plural category in Title Case, then an optional modifier from this context. No store name.\n- meta_description: 130 to 155 characters. Start with Shop, Buy or Compare. End with one store fact.\n\nReply with only this JSON object: {\"intro\": \"...\", \"meta_title\": \"...\", \"meta_description\": \"...\"}`;\n  return { json: { ...c, system, prompt } };\n});"
       }
     },
     {
       "id": "a64af89a-fa8c-528e-b3c8-be7e9dd5f071",
       "name": "Write the copy",
-      "notes": "A failed call comes out as an error item, so Check and link marks that collection failed and the rest carry on.",
+      "notes": "Returns plain text; Check and link reads the JSON. A failed call comes out as an error item, so that collection is marked failed and the rest carry on.",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "retryOnFail": true,
@@ -456,7 +456,6 @@
       "parameters": {
         "promptType": "define",
         "text": "={{ $json.prompt }}",
-        "hasOutputParser": true,
         "messages": {
           "messageValues": [
             {
@@ -469,7 +468,7 @@
     {
       "id": "6fdd5575-047e-58f7-ab66-c49c7efd8e24",
       "name": "Ollama Chat Model",
-      "notes": "Ollama Cloud: an Ollama credential with Base URL https://ollama.com and your API key. Output Format JSON stops stray commas breaking the parser. Swap for any chat model.",
+      "notes": "Ollama Cloud: an Ollama credential with Base URL https://ollama.com and your API key. Swap for any chat model.",
       "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
       "typeVersion": 1,
       "position": [
@@ -479,28 +478,13 @@
       "parameters": {
         "model": "={{ $('Write settings').first().json.model }}",
         "options": {
-          "temperature": 0.5,
-          "format": "json"
+          "temperature": 0.5
         }
       },
       "credentials": {
         "ollamaApi": {
           "name": "Ollama Cloud"
         }
-      }
-    },
-    {
-      "id": "093f9eba-cc2c-595f-ac28-60b1938b56e8",
-      "name": "Structured Output Parser",
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.3,
-      "position": [
-        2280,
-        840
-      ],
-      "parameters": {
-        "schemaType": "fromJson",
-        "jsonSchemaExample": "{\n  \"intro\": \"One paragraph.\",\n  \"meta_title\": \"NVRs | TP-LINK & Ubiquiti\",\n  \"meta_description\": \"Shop NVRs from TP-LINK and Ubiquiti ...\"\n}"
       }
     },
     {
@@ -545,7 +529,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const s = $('Write settings').first().json;\nconst fix = t => String(t || '').replace(/\\s*[\\u2014\\u2013]\\s*/g, ', ').replace(/\\s+/g, ' ').trim();\nconst esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst rx = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst has = (text, word) => new RegExp(`(^|[^\\\\w])${rx(word)}(?![\\\\w])`, 'i').test(text);\n\nreturn $input.all().map((it) => {\n  const c = it.json, d = it.json.output || {};\n  const intro = fix(d.intro), metaDesc = fix(d.meta_description);\n  const metaTitle = fix(d.meta_title).replace(new RegExp(`\\\\s*[|-]\\\\s*${rx(s.store_name)}$`, 'i'), '');\n  const base = { gid: c.gid, handle: c.handle, title: c.title, keyword: c.keyword, other_searches: c.other_searches, volume: c.volume,\n    parent_handle: c.parent?.handle || '', live_html: c.live_html, written_by: c.use_ai ? 'the model' : 'the template' };\n  if (!intro) return { json: { ...base, intro: '', body_html: '', meta_title: '', meta_description: '', links: [],\n    flags: ['no draft: ' + (c.error || 'the model returned nothing')], status: 'failed' } };   // tried again next run\n  const flags = [];\n  const words = intro.split(' ').filter(Boolean).length;\n  if ((words < s.intro_words[0] - 10 || words > s.intro_words[1] + 10)) flags.push(`intro is ${words} words`);\n\n  const stray = c.vendors_all.filter(v => !c.brands.includes(v) && has(intro, v));\n  if (stray.length) flags.push('brands not in this collection: ' + stray.join(', '));\n  const codes = [...new Set(c.products.join(' ').match(/\\b(?=[A-Z0-9-]*\\d)(?=[A-Z0-9-]*[A-Z])[A-Z0-9-]{4,}\\b/g) || [])];\n  const models = codes.filter(m => has(intro, m));\n  if (models.length) flags.push('names a model: ' + models.join(', '));\n  // Numbers are fine when they come from the titles, specs, brands or store facts, never from a product.\n  const known = JSON.stringify([c.title, c.keyword, c.other_searches, c.family.map(f => f.title), c.specs, c.brands, s.store_facts]);\n  const nums = [...new Set(intro.match(/[\\w.]*\\d[\\w.]*/g) || [])].map(n => n.replace(/\\.$/, '')).filter(n => !has(known, n));\n  if (nums.length) flags.push('names a size or number: ' + nums.join(', '));\n  if (metaTitle.length > 48) flags.push(`meta title is ${metaTitle.length} characters`);\n  if (/\\b(guide|tips|how to|explained|options)\\b/i.test(metaTitle)) flags.push('meta title reads like an article');\n  if (metaDesc.length < 120 || metaDesc.length > 160) flags.push(`meta description is ${metaDesc.length} characters`);\n\n  // First mention of a related collection becomes a link; children not mentioned get a line of their own.\n  let html = esc(intro), budget = s.max_links;\n  const linked = [];\n  for (const f of [...c.family].sort((a, b) => b.title.length - a.title.length)) {   // longest first: 4K Security Cameras before Security Cameras\n    const re = new RegExp(`(^|[^\\\\w>])(${rx(esc(f.title))})(?![\\\\w<])`, 'i');\n    if (budget > 0 && re.test(html)) {\n      html = html.replace(re, `$1<a href=\"/collections/${f.handle}\">$2</a>`);\n      linked.push(f.handle); budget--;\n    }\n  }\n  const missing = c.children.filter(k => !linked.includes(k.handle));\n  const body = `<p>${html}</p>` + (missing.length ? `<p>Shop by type: ${missing.map(k =>\n    `<a href=\"/collections/${k.handle}\">${esc(k.title)}</a>`).join(', ')}.</p>` : '');\n  const seoTitle = (metaTitle + ' | ' + s.store_name).length <= 60 ? `${metaTitle} | ${s.store_name}` : metaTitle;\n\n  return { json: { ...base, intro, body_html: body, meta_title: seoTitle, meta_description: metaDesc,\n    links: [...linked, ...missing.map(k => k.handle)], flags, status: 'review' } };\n});"
+        "jsCode": "const s = $('Write settings').first().json;\nconst fix = t => String(t || '').replace(/\\s*[\\u2014\\u2013]\\s*/g, ', ').replace(/\\s+/g, ' ').trim();\nconst esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst rx = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst has = (text, word) => new RegExp(`(^|[^\\\\w])${rx(word)}(?![\\\\w])`, 'i').test(text);\n// Models wrap JSON in code fences and leave trailing commas, so read it leniently.\nconst readJson = t => {\n  try {\n    const j = JSON.parse(String(t || '').replace(/```(json)?/gi, '').replace(/,\\s*([}\\]])/g, '$1').trim());\n    return j.output || j;\n  } catch (e) { return {}; }\n};\n\nreturn $input.all().map((it) => {\n  const c = it.json, d = c.output || readJson(c.text);\n  const intro = fix(d.intro), metaDesc = fix(d.meta_description);\n  const metaTitle = fix(d.meta_title).replace(new RegExp(`\\\\s*[|-]\\\\s*${rx(s.store_name)}$`, 'i'), '');\n  const base = { gid: c.gid, handle: c.handle, title: c.title, keyword: c.keyword, other_searches: c.other_searches, volume: c.volume,\n    parent_handle: c.parent?.handle || '', live_html: c.live_html, written_by: c.use_ai ? 'the model' : 'the template' };\n  if (!intro) return { json: { ...base, intro: '', body_html: '', meta_title: '', meta_description: '', links: [],\n    flags: ['no draft: ' + (c.error || 'the model returned nothing')], status: 'failed' } };   // tried again next run\n  const flags = [];\n  const words = intro.split(' ').filter(Boolean).length;\n  if ((words < s.intro_words[0] - 10 || words > s.intro_words[1] + 10)) flags.push(`intro is ${words} words`);\n\n  const stray = c.vendors_all.filter(v => !c.brands.includes(v) && has(intro, v));\n  if (stray.length) flags.push('brands not in this collection: ' + stray.join(', '));\n  const codes = [...new Set(c.products.join(' ').match(/\\b(?=[A-Z0-9-]*\\d)(?=[A-Z0-9-]*[A-Z])[A-Z0-9-]{4,}\\b/g) || [])];\n  const models = codes.filter(m => has(intro, m));\n  if (models.length) flags.push('names a model: ' + models.join(', '));\n  // Numbers are fine when they come from the titles, specs, brands or store facts, never from a product.\n  const known = JSON.stringify([c.title, c.keyword, c.other_searches, c.family.map(f => f.title), c.specs, c.brands, s.store_facts]);\n  const nums = [...new Set(intro.match(/[\\w.]*\\d[\\w.]*/g) || [])].map(n => n.replace(/\\.$/, '')).filter(n => !has(known, n));\n  if (nums.length) flags.push('names a size or number: ' + nums.join(', '));\n  if (metaTitle.length > 48) flags.push(`meta title is ${metaTitle.length} characters`);\n  if (/\\b(guide|tips|how to|explained|options)\\b/i.test(metaTitle)) flags.push('meta title reads like an article');\n  if (metaDesc.length < 120 || metaDesc.length > 160) flags.push(`meta description is ${metaDesc.length} characters`);\n\n  // First mention of a related collection becomes a link; children not mentioned get a line of their own.\n  let html = esc(intro), budget = s.max_links;\n  const linked = [];\n  for (const f of [...c.family].sort((a, b) => b.title.length - a.title.length)) {   // longest first: 4K Security Cameras before Security Cameras\n    const re = new RegExp(`(^|[^\\\\w>])(${rx(esc(f.title))})(?![\\\\w<])`, 'i');\n    if (budget > 0 && re.test(html)) {\n      html = html.replace(re, `$1<a href=\"/collections/${f.handle}\">$2</a>`);\n      linked.push(f.handle); budget--;\n    }\n  }\n  const missing = c.children.filter(k => !linked.includes(k.handle));\n  const body = `<p>${html}</p>` + (missing.length ? `<p>Shop by type: ${missing.map(k =>\n    `<a href=\"/collections/${k.handle}\">${esc(k.title)}</a>`).join(', ')}.</p>` : '');\n  const seoTitle = (metaTitle + ' | ' + s.store_name).length <= 60 ? `${metaTitle} | ${s.store_name}` : metaTitle;\n\n  return { json: { ...base, intro, body_html: body, meta_title: seoTitle, meta_description: metaDesc,\n    links: [...linked, ...missing.map(k => k.handle)], flags, status: 'review' } };\n});"
       }
     },
     {
@@ -2268,17 +2252,6 @@
           {
             "node": "Write the copy",
             "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Structured Output Parser": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "Write the copy",
-            "type": "ai_outputParser",
             "index": 0
           }
         ]
