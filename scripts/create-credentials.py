@@ -2,13 +2,15 @@
 """Create the n8n credentials a template needs, without secrets ever being printed or pasted into a chat.
 
 Usage:
-    python3 scripts/create-credentials.py <template-folder> [--supabase]
+    python3 scripts/create-credentials.py <template-folder> [--supabase] [--only TYPE[,TYPE]]
 
 Run it in your own terminal. It asks for your n8n URL and an n8n API key, then for each credential the
 template lists in <template-folder>/credentials.json. Secrets are read with getpass (nothing is shown as you
 type) and sent straight to your n8n instance's public API. Only credential names and IDs are printed.
 
 --supabase also creates the Postgres credential for the template's workflow-supabase.json.
+--only creates just the listed credential types, e.g. --only postgres to add Supabase later.
+Set N8N_URL and N8N_API_KEY in the environment to skip those two questions.
 
 Python 3.8+ standard library only.
 """
@@ -53,9 +55,14 @@ def api(base, key, method, path, body=None):
 
 def postgres_from_url(url):
     """postgresql://user:password@host:port/database -> n8n Postgres credential fields."""
+    if "YOUR-PASSWORD" in url.upper() or "YOUR_PASSWORD" in url.upper():
+        raise SystemExit("The connection string still has the [YOUR-PASSWORD] placeholder. Put your database password in its place.")
     u = urllib.parse.urlparse(url)
     if u.scheme not in ("postgres", "postgresql") or not u.hostname:
         raise SystemExit("That doesn't look like a Postgres connection string (postgresql://user:password@host:port/database).")
+    if u.hostname.startswith("db.") and u.hostname.endswith(".supabase.co"):
+        raise SystemExit("That's Supabase's direct connection, which only works over IPv6 and most n8n servers can't reach it. "
+                         "In Supabase, click Connect and copy the Session pooler string instead (host ...pooler.supabase.com).")
     return {
         "host": u.hostname,
         "port": u.port or 5432,
@@ -95,7 +102,15 @@ def build(cred):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    argv = sys.argv[1:]
+    only = None
+    if "--only" in argv:
+        i = argv.index("--only")
+        if i + 1 >= len(argv):
+            raise SystemExit("--only needs a credential type, e.g. --only postgres")
+        only = set(argv[i + 1].split(","))
+        del argv[i:i + 2]
+    args = [a for a in argv if not a.startswith("--")]
     if len(args) != 1:
         raise SystemExit(__doc__)
     folder = args[0].rstrip("/")
@@ -103,11 +118,15 @@ def main():
     if not os.path.exists(spec_path):
         raise SystemExit(f"No {spec_path}. Pass a template folder, e.g. shopify-collections-seo")
     spec = json.load(open(spec_path))
-    creds = [c for c in spec["credentials"] if "--supabase" in sys.argv or not c.get("supabase_only")]
+    creds = [c for c in spec["credentials"] if "--supabase" in argv or not c.get("supabase_only")]
+    if only:
+        creds = [c for c in creds if c["type"] in only]
+    if not creds:
+        raise SystemExit("Nothing to create: check --only and --supabase against credentials.json.")
 
     print(f"Credentials for {spec['template']}: " + ", ".join(c["name"] for c in creds))
-    base = ask("n8n URL, e.g. https://n8n.example.com").rstrip("/")
-    key = ask("n8n API key (Settings > n8n API)", secret=True)
+    base = (os.environ.get("N8N_URL") or ask("n8n URL, e.g. https://n8n.example.com")).rstrip("/")
+    key = os.environ.get("N8N_API_KEY") or ask("n8n API key (Settings > n8n API)", secret=True)
 
     existing = {}
     try:

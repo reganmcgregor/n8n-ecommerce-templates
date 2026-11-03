@@ -98,7 +98,7 @@ If you'd rather not use it, set `use_firecrawl` to false in the template's setti
 python3 scripts/create-credentials.py shopify-collections-seo
 ```
 
-It asks for your n8n URL and an n8n API key, then for each credential in the template's `credentials.json`. Secrets are typed with nothing shown on screen and sent straight to your n8n. It prints only the names and IDs it created, and which nodes each one goes on. Add `--supabase` to create the Postgres credential for `workflow-supabase.json` too. If a credential with the same name and type already exists, it asks before creating another.
+It asks for your n8n URL and an n8n API key, then for each credential in the template's `credentials.json`. Secrets are typed with nothing shown on screen and sent straight to your n8n. It prints only the names and IDs it created, and which nodes each one goes on. Add `--supabase` to create the Postgres credential for `workflow-supabase.json` too. If a credential with the same name and type already exists, it asks before creating another. `--only postgres` creates just the Supabase credential, for when you switch an installed template to Supabase later, and setting `N8N_URL` and `N8N_API_KEY` in your environment skips those two questions. It refuses a Supabase direct-connection string (IPv6 only) or one that still has the `[YOUR-PASSWORD]` placeholder.
 
 You need an n8n API key: in n8n, open **Settings > n8n API**, create a key and copy it. Self-hosted n8n has the API on by default (unless `N8N_PUBLIC_API_DISABLED` is set). On n8n Cloud, the API [isn't available during the free trial](https://docs.n8n.io/api/authentication/), so on a trial create the credentials by hand as described above.
 
