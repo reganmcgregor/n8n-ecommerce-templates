@@ -9,7 +9,7 @@ The templates call the Shopify Admin GraphQL API (version 2026-10) with an acces
 ### Create the app
 
 1. Open the [Shopify Dev Dashboard](https://dev.shopify.com/dashboard) with the account that owns your store, and create an app.
-2. Give it the Admin API scopes the template needs. Read-only templates need `read_products`. Templates that create or change products also need `write_products`, and the README lists any others (add products to Shopify also needs `read_inventory`, `write_inventory`, `read_publications`, `write_publications` and `read_locations`; Shopify collections SEO needs `read_publications` and `write_publications`; category page SEO needs `read_online_store_navigation`).
+2. Give it the Admin API scopes the template needs. Read-only templates need `read_products`. Templates that create or change products also need `write_products`, and the README lists any others (add products to Shopify also needs `read_inventory`, `write_inventory`, `read_publications`, `write_publications` and `read_locations`; Shopify collections SEO needs `read_publications` and `write_publications`; category page SEO needs `read_online_store_navigation`; Shopify product images needs `read_files` and `write_files` (`fileUpdate` writes alt text and detaches old images); product data enrichment needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` to write Shopify's category metafields).
 3. Release a version and install the app on your store. The app and the store must belong to the same Shopify organisation, or the token request is refused.
 4. Copy the app's **Client ID** and **Client secret** from its settings.
 
@@ -30,7 +30,7 @@ If you already have an Admin API access token from a custom app made before 2026
 ## Slack
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps), click **Create New App**, choose **From scratch**, and pick your workspace.
-2. Under **OAuth & Permissions**, add the bot token scope `chat:write`. Add `chat:write.public` too if you want it to post to public channels it hasn't joined.
+2. Under **OAuth & Permissions**, add the bot token scope `chat:write`. Add `chat:write.public` too if you want it to post to public channels it hasn't joined. Templates that upload images to Slack (Shopify product images posts a contact sheet on every card) also need `files:write`.
 3. Click **Install to Workspace** and copy the **Bot User OAuth Token** (it starts with `xoxb-`).
 4. In n8n, create a **Slack API** credential and paste the token as the Access Token.
 5. In Slack, invite the bot to the channel the template posts to: type `/invite @your-bot-name` in the channel.
@@ -59,6 +59,17 @@ To use another provider, swap the Chat Model sub-node for that provider's (OpenA
 
 The competitor price monitoring template has no AI step. Add products to Shopify uses one Basic LLM Chain for the title and short description. AI product titles uses one Basic LLM Chain for the title. Shopify collections SEO uses one to name each proposed collection, and category page SEO one to write each intro and its meta tags. Those two ask for a small JSON reply and read it in a Code node rather than a Structured Output Parser, because models on Ollama Cloud sometimes wrap JSON in a code fence or leave a trailing comma (even with Output Format set to JSON), and a parser rejects that.
 
+Product data enrichment uses one Basic LLM Chain to extract the attributes, plus an optional one that reads text from product images. Shopify product images uses two Basic LLM Chains that send a photo as the user message (Message Type **Image (Binary)**), so it needs a vision-capable model; `gemma4:31b` on Ollama Cloud is one. With Output Format JSON, the chain sometimes hands back the parsed object and sometimes `text` holding JSON in a code fence, so the template reads both. Shopify collection sorting has no chat model; its optional blend mode uses embeddings (below).
+
+## Embeddings (optional)
+
+The Shopify collection sorting template can blend meaning into its keyword score (`match_mode: "blend"`). It calls an embeddings endpoint from a Code node, so there's no credential to create:
+
+1. Install [Ollama](https://ollama.com) where n8n can reach it and run `ollama pull nomic-embed-text`.
+2. Set `embed_url` in **Sort settings** to `http://localhost:11434/api/embed`, or `http://host.docker.internal:11434/api/embed` when n8n runs in Docker and Ollama on the host.
+
+Any OpenAI-style `/v1/embeddings` API works too: set `embed_url`, `embed_model` and `embed_api_key`, and clear `query_prefix` and `doc_prefix`. The key sits in the workflow in plain text, so don't share the workflow with it filled in.
+
 ## AliExpress Open Platform
 
 Used by the add products to Shopify template for AliExpress listings, through the free Dropshipping API.
@@ -78,7 +89,7 @@ Used for Google searches (competitor discovery), and for search volumes, keyword
 2. Open the API Access page in your dashboard. Your **API login** and **API password** are there. The API password isn't your account password.
 3. In n8n, create a **Basic Auth** credential with the API login as the user and the API password as the password.
 
-Each response reports its own cost, and the templates save it so you can see what a run spent.
+Each response reports its own cost, and the templates save it so you can see what a run spent. A query with a search operator such as `site:` is billed at five times the price of a plain one (US$0.01 against US$0.002 in November 2026), which is why the product images template searches for the brand and model alone and filters the results in code.
 
 ## Firecrawl
 

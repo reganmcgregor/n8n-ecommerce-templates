@@ -1,0 +1,1074 @@
+{
+  "name": "Shopify collection sorting",
+  "nodes": [
+    {
+      "id": "482899f4-5b11-519a-bf84-6ebcbba499c1",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        -140
+      ],
+      "parameters": {
+        "content": "## Shopify collection sorting\n\nWrites each collection's Manual order so the products that best match its keyword come first and sold-out, draft, image-less and unpriced products go last. Runs every 2 hours, so a sell-out or a restock moves within 2 hours. Nothing is hidden, unpublished or deleted.\n\n### How it works\n1. **Setup** (run once) creates `collection_sort` and `title_vectors` and adds a row per published collection: a keyword (from the `seo.target_keyword` metafield or the title) and a mode from its current sort. Best selling and Newest become `skip`, Manual becomes `tier` (your order kept, sold-out moved down), the rest `keyword`.\n2. **Sort** (every 2 hours) reads each collection's products in their current order, scores titles against the keyword (`words`, or `blend` with embeddings), switches a collection to Manual on one run and moves its products on the next, and reports to Slack when something changed.\n\n### Setup\n1. Credentials: Custom Auth with your Shopify client ID and secret on both **Get Shopify token** nodes, Slack API on **Post sort report**.\n2. Fill in **Setup settings** and **Sort settings**, then run **Run Setup** and edit the keywords in `collection_sort`.\n3. Run **Run Sort now** with `dry_run` true, read the report, then set it to false and publish.\n\n### Customisation\n- `match_mode: \"blend\"` adds meaning from an embeddings API (Ollama `nomic-embed-text` or any OpenAI-style one) at `meaning_weight` 0.6.\n- Change `stopwords` and `synonyms` for your catalogue, and the schedule on **Every 2 hours**.",
+        "width": 880,
+        "height": 660,
+        "color": 1
+      }
+    },
+    {
+      "id": "6ac95f8e-b4d6-58aa-b8dc-112fb25f0000",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -140
+      ],
+      "parameters": {
+        "content": "## Setup (run once)\nCreates the two tables and adds a row per published collection. Running it again only adds new collections, so your edits stay.",
+        "width": 2240,
+        "height": 400,
+        "color": 7
+      }
+    },
+    {
+      "id": "ebc2bb04-b793-5ccd-98b0-3436a895b791",
+      "name": "Lane Sort",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        320
+      ],
+      "parameters": {
+        "content": "## Sort (every 2 hours)\nScores each collection's products against its keyword and puts sold-out, draft, image-less and unpriced products last. Starts as a dry run that only reports.",
+        "width": 2960,
+        "height": 700,
+        "color": 7
+      }
+    },
+    {
+      "id": "587d78f9-7161-50c4-b937-f0d85e965187",
+      "name": "Run Setup",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        40
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "fa39990b-c509-528a-a8f1-8c4586183592",
+      "name": "Setup settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        40
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"keyword_namespace\": \"seo\",\n  \"keyword_key\": \"target_keyword\",\n  \"leave_alone\": [\n    \"BEST_SELLING\",\n    \"CREATED_DESC\"\n  ]\n}",
+        "options": {}
+      },
+      "notes": "Your settings for the Setup lane. leave_alone: sorts that Setup marks skip."
+    },
+    {
+      "id": "441b83eb-de17-546f-8238-365f9af02798",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md."
+    },
+    {
+      "id": "b2d987a8-6acc-5978-bf90-6bb87d8da4d8",
+      "name": "Create collection_sort",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        40
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "collection_sort",
+        "columns": {
+          "column": [
+            {
+              "name": "handle",
+              "type": "string"
+            },
+            {
+              "name": "gid",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "name": "keyword",
+              "type": "string"
+            },
+            {
+              "name": "other_searches",
+              "type": "string"
+            },
+            {
+              "name": "mode",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      }
+    },
+    {
+      "id": "68ebf998-dd43-5849-8078-3a6f51439543",
+      "name": "Create title_vectors",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        40
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "title_vectors",
+        "columns": {
+          "column": [
+            {
+              "name": "text",
+              "type": "string"
+            },
+            {
+              "name": "vector",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      }
+    },
+    {
+      "id": "1d43ba4a-baf7-555a-acc5-85b1f54e5808",
+      "name": "Read collections",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Collections($after: String, $ns: String!, $key: String!) {\n  collections(first: 100, after: $after, query: \"published_status:published\") {\n    pageInfo { hasNextPage endCursor }\n    nodes { id handle title sortOrder keyword: metafield(namespace: $ns, key: $key) { value } }\n  }\n}`, variables: { after: null, ns: $('Setup settings').first().json.keyword_namespace, key: $('Setup settings').first().json.keyword_key } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { after: $response.body.data.collections.pageInfo.endCursor, ns: $('Setup settings').first().json.keyword_namespace, key: $('Setup settings').first().json.keyword_key } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.collections.pageInfo.hasNextPage }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "6aedcfad-5dce-5f74-bf43-a5d2af27740b",
+      "name": "Existing rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        40
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_sort"
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "935bb164-6a94-5087-93dd-b94ca7edf6b8",
+      "name": "New collections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Setup settings').first().json;\nconst have = new Set($('Existing rows').all().map(i => i.json.handle).filter(Boolean));\nreturn $('Read collections').all().flatMap(i => i.json.data.collections.nodes)\n  .filter(c => !have.has(c.handle))\n  .map(c => ({ json: {\n    handle: c.handle,\n    gid: c.id,\n    title: c.title,\n    keyword: String((c.keyword && c.keyword.value) || c.title).toLowerCase().trim(),\n    other_searches: '',\n    // Best selling and Newest keep Shopify's sort; a hand-set Manual order keeps your order\n    mode: s.leave_alone.includes(c.sortOrder) ? 'skip' : c.sortOrder === 'MANUAL' ? 'tier' : 'keyword'\n  } }));\n"
+      },
+      "notes": "Why Code: no native node maps sortOrder to a mode and skips handles already in the table in one step."
+    },
+    {
+      "id": "f4ee53ba-4b6c-5b48-87a6-89d553589bd1",
+      "name": "Add new collections",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        40
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_sort"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "handle": "={{ $json.handle }}",
+            "gid": "={{ $json.gid }}",
+            "title": "={{ $json.title }}",
+            "keyword": "={{ $json.keyword }}",
+            "other_searches": "={{ $json.other_searches }}",
+            "mode": "={{ $json.mode }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "handle",
+              "displayName": "handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "gid",
+              "displayName": "gid",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "other_searches",
+              "displayName": "other_searches",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "759fa34c-65f7-5fcd-93dd-7588586e6e19",
+      "name": "Every 2 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        500
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "450f910f-a852-54ee-a509-7ca32e3adc79",
+      "name": "Run Sort now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        680
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "3c3aa8f9-b4d3-5bb0-bb28-ace92040ac17",
+      "name": "Sort settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        590
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"min_secondary\": 0.5,\n  \"stopwords\": [\n    \"for\",\n    \"with\",\n    \"and\",\n    \"the\",\n    \"a\"\n  ],\n  \"synonyms\": {\n    \"wireless\": \"wifi\",\n    \"lte\": \"4g\"\n  },\n  \"match_mode\": \"words\",\n  \"meaning_weight\": 0.6,\n  \"embed_url\": \"http://localhost:11434/api/embed\",\n  \"embed_model\": \"nomic-embed-text\",\n  \"embed_api_key\": \"\",\n  \"query_prefix\": \"search_query: \",\n  \"doc_prefix\": \"search_document: \",\n  \"max_moves\": 250,\n  \"dry_run\": true,\n  \"slack_channel\": \"#log-sort\"\n}",
+        "options": {}
+      },
+      "notes": "Your settings for the Sort lane. Keep dry_run on until you have read the first report."
+    },
+    {
+      "id": "e0b14878-e06a-5749-937f-820ff9bb1c0f",
+      "name": "Get Shopify token for Sort",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        590
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Sort settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md."
+    },
+    {
+      "id": "5633a35f-aaef-5cdd-8401-3fcab2258ddf",
+      "name": "Sort rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        590
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "collection_sort"
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": false
+    },
+    {
+      "id": "902b3c0d-0bda-5dbc-9d3b-c3cc76c40834",
+      "name": "Collections to sort",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        590
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fdc57403-910a-5d71-a66c-0665b7951b40",
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "skip",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "30033976-3883-5eb1-aec3-c883c14b470f",
+              "leftValue": "={{ $json.gid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "128110a9-efa0-52ea-9cb9-076ec0b6384a",
+      "name": "Read collection products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        590
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Sort settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Sort').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query($id: ID!) { collection(id: $id) { sortOrder products(first: 250, sortKey: COLLECTION_DEFAULT) { nodes {\n    id title status totalInventory tracksInventory featuredMedia { id } priceRangeV2 { minVariantPrice { amount } } } } } }`, variables: { id: $json.gid } }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "86f1754e-2586-5d5e-aaed-07ece0a5f151",
+      "name": "Saved vectors",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        590
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "title_vectors"
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "0d4fa1c8-1506-5cb7-bc1b-a3fcdafb2daf",
+      "name": "Add meaning scores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        590
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Sort settings').first().json;\nconst items = $('Read collection products').all();\nif (s.match_mode !== 'blend') return items.map(i => ({ json: i.json }));\nconst rows = $('Collections to sort').all().map(i => i.json);\nconst searches = r => [r.keyword, ...String(r.other_searches || '').split(',')].map(x => x.trim()).filter(Boolean);\n// Vectors saved on earlier runs, so only new or renamed titles are embedded again\nconst saved = new Map($('Saved vectors').all().filter(i => i.json.text).map(i => [i.json.text, JSON.parse(i.json.vector)]));\nconst texts = new Set();\nitems.forEach((it, i) => {\n  const r = rows[i], col = it.json.data && it.json.data.collection;\n  if (!col || r.mode !== 'keyword') return;\n  searches(r).forEach(k => texts.add(s.query_prefix + k));\n  col.products.nodes.forEach(p => texts.add(s.doc_prefix + p.title));\n});\nconst missing = [...texts].filter(t => !saved.has(t)), fresh = [];\nfor (let i = 0; i < missing.length; i += 64) {\n  const batch = missing.slice(i, i + 64);\n  const res = await this.helpers.httpRequest({ method: 'POST', url: s.embed_url, json: true, timeout: 60000,\n    headers: s.embed_api_key ? { Authorization: 'Bearer ' + s.embed_api_key } : {},\n    body: { model: s.embed_model, input: batch } });\n  // Ollama returns embeddings; OpenAI-style APIs return data[].embedding\n  const vecs = res.embeddings || (res.data || []).map(d => d.embedding);\n  batch.forEach((t, j) => { saved.set(t, vecs[j]); fresh.push({ text: t, vector: JSON.stringify(vecs[j].map(x => Math.round(x * 1e4) / 1e4)) }); });\n}\nconst cos = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / Math.sqrt(x * y); };\nreturn items.map((it, i) => {\n  const r = rows[i], col = it.json.data && it.json.data.collection;\n  const out = { ...it.json, new_vectors: i === 0 ? fresh : [] };\n  if (!col || r.mode !== 'keyword') return { json: out };\n  out.meaning = {};\n  for (const k of searches(r)) {\n    const raw = col.products.nodes.map(p => [p.id, cos(saved.get(s.query_prefix + k), saved.get(s.doc_prefix + p.title))]);\n    // Rescaled 0 to 1 within the collection, so meaning sits on the same scale as the word score\n    const lo = Math.min(...raw.map(x => x[1])), hi = Math.max(...raw.map(x => x[1]));\n    out.meaning[k] = Object.fromEntries(raw.map(([id, c]) => [id, hi > lo ? (c - lo) / (hi - lo) : 1]));\n  }\n  return { json: out };\n});\n"
+      },
+      "notes": "Why Code: batches embeddings, reuses saved vectors and rescales cosine scores; no native node does all three. Passes items straight through in words mode."
+    },
+    {
+      "id": "eaa1d508-cb3e-54d3-8e77-881d01311d21",
+      "name": "Order products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        590
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Sort settings').first().json;\nconst rows = $('Collections to sort').all().map(i => i.json);\nconst tokens = t => [...new Set(String(t).toLowerCase().replace(/wi-?fi/g, 'wifi').split(/[^a-z0-9]+/)\n  .filter(w => w && !s.stopwords.includes(w))\n  .map(w => w.length > 4 && w.endsWith('ies') ? w.slice(0, -3) + 'y' : (w.length > 3 && /[^siu]s$/.test(w) ? w.slice(0, -1) : w))\n  .map(w => s.synonyms[w] || w))];\nconst words = (kw, title) => { const k = tokens(kw), t = tokens(title); return k.length ? k.filter(w => t.includes(w)).length / k.length : 0; };\n// 0 = can be bought, 1 = sold out, 2 = draft, no image or no price\nconst tier = p => {\n  if (p.status !== 'ACTIVE' || !p.featuredMedia || !(Number(p.priceRangeV2.minVariantPrice.amount) > 0)) return 2;\n  if (p.tracksInventory && p.totalInventory <= 0) return 1;\n  return 0;\n};\n\nreturn $input.all().map((it, i) => {\n  const r = rows[i], col = it.json.data && it.json.data.collection;\n  if (!col) return { json: { handle: r.handle, error: 'collection not found', switch: false, moves: [], page1: [], sold_out: [], hidden: 0 } };\n  const now = col.products.nodes, ids = now.map(p => p.id);\n  // words only, or a blend with the meaning score when match_mode is blend\n  const meaning = it.json.meaning;\n  const score = (kw, p) => meaning && meaning[kw]\n    ? s.meaning_weight * (meaning[kw][p.id] || 0) + (1 - s.meaning_weight) * words(kw, p.title)\n    : words(kw, p.title);\n  // keyword mode: best match first; tier mode: keep the order you set by hand\n  const rank = list => r.mode === 'keyword'\n    ? list.map(p => ({ p, sc: score(r.keyword, p), at: ids.indexOf(p.id) })).sort((a, b) => b.sc - a.sc || a.at - b.at).map(x => x.p)\n    : list;\n  const ready = now.filter(p => tier(p) === 0), placed = [];\n  if (r.mode === 'keyword') {\n    const main = tokens(r.keyword);\n    for (const kw of String(r.other_searches || '').split(',').map(x => x.trim()).filter(Boolean)) {   // one best product per other search, in your order\n      const extra = tokens(kw).filter(w => !main.includes(w));   // the words this search adds to the main keyword\n      // with words only, the product must contain one of those words; with meaning, the blend decides\n      const best = ready.filter(p => !placed.includes(p) && (meaning || extra.some(w => tokens(p.title).includes(w))))\n        .map(p => ({ p, sc: score(kw, p) })).sort((a, b) => b.sc - a.sc)[0];\n      if (best && best.sc >= s.min_secondary) placed.push(best.p);\n    }\n  }\n  const soldOut = now.filter(p => tier(p) === 1), hidden = now.filter(p => tier(p) === 2);\n  const order = [...placed, ...rank(ready.filter(p => !placed.includes(p))), ...rank(soldOut), ...rank(hidden)];\n  const report = { handle: r.handle, mode: r.mode, was: col.sortOrder, page1: order.slice(0, 8).map(p => p.title),\n    sold_out: soldOut.map(p => p.title), hidden: hidden.length };\n\n  // Shopify re-sorts a collection after it switches to Manual, so a switch gets this run and the moves wait for the next.\n  if (col.sortOrder !== 'MANUAL') return { json: { gid: r.gid, ...report, switch: true, moves: [], more: false } };\n  const arr = ids.slice(), moves = [];\n  order.forEach((p, pos) => {                // only the moves that change the live order\n    if (arr[pos] === p.id) return;\n    const at = arr.indexOf(p.id);\n    if (at >= 0) arr.splice(at, 1);\n    arr.splice(pos, 0, p.id);\n    moves.push({ id: p.id, newPosition: String(pos) });\n  });\n  // Shopify takes up to 250 moves a call; anything over max_moves waits for the next run\n  return { json: { gid: r.gid, ...report, switch: false, moves: moves.slice(0, s.max_moves), more: moves.length > s.max_moves } };\n});\n"
+      },
+      "notes": "Why Code: scoring, tiers and the fewest moves need loops no native node expresses."
+    },
+    {
+      "id": "de38755a-f8d7-5e72-82be-96c35d5bda8a",
+      "name": "Live run?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2a04691-4b6a-5f53-b5db-a37124d33256",
+              "leftValue": "={{ !$('Sort settings').first().json.dry_run && ($json.switch || $json.moves.length > 0) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5a7bf35b-5b9c-5926-bdc0-7e4e5a94c4c9",
+      "name": "Reorder products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        460
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Sort settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Sort').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.switch\n  ? { query: 'mutation($id: ID!) { collectionUpdate(collection: { id: $id, sortOrder: MANUAL }) { userErrors { message } } }', variables: { id: $json.gid } }\n  : { query: 'mutation($id: ID!, $moves: [MoveInput!]!) { collectionReorderProducts(id: $id, moves: $moves) { job { id } userErrors { field message } } }',\n      variables: { id: $json.gid, moves: $json.moves } }) }}",
+        "options": {}
+      },
+      "notes": "Runs before the report: branches run top to bottom."
+    },
+    {
+      "id": "2a1188eb-cd2c-5342-b1fc-44657ac65c16",
+      "name": "Anything to report?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        640
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "89ff6847-8e86-55cb-88d5-f1b377fb4ed7",
+              "leftValue": "={{ $('Sort settings').first().json.dry_run || $('Order products').all().some(i => i.json.switch || i.json.moves.length > 0 || i.json.error) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "81ba2026-0e9f-5e60-9108-a04c5e5ef33b",
+      "name": "Post sort report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        640
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((() => {\n  const s = $('Sort settings').first().json, all = $('Order products').all().map(i => i.json);\n  const moved = all.filter(r => r.switch || r.moves.length || r.error);\n  const errs = $('Reorder products').isExecuted ? $('Reorder products').all().flatMap(x => [...(x.json.errors || []),\n    ...(x.json.data?.collectionUpdate?.userErrors || []), ...(x.json.data?.collectionReorderProducts?.userErrors || [])]).map(e => e.message) : [];\n  // Short lines, so a long run still fits in one Slack message.\n  const lines = moved.slice(0, 25).map(r => '*' + r.handle + '*: ' + (r.error || (r.switch ? 'switches to Manual, products move on the next run' : r.moves.length + (r.moves.length === 1 ? ' move' : ' moves') + (r.more ? ' (the rest on the next run)' : ''))) +\n    (r.page1.length ? '. First: ' + r.page1.slice(0, 3).map(t => t.slice(0, 40)).join(' / ') : '') +\n    (r.sold_out.length ? '. Sold out, last: ' + r.sold_out.length : '') + (r.hidden ? '. Draft, no image or no price: ' + r.hidden : ''));\n  return { channel: s.slack_channel, unfurl_links: false, text: (s.dry_run ? ':test_tube: Sort dry run, nothing changed.' : ':arrows_counterclockwise: Sort run.') + '\\n' +\n    lines.join('\\n') + (moved.length > 25 ? '\\n...and ' + (moved.length - 25) + ' more' : '') +\n    '\\nAlready in order: ' + (all.length - moved.length) + '.' + (errs.length ? '\\n:x: Shopify errors: ' + errs.join('; ') : '') };\n})()) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "efd7dcb1-ddee-5e70-9faa-52daf467f9a2",
+      "name": "New vectors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        820
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return ($('Add meaning scores').first().json.new_vectors || []).map(v => ({ json: v }));"
+      }
+    },
+    {
+      "id": "80bcbff3-c530-5f27-b214-b8a1345000c9",
+      "name": "Save vectors",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        820
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "title_vectors"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "text": "={{ $json.text }}",
+            "vector": "={{ $json.vector }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "vector",
+              "displayName": "vector",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "995d5171-8f9f-5650-92b5-0061ccc8d911",
+      "name": "Risk Reorder products",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2140,
+        330
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify\nSets the collection to Manual sort, then moves its products on the next run. Runs only when `dry_run` is false.",
+        "width": 400,
+        "height": 120,
+        "color": 3
+      }
+    }
+  ],
+  "connections": {
+    "Run Setup": {
+      "main": [
+        [
+          {
+            "node": "Setup settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Create collection_sort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create collection_sort": {
+      "main": [
+        [
+          {
+            "node": "Create title_vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create title_vectors": {
+      "main": [
+        [
+          {
+            "node": "Read collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read collections": {
+      "main": [
+        [
+          {
+            "node": "Existing rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existing rows": {
+      "main": [
+        [
+          {
+            "node": "New collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New collections": {
+      "main": [
+        [
+          {
+            "node": "Add new collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 2 hours": {
+      "main": [
+        [
+          {
+            "node": "Sort settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Sort now": {
+      "main": [
+        [
+          {
+            "node": "Sort settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Sort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Sort": {
+      "main": [
+        [
+          {
+            "node": "Sort rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort rows": {
+      "main": [
+        [
+          {
+            "node": "Collections to sort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collections to sort": {
+      "main": [
+        [
+          {
+            "node": "Read collection products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read collection products": {
+      "main": [
+        [
+          {
+            "node": "Saved vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Saved vectors": {
+      "main": [
+        [
+          {
+            "node": "Add meaning scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add meaning scores": {
+      "main": [
+        [
+          {
+            "node": "Order products",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "New vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New vectors": {
+      "main": [
+        [
+          {
+            "node": "Save vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order products": {
+      "main": [
+        [
+          {
+            "node": "Live run?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Anything to report?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live run?": {
+      "main": [
+        [
+          {
+            "node": "Reorder products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to report?": {
+      "main": [
+        [
+          {
+            "node": "Post sort report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
