@@ -1,0 +1,19 @@
+{%- comment -%}
+  "Shop more like this": links to the narrower collections in custom.related_collections
+  (spec and brand-by-type collections the product is in). Empty collections are skipped,
+  and nothing prints when there's nothing to link.
+  Paste into a Custom Liquid block under the product description.
+{%- endcomment -%}
+{%- capture items -%}
+  {%- for c in product.metafields.custom.related_collections.value -%}
+    {%- if c.products_count > 0 -%}
+      <li><a href="{{ c.url }}">{{ c.title }}</a></li>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- if items != blank -%}
+  <nav class="shop-more" aria-label="Shop more like this">
+    <p style="margin: 0 0 0.5rem; font-weight: 600;">Shop more like this</p>
+    <ul style="display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; list-style: none; margin: 0; padding: 0;">{{ items }}</ul>
+  </nav>
+{%- endif -%}

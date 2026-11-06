@@ -1,0 +1,27 @@
+{%- comment -%}
+  "Shop by type" links to the sub-collections in custom.sub_collections.
+  A collection with no children of its own shows its siblings instead (the parent's list, minus itself).
+  Empty collections are skipped, and nothing prints when there's nothing to link.
+  Paste into a Custom Liquid block under the description in the collection template's heading section.
+{%- endcomment -%}
+{%- liquid
+  assign links = collection.metafields.custom.sub_collections.value
+  assign label = 'Shop by type'
+  if links == blank
+    assign links = collection.metafields.custom.parent_collection.value.metafields.custom.sub_collections.value
+    assign label = 'Related categories'
+  endif
+-%}
+{%- capture items -%}
+  {%- for c in links -%}
+    {%- if c.id != collection.id and c.products_count > 0 -%}
+      <li><a href="{{ c.url }}" style="display: inline-block; padding: 0.4rem 0.9rem; border: 1px solid rgb(var(--color-foreground-rgb, 0 0 0) / 0.2); border-radius: 2rem; text-decoration: none;">{{ c.title }}</a></li>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- if items != blank -%}
+  <nav class="collection-links" aria-label="{{ label }}">
+    <p style="margin: 0 0 0.5rem; font-weight: 600;">{{ label }}</p>
+    <ul style="display: flex; flex-wrap: wrap; gap: 0.5rem; list-style: none; margin: 0; padding: 0;">{{ items }}</ul>
+  </nav>
+{%- endif -%}

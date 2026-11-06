@@ -1,0 +1,40 @@
+{%- comment -%}
+  Collection breadcrumb with BreadcrumbList markup.
+  Paste into a Custom Liquid block at the top of the collection template's heading section.
+  Reads custom.parent_collection up to three levels: Home / Networking / PoE Switches / 8 Port PoE Switches.
+{%- endcomment -%}
+{%- liquid
+  assign p1 = collection.metafields.custom.parent_collection.value
+  assign p2 = p1.metafields.custom.parent_collection.value
+  assign p3 = p2.metafields.custom.parent_collection.value
+  assign pos = 1
+-%}
+<nav class="breadcrumbs" aria-label="Breadcrumb" style="font-size: 0.875rem;">
+  <a href="{{ routes.root_url }}">Home</a>
+  {%- if p3 %} / <a href="{{ p3.url }}">{{ p3.title }}</a>{% endif -%}
+  {%- if p2 %} / <a href="{{ p2.url }}">{{ p2.title }}</a>{% endif -%}
+  {%- if p1 %} / <a href="{{ p1.url }}">{{ p1.title }}</a>{% endif %}
+  / <span aria-current="page">{{ collection.title }}</span>
+</nav>
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+  {"@type": "ListItem", "position": 1, "name": "Home", "item": {{ shop.url | append: routes.root_url | json }}}
+  {%- for c in (1..3) -%}
+    {%- liquid
+      case forloop.index
+        when 1
+          assign crumb = p3
+        when 2
+          assign crumb = p2
+        when 3
+          assign crumb = p1
+      endcase
+    -%}
+    {%- if crumb -%}
+      {%- assign pos = pos | plus: 1 -%}
+      ,{"@type": "ListItem", "position": {{ pos }}, "name": {{ crumb.title | json }}, "item": {{ shop.url | append: crumb.url | json }}}
+    {%- endif -%}
+  {%- endfor -%}
+  ,{"@type": "ListItem", "position": {{ pos | plus: 1 }}, "name": {{ collection.title | json }}}
+]}
+</script>

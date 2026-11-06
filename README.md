@@ -1,6 +1,6 @@
 # n8n ecommerce templates
 
-Free n8n templates for running an online store: monitoring competitor prices, adding products, writing product titles, enriching product data and images, and building and sorting collections. Each one is a single n8n canvas with a lane per job, keeps its state in n8n Data Tables (or in Supabase, with the `workflow-supabase.json` version), and asks you in Slack before it changes anything in your store.
+Free n8n templates for running an online store: monitoring competitor prices, adding products, writing product titles, enriching product data and images, building and sorting collections, and internal linking. Each one is a single n8n canvas with a lane per job, keeps its state in n8n Data Tables (or in Supabase, with the `workflow-supabase.json` version), and asks you in Slack before it changes anything in your store.
 
 | Template | What it does |
 | --- | --- |
@@ -12,6 +12,7 @@ Free n8n templates for running an online store: monitoring competitor prices, ad
 | [Product data enrichment](product-data-enrichment/) | Scrapes each product's manufacturer spec page, extracts its attributes with AI, checks every value against a quote from the source, and writes the approved specs to Shopify metafields and Shopify's standard product attributes after a Slack review. |
 | [Shopify product images](product-images/) | Finds each product's page on the manufacturer's site, scrapes its images, checks them with a vision model, writes alt text per shot, and pads approved images to white 2048 px squares before uploading them. A weekly lane fixes alt text across the catalogue. |
 | [Shopify collection sorting](shopify-collection-sorting/) | Scores every product against its collection's keyword (word matching, or blended with embeddings), puts the best matches first and sold-out, draft and image-less products last, and keeps the order current every 2 hours. |
+| [Ecommerce internal linking](ecommerce-internal-linking/) | Fills breadcrumb, sub-collection, brand and related-collection link fields from your menu and collection rules every day, with Liquid snippets to show them on a stock theme, and runs a weekly orphan and broken-link audit. No AI model needed. |
 
 ## Getting started
 

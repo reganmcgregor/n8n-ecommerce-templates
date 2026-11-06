@@ -1,0 +1,8 @@
+{%- comment -%}
+  "By TP-LINK", linking the product to its brand page in custom.brand. Prints nothing when the field is empty.
+  Paste into a Custom Liquid block under the product title.
+{%- endcomment -%}
+{%- assign brand = product.metafields.custom.brand.value -%}
+{%- if brand -%}
+  <p class="product-brand" style="margin: 0;">By <a href="{{ brand.url }}">{{ brand.title }}</a></p>
+{%- endif -%}

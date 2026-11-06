@@ -1,0 +1,21 @@
+{%- comment -%}
+  "Shop by brand" links from a category page to the brand page of every vendor in it.
+  Looks each vendor's brand collection up by handle (TP-LINK -> /collections/tp-link), so brand
+  collections need the handleized vendor name as their handle. Vendors without one are skipped.
+  Paste into a Custom Liquid block under the sub-collection links.
+{%- endcomment -%}
+{%- capture items -%}
+  {%- for vendor in collection.all_vendors -%}
+    {%- assign brand_handle = vendor | handleize -%}
+    {%- assign brand = collections[brand_handle] -%}
+    {%- if brand.id != blank and brand.id != collection.id and brand.products_count > 0 -%}
+      <li><a href="{{ brand.url }}">{{ brand.title }}</a></li>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- if items != blank -%}
+  <nav class="shop-by-brand" aria-label="Shop by brand">
+    <p style="margin: 0 0 0.5rem; font-weight: 600;">Shop by brand</p>
+    <ul style="display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; list-style: none; margin: 0; padding: 0;">{{ items }}</ul>
+  </nav>
+{%- endif -%}
