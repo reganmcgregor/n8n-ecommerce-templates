@@ -228,8 +228,8 @@
       "notes": "TAKEN means the definition already exists."
     },
     {
-      "id": "d882a993-f4ae-55e6-b4b7-84bc19898946",
-      "name": "Category types to enable",
+      "id": "be4cd7eb-77a2-55fa-84ae-b8c4c77b53bc",
+      "name": "Standard attribute types to enable",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -242,8 +242,8 @@
       "executeOnce": true
     },
     {
-      "id": "35dca0a9-6736-5fc3-a551-533fefaaaf96",
-      "name": "Enable category value types",
+      "id": "d91d7c4d-e6cb-55fe-9b1f-e9d7d0475aa0",
+      "name": "Enable standard attribute types",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -268,7 +268,7 @@
         "options": {}
       },
       "onError": "continueRegularOutput",
-      "notes": "Turns on the shopify--<attribute> metaobject definitions the Push lane writes values into."
+      "notes": "Turns on the shopify--<attribute> metaobject definitions that hold standard attribute values."
     },
     {
       "id": "07afb2c3-ba80-50ed-ad84-5a69371ecf84",
@@ -312,7 +312,7 @@
       ],
       "parameters": {
         "mode": "raw",
-        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"queue_tag\": \"enrich\",\n  \"product_ids\": [],\n  \"batch_size\": 5,\n  \"text_model\": \"gpt-oss:120b\",\n  \"vision_model\": \"gemma4:cloud\",\n  \"spec_url_metafield\": \"custom.spec_url\",\n  \"mpn_metafield\": \"custom.mpn\",\n  \"use_firecrawl\": false,\n  \"use_images\": false,\n  \"max_images\": 3,\n  \"auto_approve_confidence\": 0.85,\n  \"max_list_values\": 6,\n  \"max_chars_spec\": 14000,\n  \"max_chars_other\": 6000,\n  \"user_agent\": \"YourStoreBot/1.0 (+https://your-store.com)\"\n}",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"queue_tag\": \"enrich\",\n  \"product_ids\": [],\n  \"batch_size\": 5,\n  \"text_model\": \"gemma4:31b\",\n  \"vision_model\": \"gemma4:31b\",\n  \"spec_url_metafield\": \"custom.spec_url\",\n  \"mpn_metafield\": \"custom.mpn\",\n  \"use_firecrawl\": false,\n  \"use_images\": false,\n  \"max_images\": 3,\n  \"auto_approve_confidence\": 0.85,\n  \"max_list_values\": 6,\n  \"max_chars_spec\": 14000,\n  \"max_chars_other\": 6000,\n  \"user_agent\": \"YourStoreBot/1.0 (+https://your-store.com)\"\n}",
         "options": {}
       },
       "notes": "Your settings for this lane."
@@ -1790,7 +1790,7 @@
         2620
       ],
       "parameters": {
-        "jsCode": "const s = $('Push settings').first().json;\nconst plan = $('Plan the push').first().json;\nconst fresh = $('Resolve standard values').isExecuted ? $('Resolve standard values').all().map(i => i.json) : [];\nconst cache = [...$('Get value cache').all().map(i => i.json), ...fresh];\nconst gidFor = (key, value) => (cache.find(c => c.standard_key === key && c.metaobject_gid\n  && String(c.value).toLowerCase() === String(value).toLowerCase()) || {}).metaobject_gid;\nconst notHere = (cat, key) => fresh.some(c => c.category_id === cat && c.standard_key === key && c.status === 'not_on_category');\nconst TYPE = { enum: 'single_line_text_field', list: 'list.single_line_text_field', number: 'number_decimal', boolean: 'boolean', text: 'single_line_text_field' };\nconst M = `mutation Push($mf: [MetafieldsSetInput!]!) {\n  metafieldsSet(metafields: $mf) {\n    metafields { id namespace key }\n    userErrors { field message code }\n  }\n}`;\nconst units = [];    // one per metafield: { kind, mf, rowIds }\nconst parked = [];   // rows settled before any request\nfor (const p of plan.products) {\n  for (const g of p.groups) {\n    const values = [...new Set(g.rows.map(r => String(r.value)))];\n    const ids = g.rows.map(r => r.id);\n    const type = TYPE[g.type] || 'single_line_text_field';\n    if (!type.startsWith('list.') && values.length > 1) {\n      parked.push(...ids.map(id => ({ id, push_status: 'failed', push_error: 'More than one value for a single-value field' })));\n      continue;\n    }\n    units.push({ kind: 'custom', rowIds: ids, mf: { ownerId: p.product_id, namespace: s.namespace, key: g.key, type,\n      value: type.startsWith('list.') ? JSON.stringify(values) : values[0] } });\n    // the twin: the product's category metafield, when the schema names a standard attribute\n    if (g.standard_key && !notHere(p.category_id, g.standard_key)) {\n      const gids = values.map(v => gidFor(g.standard_key, v)).filter(Boolean);\n      if (gids.length === values.length)\n        units.push({ kind: 'standard', rowIds: ids, mf: { ownerId: p.product_id, namespace: 'shopify', key: g.standard_key,\n          type: 'list.metaobject_reference', value: JSON.stringify([...new Set(gids)]) } });\n      else parked.push(...ids.map(id => ({ id, twin: 'no metaobject for every value yet' })));\n    }\n  }\n}\nconst out = [];\nfor (let i = 0; i < units.length; i += 25) {\n  const chunk = units.slice(i, i + 25);\n  out.push({ json: { query: M, variables: { mf: chunk.map(u => u.mf) }, units: chunk, parked: i === 0 ? parked : [] } });\n}\nif (!out.length) out.push({ json: { query: M, variables: { mf: [] }, units: [], parked } });\nreturn out;"
+        "jsCode": "const s = $('Push settings').first().json;\nconst plan = $('Plan the push').first().json;\nconst fresh = $('Resolve standard values').isExecuted ? $('Resolve standard values').all().map(i => i.json) : [];\nconst cache = [...$('Get value cache').all().map(i => i.json), ...fresh];\nconst gidFor = (key, value) => (cache.find(c => c.standard_key === key && c.metaobject_gid\n  && String(c.value).toLowerCase() === String(value).toLowerCase()) || {}).metaobject_gid;\nconst notHere = (cat, key) => fresh.some(c => c.category_id === cat && c.standard_key === key && c.status === 'not_on_category');\nconst TYPE = { enum: 'single_line_text_field', list: 'list.single_line_text_field', number: 'number_decimal', boolean: 'boolean', text: 'single_line_text_field' };\nconst M = `mutation Push($mf: [MetafieldsSetInput!]!) {\n  metafieldsSet(metafields: $mf) {\n    metafields { id namespace key }\n    userErrors { field message code }\n  }\n}`;\nconst units = [];    // one per metafield: { kind, mf, rowIds }\nconst parked = [];   // rows settled before any request\nfor (const p of plan.products) {\n  for (const g of p.groups) {\n    const values = [...new Set(g.rows.map(r => String(r.value)))];\n    const ids = g.rows.map(r => r.id);\n    const type = TYPE[g.type] || 'single_line_text_field';\n    if (!type.startsWith('list.') && values.length > 1) {\n      parked.push(...ids.map(id => ({ id, push_status: 'failed', push_error: 'More than one value for a single-value field' })));\n      continue;\n    }\n    units.push({ kind: 'custom', rowIds: ids, mf: { ownerId: p.product_id, namespace: s.namespace, key: g.key, type,\n      value: type.startsWith('list.') ? JSON.stringify(values) : values[0] } });\n    // the twin: Shopify's standard product attribute, when the schema names one\n    if (g.standard_key && !notHere(p.category_id, g.standard_key)) {\n      const gids = values.map(v => gidFor(g.standard_key, v)).filter(Boolean);\n      if (gids.length === values.length)\n        units.push({ kind: 'standard', rowIds: ids, mf: { ownerId: p.product_id, namespace: 'shopify', key: g.standard_key,\n          type: 'list.metaobject_reference', value: JSON.stringify([...new Set(gids)]) } });\n      else parked.push(...ids.map(id => ({ id, twin: 'no metaobject for every value yet' })));\n    }\n  }\n}\nconst out = [];\nfor (let i = 0; i < units.length; i += 25) {\n  const chunk = units.slice(i, i + 25);\n  out.push({ json: { query: M, variables: { mf: chunk.map(u => u.mf) }, units: chunk, parked: i === 0 ? parked : [] } });\n}\nif (!out.length) out.push({ json: { query: M, variables: { mf: [] }, units: [], parked } });\nreturn out;"
       },
       "executeOnce": false
     },
@@ -1866,7 +1866,7 @@
         2520
       ],
       "parameters": {
-        "jsCode": "const s = $('Push settings').first().json;\nconst token = $('Get Shopify token for Push').first().json.access_token;\nconst url = `https://${s.store_domain}/admin/api/2026-10/graphql.json`;\nconst reqs = $('Build the metafields').all().map(i => i.json);\nconst resps = $input.all().map(i => i.json);\nconst norm = r => {\n  const ms = r && r.data && r.data.metafieldsSet;\n  const errs = [].concat((r && r.errors) || [], (ms && ms.userErrors) || []);\n  return { written: (ms && ms.metafields) || [], errors: errs.map(e => e.message || JSON.stringify(e)) };\n};\nconst state = {};   // row id -> { custom, twin, error }\nconst note = (u, ok, msg) => {\n  for (const id of u.rowIds) {\n    const st = state[id] = state[id] || {};\n    if (u.kind === 'custom') { st.custom = ok; if (!ok) st.error = msg; }\n    else st.twin = ok ? 'ok' : (/subtype does not match/i.test(msg) ? 'mismatch' : 'failed: ' + msg);\n  }\n};\nfor (let i = 0; i < reqs.length; i++) {\n  const q = reqs[i];\n  for (const p of q.parked) state[p.id] = { ...(state[p.id] || {}), ...(p.push_status ? { custom: false, error: p.push_error } : { twin: 'skipped: ' + p.twin }) };\n  if (!q.units.length) continue;\n  const b = norm(resps[i]);\n  if (b.errors.length === 0 && b.written.length >= q.units.length) { q.units.forEach(u => note(u, true, '')); continue; }\n  for (const u of q.units) {\n    let ok = false, msg = '';\n    try {\n      const n = norm(await this.helpers.httpRequest({ method: 'POST', url, json: true,\n        headers: { 'X-Shopify-Access-Token': token }, body: { query: q.query, variables: { mf: [u.mf] } } }));\n      ok = n.written.length > 0 && n.errors.length === 0;\n      msg = n.errors.join('; ');\n    } catch (e) { msg = 'HTTP error: ' + (e.message || String(e)); }\n    note(u, ok, msg || (ok ? '' : 'Write not confirmed by Shopify'));\n  }\n}\nreturn Object.entries(state).map(([id, st]) => {\n  let push_status, push_error = '';\n  if (st.custom === false) { push_status = 'failed'; push_error = st.error || ''; }\n  else if (st.twin === 'mismatch') { push_status = 'category_mismatch'; push_error = 'Category has no such attribute; custom metafield written'; }\n  else { push_status = 'pushed'; if (st.twin && st.twin !== 'ok') push_error = 'Category metafield ' + st.twin; }\n  return { json: { id, push_status, push_error: push_error.slice(0, 300) } };\n});"
+        "jsCode": "const s = $('Push settings').first().json;\nconst token = $('Get Shopify token for Push').first().json.access_token;\nconst url = `https://${s.store_domain}/admin/api/2026-10/graphql.json`;\nconst reqs = $('Build the metafields').all().map(i => i.json);\nconst resps = $input.all().map(i => i.json);\nconst norm = r => {\n  const ms = r && r.data && r.data.metafieldsSet;\n  const errs = [].concat((r && r.errors) || [], (ms && ms.userErrors) || []);\n  return { written: (ms && ms.metafields) || [], errors: errs.map(e => e.message || JSON.stringify(e)) };\n};\nconst state = {};   // row id -> { custom, twin, error }\nconst note = (u, ok, msg) => {\n  for (const id of u.rowIds) {\n    const st = state[id] = state[id] || {};\n    if (u.kind === 'custom') { st.custom = ok; if (!ok) st.error = msg; }\n    else st.twin = ok ? 'ok' : (/subtype does not match/i.test(msg) ? 'mismatch' : 'failed: ' + msg);\n  }\n};\nfor (let i = 0; i < reqs.length; i++) {\n  const q = reqs[i];\n  for (const p of q.parked) state[p.id] = { ...(state[p.id] || {}), ...(p.push_status ? { custom: false, error: p.push_error } : { twin: 'skipped: ' + p.twin }) };\n  if (!q.units.length) continue;\n  const b = norm(resps[i]);\n  if (b.errors.length === 0 && b.written.length >= q.units.length) { q.units.forEach(u => note(u, true, '')); continue; }\n  for (const u of q.units) {\n    let ok = false, msg = '';\n    try {\n      const n = norm(await this.helpers.httpRequest({ method: 'POST', url, json: true,\n        headers: { 'X-Shopify-Access-Token': token }, body: { query: q.query, variables: { mf: [u.mf] } } }));\n      ok = n.written.length > 0 && n.errors.length === 0;\n      msg = n.errors.join('; ');\n    } catch (e) { msg = 'HTTP error: ' + (e.message || String(e)); }\n    note(u, ok, msg || (ok ? '' : 'Write not confirmed by Shopify'));\n  }\n}\nreturn Object.entries(state).map(([id, st]) => {\n  let push_status, push_error = '';\n  if (st.custom === false) { push_status = 'failed'; push_error = st.error || ''; }\n  else if (st.twin === 'mismatch') { push_status = 'category_mismatch'; push_error = 'Category has no such attribute; custom metafield written'; }\n  else { push_status = 'pushed'; if (st.twin && st.twin !== 'ok') push_error = 'Standard attribute ' + st.twin; }\n  return { json: { id, push_status, push_error: push_error.slice(0, 300) } };\n});"
       }
     },
     {
@@ -1901,7 +1901,7 @@
         -40
       ],
       "parameters": {
-        "content": "## Product data enrichment\n\nScrapes each queued product's manufacturer spec page, has an AI model return every attribute with a confidence, a source label and an exact quote, checks each quote in code, and asks you in Slack about anything it isn't sure of. Approved values go to `custom.*` metafields and, where Shopify's taxonomy has the attribute, to the product's category metafield.\n\n### How it works\n1. **Setup** (run once) creates four data tables, saves your attribute schema, creates the metafield definitions and turns on the category value types.\n2. **Extract** (every 15 minutes) takes products tagged `enrich`, scrapes the spec page (Firecrawl when a site blocks plain requests), adds an optional product database and image text, extracts the values and approves grounded ones from the spec page or database.\n3. **Review** posts a card per product with every value editable, plus a bulk card per category and attribute. Clicks are signature-checked.\n4. **Push** writes approved values with `metafieldsSet`, proves each write and retries failures one at a time. `dry_run` is on until you turn it off.\n\n### Setup\n1. Credentials: Custom Auth (Shopify client ID and secret) on the three **Get Shopify token** nodes, Slack API on **Post the card** and **Update the card**, Crypto (Slack signing secret) on **Sign the request**, Ollama on both chat models, Header Auth on **Firecrawl scrape** if you use it.\n2. Fill in the four settings nodes; your categories and attributes go in `schema`.\n3. Run **Run once to set up**.\n4. Point your Slack app's Interactivity URL at **Slack button click**.\n5. Test with a few IDs in `product_ids`, then publish.\n\n### Customisation\n- Swap either chat model sub-node for any other.\n- Turn on **Product database (optional)** for your industry's database.\n- Set `use_images` to true to read specs printed on product photos.\n",
+        "content": "## Product data enrichment\n\nScrapes each queued product's manufacturer spec page, has an AI model return every attribute with a confidence, a source label and an exact quote, checks each quote in code, and asks you in Slack about anything it isn't sure of. Approved values go to `custom.*` metafields and, where Shopify's taxonomy has the attribute, to Shopify's matching standard product attribute.\n\n### How it works\n1. **Setup** (run once) creates four data tables, saves your attribute schema, creates the metafield definitions and turns on the standard attribute types.\n2. **Extract** (every 15 minutes) takes products tagged `enrich`, scrapes the spec page (Firecrawl when a site blocks plain requests), adds an optional product database and image text, extracts the values and approves grounded ones from the spec page or database.\n3. **Review** posts a card per product with every value editable, plus a bulk card per category and attribute. Clicks are signature-checked.\n4. **Push** writes approved values with `metafieldsSet`, proves each write and retries failures one at a time. `dry_run` is on until you turn it off.\n\n### Setup\n1. Credentials: Custom Auth (Shopify client ID and secret) on the three **Get Shopify token** nodes, Slack API on **Post the card** and **Update the card**, Crypto (Slack signing secret) on **Sign the request**, Ollama on both chat models, Header Auth on **Firecrawl scrape** if you use it.\n2. Fill in the four settings nodes; your categories and attributes go in `schema`.\n3. Run **Run once to set up**.\n4. Point your Slack app's Interactivity URL at **Slack button click**.\n5. Test with a few IDs in `product_ids`, then publish.\n\n### Customisation\n- Swap either chat model sub-node for any other.\n- Turn on **Product database (optional)** for your industry's database.\n- Set `use_images` to true to read specs printed on product photos.\n",
         "width": 880,
         "height": 900,
         "color": 1
@@ -1917,7 +1917,7 @@
         -40
       ],
       "parameters": {
-        "content": "## Setup (run once)\nCreates the four data tables, saves the attribute schema from **Setup settings**, creates a pinned metafield definition per attribute (usable in smart collections) and turns on the Shopify category value types the schema names. Safe to run again.",
+        "content": "## Setup (run once)\nCreates the four data tables, saves the attribute schema from **Setup settings**, creates a pinned metafield definition per attribute (usable in smart collections) and turns on the Shopify standard attribute types the schema names. Safe to run again.",
         "width": 3400,
         "height": 400,
         "color": 7
@@ -1965,7 +1965,7 @@
         2380
       ],
       "parameters": {
-        "content": "## Push (every 15 minutes, and after each approval)\nWrites approved values to `custom.*` metafields and, where the category has the attribute, to its category metafield. Proves every write. Nothing is written while `dry_run` is true.",
+        "content": "## Push (every 15 minutes, and after each approval)\nWrites approved values to `custom.*` metafields and, where the category has the attribute, to Shopify's standard product attribute. Proves every write. Nothing is written while `dry_run` is true.",
         "width": 3400,
         "height": 480,
         "color": 7
@@ -1981,7 +1981,7 @@
         30
       ],
       "parameters": {
-        "content": "### Writes to Shopify\nCreates metafield definitions and turns on category value types. Test on a development store first.",
+        "content": "### Writes to Shopify\nCreates metafield definitions and turns on standard attribute types. Test on a development store first.",
         "width": 420,
         "height": 120,
         "color": 3
@@ -2013,7 +2013,7 @@
         2700
       ],
       "parameters": {
-        "content": "### Writes to Shopify\nCreates category value entries (metaobjects). Only runs when `dry_run` is false.",
+        "content": "### Writes to Shopify\nCreates standard attribute values (metaobjects). Only runs when `dry_run` is false.",
         "width": 420,
         "height": 150,
         "color": 3
@@ -2151,18 +2151,18 @@
       "main": [
         [
           {
-            "node": "Category types to enable",
+            "node": "Standard attribute types to enable",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Category types to enable": {
+    "Standard attribute types to enable": {
       "main": [
         [
           {
-            "node": "Enable category value types",
+            "node": "Enable standard attribute types",
             "type": "main",
             "index": 0
           }

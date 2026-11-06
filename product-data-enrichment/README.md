@@ -1,11 +1,11 @@
 # Product data enrichment
 
-An n8n template that scrapes each queued product's manufacturer spec page, has an AI model return every attribute with a confidence, a source label and an exact quote, checks each quote in code, and asks you in Slack about anything it isn't sure of. Approved values go to your `custom.*` product metafields and, where Shopify's Standard Product Taxonomy has the attribute, to the product's category metafield as well.
+An n8n template that scrapes each queued product's manufacturer spec page, has an AI model return every attribute with a confidence, a source label and an exact quote, checks each quote in code, and asks you in Slack about anything it isn't sure of. Approved values go to your `custom.*` product metafields and, where Shopify's Standard Product Taxonomy has the attribute, to Shopify's matching standard product attribute as well.
 
 - **Setup** creates the `attribute_schema`, `extract_runs`, `attribute_values` and `taxonomy_values` data tables, saves the attribute schema from **Setup settings**, creates a pinned metafield definition per attribute (usable in smart collection rules and as an admin filter) and turns on the `shopify--<attribute>` metaobject definitions the schema's `standard` fields name.
 - **Extract** takes products tagged `enrich` (or the IDs in `product_ids`), scrapes the spec page with one HTTP request and falls back to Firecrawl when a site blocks it, adds an optional product database and optional text read from the product images, and labels the sources S1, S2 and so on, with the supplier description last as SUP. The model returns each value with a confidence, a source and a quote; code checks the quote is in that source and carries the value, then approves values from the spec page or a database at 0.85 or above and holds the rest for review. It records the run and removes the tag.
 - **Review** posts a bulk card per category and attribute once `bulk_min_products` products are waiting on the same value, and a card per product with every other pending value editable inline. It checks Slack's signature on every click, ignores clicks on old cards, and sends approvals straight to Push.
-- **Push** writes approved values with `metafieldsSet` (25 per call), creates the category value metaobject on the first use of a value with `metaobjectUpsert`, proves every write in Shopify's reply and retries a failed batch one metafield at a time. `dry_run` is on until you turn it off.
+- **Push** writes approved values with `metafieldsSet` (25 per call), creates the standard attribute value (a metaobject) on the first use of a value with `metaobjectUpsert`, proves every write in Shopify's reply and retries a failed batch one metafield at a time. `dry_run` is on until you turn it off.
 
 The full walkthrough is in the guide: [Product Data Enrichment With AI](GUIDE_URL).
 
@@ -14,7 +14,7 @@ The full walkthrough is in the guide: [Product Data Enrichment With AI](GUIDE_UR
 - n8n with Data Tables (self-hosted or Cloud). Tested on n8n 2.45.
 - A Shopify app with the `read_products`, `write_products`, `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` scopes, and its client ID and secret.
 - A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret.
-- An AI model. The template uses Ollama Cloud with `gpt-oss:120b` for extraction and `gemma4:cloud` for the optional image step; any chat model sub-node works.
+- An AI model. The template uses Ollama Cloud with `gemma4:31b` for both extraction and the optional image step; any chat model sub-node works. In our tests `gpt-oss:120b` did as well but took twice as long; a small local `qwen3.5:9b` broke the JSON on a quarter of products.
 - Optional: a Firecrawl API key, for spec pages that refuse a plain request.
 - Products with a category from Shopify's Standard Product Taxonomy and the manufacturer's spec page URL in a metafield (`custom.spec_url` by default).
 
@@ -71,7 +71,7 @@ The full walkthrough is in the guide: [Product Data Enrichment With AI](GUIDE_UR
 
 ## Run Setup
 
-Open **Run once to set up** and click **Execute workflow**. You get four data tables, one row per category and attribute in `attribute_schema`, a pinned definition per attribute under **Settings > Custom data > Products**, and the category value types turned on. Running it again is safe: a definition that already exists answers `TAKEN`, and enabling a type twice returns the same definition.
+Open **Run once to set up** and click **Execute workflow**. You get four data tables, one row per category and attribute in `attribute_schema`, a pinned definition per attribute under **Settings > Custom data > Products**, and the standard attribute types turned on. Running it again is safe: a definition that already exists answers `TAKEN`, and enabling a type twice returns the same definition.
 
 ## Test on 10 products
 
@@ -79,7 +79,7 @@ Open **Run once to set up** and click **Execute workflow**. You get four data ta
 2. Open **Run now** and click **Execute workflow**. Check `extract_runs`: `spec_status` should say `ok` or `firecrawl` for products with a spec page. If it says `blocked (403)` or `blocked (429)`, turn on `use_firecrawl`.
 3. Open **Post cards now** and click **Execute workflow** to post the cards.
 4. Publish the workflow so **Slack button click** answers, then approve, edit and reject a few cards. With `dry_run` on, Push stops at **Build the metafields**: open it and read the payloads.
-5. Set `dry_run` to false and approve one more card, or run **Every 15 minutes (Push)**. The values appear on the product in Shopify, custom metafields under **Product metafields** and the twins under **Category metafields**.
+5. Set `dry_run` to false and approve one more card, or run **Every 15 minutes (Push)**. The values appear on the product in Shopify, custom metafields under **Product metafields** and the standard attribute twins under the admin's **Category metafields** section.
 6. Do this on a development store first: Setup, Extract (the tag removal) and Push write to Shopify.
 
 ## Schedule
@@ -110,9 +110,9 @@ Check the Interactivity Request URL is the production URL of **Slack button clic
 
 Read `push_error` in `attribute_values`. `Value must be a decimal.` means someone typed text into a number field in Slack; fix the value in Shopify or tag the product again. Push retries a rejected batch one metafield at a time, so one bad value never holds up the rest.
 
-### The category metafield isn't set
+### The standard attribute isn't set
 
-Read `taxonomy_values` and `push_error`. `Category metafield skipped: no metaobject for every value yet` means a value couldn't be resolved; check the app has the metaobject scopes and that Setup's **Enable category value types** returned no errors. `category_mismatch` means the product's category doesn't have that taxonomy attribute; the custom metafield is still written.
+Read `taxonomy_values` and `push_error`. `Standard attribute skipped: no metaobject for every value yet` means a value couldn't be resolved; check the app has the metaobject scopes and that Setup's **Enable standard attribute types** returned no errors. `category_mismatch` means the product's category doesn't have that taxonomy attribute; the custom metafield is still written.
 
 ### Data table writes start failing
 
