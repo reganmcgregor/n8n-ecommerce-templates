@@ -16,7 +16,7 @@ The full walkthrough is in the guide: [Product Data Enrichment With AI](GUIDE_UR
 - A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret.
 - An AI model. The template uses Ollama Cloud with `gemma4:31b` for both extraction and the optional image step; any chat model sub-node works. In our tests `gpt-oss:120b` did as well but took twice as long; a small local `qwen3.5:9b` broke the JSON on a quarter of products.
 - Optional: a Firecrawl API key, for spec pages that refuse a plain request.
-- Products with a category from Shopify's Standard Product Taxonomy and the manufacturer's spec page URL in a metafield (`custom.spec_url` by default).
+- Products with a category from Shopify's Standard Product Taxonomy. Setup creates the `custom.spec_url` and `custom.mpn` fields; you fill in each product's spec page URL and model number (by hand, in the bulk editor, or by CSV import with columns headed `Spec page URL (product.metafields.custom.spec_url)` and `Model number (MPN) (product.metafields.custom.mpn)`).
 
 [SETUP.md](../SETUP.md) shows how to create each credential.
 
@@ -46,7 +46,8 @@ The full walkthrough is in the guide: [Product Data Enrichment With AI](GUIDE_UR
 |---|---|
 | `store_domain` | Your permanent `*.myshopify.com` domain |
 | `namespace` | The metafield namespace for your attributes (`custom`) |
-| `schema` | One list of attributes per category name, exactly as Shopify names the category (`Surveillance Cameras`, `Tumblers`). Each attribute has a `key`, a `label`, a `type` (`enum`, `list`, `number`, `boolean` or `text`), an optional `unit`, an `allowed` list for `enum` and `list`, an optional `standard` (the Shopify taxonomy attribute it twins, such as `Power source`) and an optional `standard_map` from your value to the taxonomy's name for it |
+| `spec_url_metafield`, `mpn_metafield` | The fields Setup creates for the spec page URL and the model number, as `namespace.key`. Keep them the same as in **Extract settings** |
+| `schema` | One list of attributes per category name, exactly as Shopify names the category (`Surveillance Cameras`, `Tumblers`). Each attribute has a `key`, a `label`, a `type` (`enum`, `list`, `number`, `boolean` or `text`), an optional `unit`, an `allowed` list for `enum` and `list`, an optional `standard` (the Shopify taxonomy attribute it twins, such as `Power source`) and an optional `standard_map` from your value to the taxonomy's name for it. Look up your categories, their attributes and accepted values in [Shopify's taxonomy explorer](https://shopify.github.io/product-taxonomy/releases/latest/). A standard attribute only works on the categories it's mapped to, so leave `standard` out where your category doesn't have it |
 
 **Extract settings**:
 
@@ -71,7 +72,7 @@ The full walkthrough is in the guide: [Product Data Enrichment With AI](GUIDE_UR
 
 ## Run Setup
 
-Open **Run once to set up** and click **Execute workflow**. You get four data tables, one row per category and attribute in `attribute_schema`, a pinned definition per attribute under **Settings > Custom data > Products**, and the standard attribute types turned on. Running it again is safe: a definition that already exists answers `TAKEN`, and enabling a type twice returns the same definition.
+Open **Run once to set up** and click **Execute workflow**. You get four data tables, one row per category and attribute in `attribute_schema`, a pinned definition per attribute plus **Spec page URL** and **Model number (MPN)** under **Settings > Custom data > Products**, and the standard attribute types turned on. Running it again is safe: a definition that already exists answers `TAKEN`, and enabling a type twice returns the same definition.
 
 ## Test on 10 products
 
@@ -141,7 +142,7 @@ Help me set up the "Product data enrichment" n8n template in ./product-data-enri
 3. Never ask me for a password, token, API key or secret, and don't accept one if I paste it. Tell me to run this in my own terminal from the repo root:
    python3 scripts/create-credentials.py product-data-enrichment
    (add --supabase for the Supabase version). Then put each credential it created on the nodes it lists.
-4. Help me write the schema in Setup settings: ask which Shopify categories I sell, suggest 4 to 8 attributes per category that shoppers filter by, with allowed values, and check each category's taxonomy attributes for a standard twin. Wait for my answer on each category.
+4. Help me write the schema in Setup settings: ask which Shopify categories I sell, suggest 4 to 8 attributes per category that shoppers filter by, with allowed values, and look each category up in Shopify's taxonomy explorer (https://shopify.github.io/product-taxonomy/releases/latest/) to set `standard` and `standard_map` only where that category has the attribute. Wait for my answer on each category.
 5. Walk me through every other settings node one value at a time: say what the value does, suggest one for my store, and wait for my answer.
 6. Run the Setup lane and check its output with me.
 7. Test on about 5 products with nothing written to my store yet (dry_run on, and no Slack card approved), show me what it extracted and check it with me before anything writes to my store.
