@@ -1,18 +1,20 @@
 # n8n ecommerce templates
 
-Free n8n templates for running an online store: monitoring competitor prices, adding products, writing product titles, enriching product data and images, building and sorting collections, and internal linking. Each one is a single n8n canvas with a lane per job, keeps its state in n8n Data Tables (or in Supabase, with the `workflow-supabase.json` version), and asks you in Slack before it changes anything in your store.
+Free n8n templates for running an online store: monitoring competitor prices, adding products, writing product titles and descriptions, syncing inventory, enriching product data and images, building and sorting collections, and internal linking. Each one is a single n8n canvas with a lane per job, keeps its state in n8n Data Tables (or in Supabase, with the `workflow-supabase.json` version), and asks you in Slack before it changes anything in your store.
 
 | Template | What it does |
 | --- | --- |
 | [Competitor price monitoring](competitor-price-monitoring/) | Finds who else sells your exact products by model number, reads their prices from structured data, and posts a weekly Slack report of every product where a competitor is cheaper. No AI model needed. |
 | [Add products to Shopify](add-products-to-shopify/) | Brings a wholesaler's CSV price list (and, optionally, AliExpress listings) into one table, finds what you don't sell yet, writes the copy with AI and creates Shopify drafts you approve in Slack. |
 | [AI product titles](ai-product-titles/) | Rewrites the Shopify product titles you tag to a formula per product type, checks every model number in code, and learns from the titles you approve. |
+| [AI product descriptions](ai-product-descriptions/) | Writes a short intro for each tagged product from its specs and the maker's page, checks every number in code, and replaces only the intro in Shopify once you approve it in Slack. |
 | [Shopify collections SEO](shopify-collections-seo/) | Finds the collections your catalogue can support and shoppers search for, creates them as smart collections, gives every brand a page and proposes retiring collections that run out of stock. |
 | [Category page SEO](category-page-seo/) | Writes each collection's intro and meta tags from its live products, links it to its parent, children and siblings, sorts buyable products first and audits internal links weekly. |
 | [Product data enrichment](product-data-enrichment/) | Scrapes each product's manufacturer spec page, extracts its attributes with AI, checks every value against a quote from the source, and writes the approved specs to Shopify metafields and Shopify's standard product attributes after a Slack review. |
 | [Shopify product images](product-images/) | Finds each product's page on the manufacturer's site, scrapes its images, checks them with a vision model, writes alt text per shot, and pads approved images to white 2048 px squares before uploading them. A weekly lane fixes alt text across the catalogue. |
 | [Shopify collection sorting](shopify-collection-sorting/) | Scores every product against its collection's keyword (word matching, or blended with embeddings), puts the best matches first and sold-out, draft and image-less products last, and keeps the order current every 2 hours. |
 | [Ecommerce internal linking](ecommerce-internal-linking/) | Fills breadcrumb, sub-collection, brand and related-collection link fields from your menu and collection rules every day, with Liquid snippets to show them on a stock theme, and runs a weekly orphan and broken-link audit. No AI model needed. |
+| [Automated inventory management](automated-inventory-management/) | Syncs supplier CSV stock and unit cost into a Shopify location of its own every 3 hours, holds broken feeds, and proposes discontinued products for archive and redirect in Slack. No AI model needed. |
 
 ## Getting started
 
