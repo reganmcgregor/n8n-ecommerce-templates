@@ -7,7 +7,7 @@ An n8n template that writes a short intro for each Shopify product you tag `desc
 - **Review** checks Slack's signature on every tap and ignores taps on old cards. Approve saves whatever is in the edit box and starts Push; Reject marks the draft.
 - **Push** reads the live description, swaps only the intro and writes it with `productUpdate`, then saves the text as an example and replies under the card. An hourly run pushes anything left approved.
 
-The full walkthrough is in the guide: [Build an AI Product Description Generator That Checks Its Facts](GUIDE_URL).
+The full walkthrough is in the guide: [Build an AI Product Description Generator That Checks Its Facts](https://www.reganmcgregor.com.au/ai-product-description-generator/).
 
 ## What you need
 

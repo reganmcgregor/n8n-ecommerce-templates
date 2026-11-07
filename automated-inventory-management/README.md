@@ -9,7 +9,7 @@ An n8n template that keeps Shopify stock in step with a supplier's CSV price lis
 - **Sweep** (daily at 09:00) finds active products whose every offer is marked discontinued, or has been missing from the feed for `gone_days`, and posts up to `cards_per_run` Slack cards.
 - **Review** checks Slack's signature on every tap and ignores taps on decided cards. **Archive and redirect** archives the product, tags it and creates a 301 from its URL to its closest collection; **Keep the page** tags it so it stays live as sold out and isn't proposed again; **Snooze** brings it back after `snooze_days`. Nothing is ever deleted.
 
-The full walkthrough is in the guide: [Automated Inventory Management for Shopify](GUIDE_URL).
+The full walkthrough is in the guide: [Automated Inventory Management for Shopify](https://www.reganmcgregor.com.au/automated-inventory-management/).
 
 ## What you need
 
