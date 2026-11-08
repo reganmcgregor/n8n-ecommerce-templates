@@ -1,0 +1,43 @@
+{%- comment -%}
+  Specifications table with linked values. A value links to the collection in custom.spec_links
+  for that spec, so "Resolution: 4MP" goes to 4MP Security Cameras; a value with no collection
+  stays plain text. List the specs to show below as namespace.key|Label, in order. Standard
+  product attributes (shopify.*) show their labels. Nothing prints when the product has none.
+  Paste into a Custom Liquid block in product information, under the description.
+{%- endcomment -%}
+{%- assign specs = 'custom.resolution|Resolution,custom.night_vision|Night vision,custom.channels|Channels,custom.poe_ports|PoE ports,custom.cable_length|Length,custom.ip_rating|IP rating,shopify.surveillance-camera-design|Camera design,shopify.power-source|Power source' | split: ',' -%}
+{%- assign links = product.metafields.custom.spec_links.value -%}
+{%- capture rows -%}
+  {%- for spec in specs -%}
+    {%- assign parts = spec | split: '|' -%}
+    {%- assign ref = parts[0] | split: '.' -%}
+    {%- assign field = product.metafields[ref[0]][ref[1]] -%}
+    {%- if field != blank -%}
+      {%- if field.type contains 'metaobject_reference' and field.type contains 'list.' -%}
+        {%- assign shown = field.value | map: 'label' | join: ', ' -%}
+      {%- elsif field.type contains 'metaobject_reference' -%}
+        {%- assign shown = field.value.label -%}
+      {%- elsif field.type contains 'list.' -%}
+        {%- assign shown = field.value | join: ', ' -%}
+      {%- else -%}
+        {%- assign shown = field.value -%}
+      {%- endif -%}
+      {%- assign handle = nil -%}
+      {%- assign target = nil -%}
+      {%- if links -%}{%- assign handle = links[parts[0]] -%}{%- endif -%}
+      {%- if handle != blank -%}{%- assign target = collections[handle] -%}{%- endif -%}
+      <tr>
+        <th scope="row" style="text-align: left; padding: 0.5rem 1rem 0.5rem 0; font-weight: 600;">{{ parts[1] }}</th>
+        <td style="padding: 0.5rem 0;">
+          {%- if target != blank and target.products_count > 0 -%}<a href="{{ target.url }}" style="text-decoration: underline;">{{ shown }}</a>{%- else -%}{{ shown }}{%- endif -%}
+        </td>
+      </tr>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- if rows != blank -%}
+  <table class="spec-table" style="width: 100%; border-collapse: collapse;">
+    <caption style="text-align: left; font-weight: 600; padding-bottom: 0.5rem;">Specifications</caption>
+    <tbody>{{ rows }}</tbody>
+  </table>
+{%- endif -%}

@@ -1,12 +1,12 @@
 # Ecommerce internal linking
 
-An n8n template that keeps a Shopify store's structural internal links true every day, with no AI model. It writes five link fields from your main menu, your collection rules and your vendors, your theme shows them as breadcrumbs, sub-collection links, brand links and "Shop more like this" links, and a weekly audit tells you what nothing links to.
+An n8n template that keeps a Shopify store's structural internal links true every day, with no AI model. It writes six link fields from your main menu, your collection rules and your vendors, your theme shows them as breadcrumbs, sub-collection links, brand links, linked spec values and "Shop more like this" links, and a weekly audit tells you what nothing links to.
 
-- **Setup** creates the `link_findings` and `link_changes` data tables and five metafield definitions, pinned so they show in the admin: `custom.parent_collection` and `custom.sub_collections` on collections, `custom.brand`, `custom.primary_collection` and `custom.related_collections` on products.
-- **Link** (daily) works out every collection's parent and children (menu nesting first, then "type is X and ..." collections under the collection whose only rule is "type is X"), and every product's brand page, primary collection and related collections. It compares that with what Shopify holds, logs every difference with its old value, posts a summary to Slack, and writes the differences only when `dry_run` is false.
-- **Audit** (weekly) counts the links into every published collection from your menus, the five fields, sibling links, collection descriptions, pages and blog posts, and reports orphans, weak pages, children their parent doesn't list, menu links to empty collections, broken links, links that go through a redirect, products in no published collection or with no primary collection, and vendors with no brand page. Optionally it checks your live theme for the settings and blocks that hide links.
+- **Setup** creates the `link_findings` and `link_changes` data tables and six metafield definitions, pinned so they show in the admin: `custom.parent_collection` and `custom.sub_collections` on collections, `custom.brand`, `custom.primary_collection`, `custom.spec_links` and `custom.related_collections` on products.
+- **Link** (daily) works out every collection's parent and children (menu nesting first, then "type is X and ..." collections under the collection whose only rule is "type is X"), and every product's brand page, primary collection, spec links (which collection each spec value links to) and related collections. It compares that with what Shopify holds, logs every difference with its old value, posts a summary to Slack, and writes the differences only when `dry_run` is false.
+- **Audit** (weekly) counts the links into every published collection from your menus, the six fields, sibling links, collection descriptions, pages and blog posts, and reports orphans, weak pages, children their parent doesn't list, menu links to empty collections, broken links, links that go through a redirect, products in no published collection or with no primary collection, and vendors with no brand page. Optionally it checks your live theme for the settings and blocks that hide links.
 
-The full walkthrough is in the guide: [Ecommerce Internal Linking: Every Opportunity, and How to Automate It With n8n](GUIDE_URL).
+The full walkthrough is in the guide: [How to Improve and Automate Internal Linking on Shopify](https://www.reganmcgregor.com.au/ecommerce-internal-linking/).
 
 ## What you need
 
@@ -31,7 +31,7 @@ No AI model and no paid API. [SETUP.md](../SETUP.md) shows how to create each cr
 
 ## Settings
 
-**Setup settings**: `store_domain` (your permanent `*.myshopify.com` domain) and `namespace` (where the five fields live, `custom` by default).
+**Setup settings**: `store_domain` (your permanent `*.myshopify.com` domain) and `namespace` (where the six fields live, `custom` by default).
 
 **Link settings**:
 
@@ -43,7 +43,7 @@ No AI model and no paid API. [SETUP.md](../SETUP.md) shows how to create each cr
 | `min_products` | A child needs at least this many products to be listed under its parent |
 | `max_children` | The most sub-collection links on one page (24) |
 | `max_related` | The most "Shop more like this" links on one product (6) |
-| `write_collection_links`, `write_brand`, `write_primary`, `write_related` | Turn each kind of link field on or off |
+| `write_collection_links`, `write_brand`, `write_primary`, `write_spec_links`, `write_related` | Turn each kind of link field on or off |
 | `dry_run` | True: plan, log and report only. False: write to Shopify |
 | `slack_channel` | Where the summary goes |
 
@@ -66,11 +66,12 @@ No AI model and no paid API. [SETUP.md](../SETUP.md) shows how to create each cr
 - **Parent and children.** The tree menu's nesting comes first, in menu order. A smart collection outside the menu whose rules are "type is X and something else" (all conditions) goes under the collection whose only rule is "type is X". Anything else outside the menu has no parent.
 - **Brand.** The collection whose only rule is "vendor is X", matched to the product's vendor without case, as Shopify matches it. The audit lists vendors that have none.
 - **Primary collection.** The deepest collection in the tree that the product is in, skipping collections with a vendor rule (the brand link already covers those). Ties go to menu order, so the breadcrumb doesn't change between runs.
+- **Spec links.** A smart collection whose rules are one product metafield or standard product attribute condition, plus at most "type is X", is the page for that spec value ("Resolution is 4MP" is 4MP Security Cameras). For each spec, the product links to the spec collection it is in (one with a type rule first, then the smallest, at least two products), even when that collection is also its breadcrumb. Saved as JSON keyed by the metafield: `{"custom.resolution": "4mp-security-cameras"}`.
 - **Related collections.** Every other published collection the product is in, except its primary collection's own trail and brand pages, with at least two products, smallest first, up to `max_related`.
 
 ## Add the theme blocks
 
-The [`liquid/`](liquid) folder has six snippets, tested on Horizon 4.4. Each goes into a **Custom Liquid** block in the theme editor (no theme code files are edited):
+The [`liquid/`](liquid) folder has seven snippets, tested on Horizon 4.4. Each goes into a **Custom Liquid** block in the theme editor (no theme code files are edited):
 
 | File | Template and place |
 |---|---|
@@ -79,13 +80,14 @@ The [`liquid/`](liquid) folder has six snippets, tested on Horizon 4.4. Each goe
 | `shop-by-brand.liquid` | Collection template, under the sub-collection links |
 | `product-breadcrumbs.liquid` | Product template, product information, at the top |
 | `product-brand-link.liquid` | Product template, product information, under the title |
-| `shop-more-like-this.liquid` | Product template, product information, under the description |
+| `spec-table.liquid` | Product template, product information, under the description (list your specs in its first line) |
+| `shop-more-like-this.liquid` | Product template, product information, under the specs table |
 
 Each prints nothing when its field is empty. If you changed `namespace`, replace `custom` in the snippets to match. On Horizon, also untick **Auto load products on scroll** on the collection template's products section, or nothing links to page 2 of a collection.
 
 ## Run Setup
 
-Open **Run once to set up** and click **Execute workflow**. You get two data tables and five metafield definitions (Settings > Metafields and metaobjects > Collections and Products). Running it again keeps everything and reports the fields as already there.
+Open **Run once to set up** and click **Execute workflow**. You get two data tables and six metafield definitions (Settings > Metafields and metaobjects > Collections and Products). Running it again keeps everything and reports the fields as already there.
 
 ## Test it
 
@@ -157,7 +159,7 @@ Help me set up the "Ecommerce internal linking" n8n template in ./ecommerce-inte
    (add --supabase for the Supabase version). Then put each credential it created on the nodes it lists.
 4. Walk me through every settings node one value at a time: say what the value does, suggest one for my store, and wait for my answer. Ask me for my header menu's handle for tree_menu.
 5. Run the Setup lane and check its output with me.
-6. Walk me through adding the six Custom Liquid blocks in ecommerce-internal-linking/liquid in my theme editor, on a copy of my theme, in preview only.
+6. Walk me through adding the seven Custom Liquid blocks in ecommerce-internal-linking/liquid in my theme editor, on a copy of my theme, in preview only.
 7. Run the Audit lane, then the Link lane with dry_run true, show me the link_changes rows and check them with me before anything writes to my store.
 8. Stop and ask me whenever something doesn't match the README.
 ```
