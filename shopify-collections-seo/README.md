@@ -17,7 +17,7 @@ The full walkthrough is in the guide: [How to Automate Shopify Collections for S
 - A Shopify app with the `read_products`, `write_products`, `read_publications` and `write_publications` scopes, and its client ID and secret.
 - Product specs in product metafields, with **Use as a condition in collections** turned on for each definition (Settings > Metafields and metaobjects > Products).
 - A DataForSEO account (pay as you go).
-- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret.
+- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret. The [Slack approvals guide](https://www.reganmcgregor.com.au/slack-approval-workflow-n8n/) explains how the cards, taps and modals work.
 - An AI model. The template uses Ollama Cloud with `gpt-oss:120b`; any chat model sub-node works.
 
 [SETUP.md](../SETUP.md) shows how to create each credential.

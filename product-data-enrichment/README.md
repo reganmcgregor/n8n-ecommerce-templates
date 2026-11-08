@@ -13,7 +13,7 @@ The full walkthrough is in the guide: [Product Data Enrichment With AI](GUIDE_UR
 
 - n8n with Data Tables (self-hosted or Cloud). Tested on n8n 2.45.
 - A Shopify app with the `read_products`, `write_products`, `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` scopes, and its client ID and secret.
-- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret.
+- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret. The [Slack approvals guide](https://www.reganmcgregor.com.au/slack-approval-workflow-n8n/) explains how the cards, taps and modals work.
 - An AI model. The template uses Ollama Cloud with `gemma4:31b` for both extraction and the optional image step; any chat model sub-node works. In our tests `gpt-oss:120b` did as well but took twice as long; a small local `qwen3.5:9b` broke the JSON on a quarter of products.
 - Optional: a Firecrawl API key, for spec pages that refuse a plain request.
 - Products with a category from Shopify's Standard Product Taxonomy. Setup creates the `custom.spec_url` and `custom.mpn` fields; you fill in each product's spec page URL and model number (by hand, in the bulk editor, or by CSV import with columns headed `Spec page URL (product.metafields.custom.spec_url)` and `Model number (MPN) (product.metafields.custom.mpn)`).

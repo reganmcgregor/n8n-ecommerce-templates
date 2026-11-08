@@ -13,7 +13,7 @@ The full walkthrough is in the guide: [Build an AI Product Description Generator
 
 - n8n with Data Tables (self-hosted or Cloud). Tested on n8n 2.46.
 - A Shopify app with the `read_products` and `write_products` scopes, and its client ID and secret.
-- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret.
+- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret. The [Slack approvals guide](https://www.reganmcgregor.com.au/slack-approval-workflow-n8n/) explains how the cards, taps and modals work.
 - An AI model. The template uses Ollama Cloud with `gemma4:31b`; any chat model sub-node works.
 
 [SETUP.md](../SETUP.md) shows how to create each credential.

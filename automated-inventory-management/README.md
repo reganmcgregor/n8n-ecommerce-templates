@@ -17,7 +17,7 @@ The full walkthrough is in the guide: [Automated Inventory Management for Shopif
 - A Shopify app with the `read_products`, `write_products`, `read_inventory`, `write_inventory`, `read_locations` and `write_online_store_navigation` scopes, and its client ID and secret.
 - One Shopify location per supplier (Settings > Locations > Add location), with **Use inventory at this location to fulfill online orders** on, separate from the location that holds your own stock.
 - A supplier price list you can download as CSV from a URL.
-- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret.
+- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret. The [Slack approvals guide](https://www.reganmcgregor.com.au/slack-approval-workflow-n8n/) explains how the cards, taps and modals work.
 - No AI model and no paid APIs.
 
 [SETUP.md](../SETUP.md) shows how to create each credential.

@@ -14,7 +14,7 @@ The full walkthrough is in the guide: [Shopify Product Images: Find, Scrape and 
 
 - n8n with Data Tables (self-hosted or Cloud). Tested on n8n 2.46.
 - A Shopify app with the `read_products`, `write_products`, `read_files` and `write_files` scopes, and its client ID and secret.
-- A Slack app with a bot token (`chat:write` and `files:write`), Interactivity turned on, and its signing secret.
+- A Slack app with a bot token (`chat:write` and `files:write`), Interactivity turned on, and its signing secret. The [Slack approvals guide](https://www.reganmcgregor.com.au/slack-approval-workflow-n8n/) explains how the cards, taps and modals work.
 - A vision-capable AI model. The template uses Ollama Cloud with `gemma4:31b`; any chat model sub-node that takes images works.
 - Optional: DataForSEO, if you want the workflow to search Google for manufacturer pages it has no URL for.
 - [wsrv.nl](https://wsrv.nl/docs/) for resizing and padding. It's free and needs no account.

@@ -17,7 +17,7 @@ The full walkthrough is in the guide: [How to Add Products to Shopify Automatica
 
 - n8n with Data Tables (self-hosted or Cloud). Tested on n8n 2.45.
 - A Shopify app with the `read_products`, `write_products`, `read_inventory`, `write_inventory`, `read_publications`, `write_publications` and `read_locations` scopes, and its client ID and secret.
-- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret.
+- A Slack app with a bot token (`chat:write`), Interactivity turned on, and its signing secret. The [Slack approvals guide](https://www.reganmcgregor.com.au/slack-approval-workflow-n8n/) explains how the cards, taps and modals work.
 - An AI model. The template uses Ollama Cloud; any chat model sub-node works.
 - For AliExpress: a free AliExpress Open Platform app with Dropshipping API access, its App Key and App Secret. Skip it if you only use a price list.
 
