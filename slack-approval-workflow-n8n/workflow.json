@@ -1,0 +1,5168 @@
+{
+  "name": "Slack approvals (template)",
+  "nodes": [
+    {
+      "id": "05b584cf-0144-5473-ada3-cad96dc78210",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        -200
+      ],
+      "parameters": {
+        "content": "## Slack approvals with Block Kit\nAsk a person in Slack before a workflow changes anything. The card shows Before and After, and the reviewer can Approve, Edit in a modal, Reject with a reason, or open a page for a longer list. Alerts get buttons that do the next step (Match price, Snooze, Ignore).\n\n### How it works\n1. **Setup** creates the `approvals` data table.\n2. **Ask**: any workflow calls this one (lane ask). It posts the card, saves a row and returns at once, so nothing sits waiting.\n3. **Click**: one Request URL takes every button. It checks Slack's signature and age, the app, team and approver list, and that the row is still pending.\n4. **Apply** runs the change (your workflow, or the demo Shopify branch), and only then updates the card.\n5. **Page**: Open in page sends a private 8-hour signed link to a list of everything pending.\n6. **Remind** nudges once, expires old rows and wakes snoozed alerts.\n7. **Sync** closes a card when the item changes somewhere else first.\n\n### Setup\nCreate a Slack app (bot scopes `chat:write`, `chat:write.public`; Interactivity on). Add credentials: Slack API (bot token), Crypto (signing secret), and for the demo Shopify Custom Auth plus a Crypto with the app's client secret. Fill in each lane's settings, run Setup, publish, and set the Request URL to **Slack button click**'s production URL.\n\n### Customisation\nAdd a kind to **Kinds**, and give callers an `apply_workflow_id`: that workflow gets every decision with `decision`, `final_value` and `reason`.",
+        "width": 900,
+        "height": 1100,
+        "color": 1
+      }
+    },
+    {
+      "id": "e90c3cc0-773f-530c-9e76-85ad611fd71d",
+      "name": "Risk Write to Shopify",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1720,
+        2050
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify\nChanges the product title or the variant price. Test on a development store first.",
+        "width": 440,
+        "height": 130,
+        "color": 3
+      }
+    },
+    {
+      "id": "dfe372ba-c3a1-5884-b2e4-6e6959a0d268",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -200
+      ],
+      "parameters": {
+        "content": "## 1. Setup (run once)\nCreates the `approvals` table (it keeps an existing one). For the Shopify demo it also subscribes Sync's webhook to product updates.",
+        "width": 1380,
+        "height": 350,
+        "color": 7
+      }
+    },
+    {
+      "id": "b2c2b6b4-05f8-5013-9b50-8de63e85534f",
+      "name": "Lane Ask",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        210
+      ],
+      "parameters": {
+        "content": "## 2. Ask\nCall this workflow from any other (Execute Workflow, lane ask). Skips an item that already has an open card, saves the row, posts the card and stores where it went. Returns straight away.",
+        "width": 2700,
+        "height": 730,
+        "color": 7
+      }
+    },
+    {
+      "id": "b28d0b49-98a1-5757-aa59-530ba484907e",
+      "name": "Lane Click",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1000
+      ],
+      "parameters": {
+        "content": "## 3. Click (Slack's Request URL)\nChecks the signature, age, app, team and approvers before anything else, then the pending row (double clicks stop here). Edit and Reject open a modal straight away; the decisions go to Apply.",
+        "width": 3180,
+        "height": 850,
+        "color": 7
+      }
+    },
+    {
+      "id": "26882557-0055-5a2d-8f2a-c1376682e233",
+      "name": "Lane Apply",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1910
+      ],
+      "parameters": {
+        "content": "## 4. Apply\nRuns your apply workflow, or the demo Shopify branch (title or price), after checking the live value still matches. Only a change that landed updates the card; a failure keeps the buttons and replies in the thread.",
+        "width": 2960,
+        "height": 910,
+        "color": 7
+      }
+    },
+    {
+      "id": "fd6aa5b5-1ca7-564e-8bb1-956d44ba575c",
+      "name": "Lane Page",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2880
+      ],
+      "parameters": {
+        "content": "## 5. Page\nThe page behind Open in page. The GET checks the signed link and lists everything pending; its buttons post back with the same signature and go through Apply.",
+        "width": 2260,
+        "height": 830,
+        "color": 7
+      }
+    },
+    {
+      "id": "23c92191-d1d9-5067-9785-10aa5066e73d",
+      "name": "Lane Remind",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        3770
+      ],
+      "parameters": {
+        "content": "## 6. Remind (daily 09:00)\nOne thread nudge after `remind_after_hours`, expiry after `expire_after_days`, snoozed alerts back with their buttons. Nothing is ever applied here.",
+        "width": 1840,
+        "height": 790,
+        "color": 7
+      }
+    },
+    {
+      "id": "219d41c9-880a-551f-b14f-44a54459d8ff",
+      "name": "Lane Sync",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        4620
+      ],
+      "parameters": {
+        "content": "## 7. Sync\nKeeps cards in step with the source of truth. *Close approval* (any workflow) or Shopify's product update webhook closes open cards whose value changed somewhere else.",
+        "width": 2260,
+        "height": 530,
+        "color": 7
+      }
+    },
+    {
+      "id": "ba9106c2-faec-5ef3-9e08-3334d6cc1676",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -20
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b974b75d-711d-5015-8071-fe5c441b16bc",
+      "name": "Setup settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        -20
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c051b2ed-8779-5a5e-a058-cedbfd415a1c",
+              "name": "store_domain",
+              "value": "your-store.myshopify.com",
+              "type": "string"
+            },
+            {
+              "id": "b2613243-c6b3-5b99-bb64-82903d7af046",
+              "name": "sync_webhook_url",
+              "value": "https://your-n8n.example.com/webhook/shopify-product-updated",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Leave store_domain as your-store.myshopify.com to skip the Shopify demo."
+    },
+    {
+      "id": "9c9ccf8b-f594-58ed-b95b-a611b7a1ab66",
+      "name": "Create approvals",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        -20
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "approvals",
+        "columns": {
+          "column": [
+            {
+              "name": "kind",
+              "type": "string"
+            },
+            {
+              "name": "item_id",
+              "type": "string"
+            },
+            {
+              "name": "item_label",
+              "type": "string"
+            },
+            {
+              "name": "current_value",
+              "type": "string"
+            },
+            {
+              "name": "proposed_value",
+              "type": "string"
+            },
+            {
+              "name": "final_value",
+              "type": "string"
+            },
+            {
+              "name": "context",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "ts",
+              "type": "string"
+            },
+            {
+              "name": "requested_at",
+              "type": "date"
+            },
+            {
+              "name": "decided_by",
+              "type": "string"
+            },
+            {
+              "name": "decided_at",
+              "type": "date"
+            },
+            {
+              "name": "reason",
+              "type": "string"
+            },
+            {
+              "name": "apply_workflow_id",
+              "type": "string"
+            },
+            {
+              "name": "reminded_at",
+              "type": "date"
+            },
+            {
+              "name": "snooze_until",
+              "type": "date"
+            },
+            {
+              "name": "max_length",
+              "type": "number"
+            },
+            {
+              "name": "must_include",
+              "type": "string"
+            },
+            {
+              "name": "card",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "executeOnce": true,
+      "notes": "Reuses the table if it already exists."
+    },
+    {
+      "id": "872837c8-e962-5c25-80e0-39e9c4c89ff7",
+      "name": "Using the Shopify demo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        -20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ca407e24-78f5-5f6e-af68-580e5bac2553",
+              "leftValue": "={{ !$('Setup settings').first().json.store_domain.startsWith('your-store') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "2be3c543-7d71-56dd-9017-429bf408e472",
+      "name": "Get Shopify token for Setup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "34548663-9252-56dd-85b6-af22e0886998",
+      "name": "Subscribe to product updates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `mutation Subscribe($uri: String!) {\n  webhookSubscriptionCreate(topic: PRODUCTS_UPDATE, webhookSubscription: { uri: $uri, format: JSON }) {\n    webhookSubscription { id uri }\n    userErrors { field message }\n  }\n}`, variables: { uri: $('Setup settings').first().json.sync_webhook_url } }) }}",
+        "options": {}
+      },
+      "notes": "Run once. Shopify refuses a second identical subscription, which is fine."
+    },
+    {
+      "id": "3d7f4bf0-22d4-5e2f-90e9-2b20f719b38e",
+      "name": "Called by a workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        390
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "notes": "The one entry point for other workflows (and this one). lane: ask (default), apply or close."
+    },
+    {
+      "id": "90332f3d-8b10-502e-984a-78816135ac81",
+      "name": "Which lane?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        220,
+        390
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Apply",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "94fef16e-e535-5673-a2fe-f069a1e20eff",
+                    "leftValue": "={{ $json.lane === 'apply' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Close",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3a79420c-ec86-55ae-ac63-fd01eade4d6b",
+                    "leftValue": "={{ $json.lane === 'close' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Ask"
+        }
+      },
+      "notes": "A workflow can only have one Execute Workflow Trigger that runs, so every call comes in here."
+    },
+    {
+      "id": "88b8eb7a-5fc6-5a14-ba97-e2c98b3c79a3",
+      "name": "Send a test card",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        650
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e6b3e217-de29-55f0-bd5d-8744ec0cddb1",
+      "name": "Test cards",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        650
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One title approval and one price alert for the same camera. Change the IDs to a product on your store.\nreturn [\n  { json: {\n    kind: 'product_title',\n    item_id: 'gid://shopify/Product/1234567890',\n    item_label: 'Reolink RLC-820A',\n    current_value: 'RLC-820A REOLINK 8MP 4K POE TURRET IP CAMERA 30M IR',\n    proposed_value: 'Reolink RLC-820A 4K 8MP Turret PoE IP Camera',\n    context: 'Asked by AI product titles',\n    image_url: '', link: '', max_length: 70, must_include: 'RLC-820A', apply_workflow_id: '',\n  } },\n  { json: {\n    kind: 'price_alert',\n    item_id: 'gid://shopify/ProductVariant/1234567890',\n    item_label: 'Reolink RLC-820A 4K 8MP Turret PoE IP Camera',\n    current_value: '189.00',\n    proposed_value: '149.00',\n    context: 'Competitor X is A$40.00 under you.',\n    image_url: '', link: '', max_length: 0, must_include: '', apply_workflow_id: '',\n    // details: any { label: value } pairs to show on the card. Emoji and arrows make the change easy to see.\n    details: { 'Your price': 'A$189.00', 'Competitor X': 'A$149.00   :red_circle: ▼ 21%', 'Seen': 'Today, 8:12 am', 'Sales, 28 days': '6' },\n  } },\n];"
+      }
+    },
+    {
+      "id": "fd75e541-c8fc-5d4a-bcc9-4bc195b9005c",
+      "name": "Ask settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        550
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4cfdf7ee-31a2-5ae1-af87-08918954b5bd",
+              "name": "slack_channel",
+              "value": "#approvals",
+              "type": "string"
+            },
+            {
+              "id": "dc7d6a6e-20f9-5740-8958-382baade40bb",
+              "name": "page_button",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "slack_channel: a channel name (#approvals) or ID. page_button adds Open in page to every card."
+    },
+    {
+      "id": "6a3e9ffc-742d-58ff-a9d0-ac70a72f4e77",
+      "name": "Kinds",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        450
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3df66722-688d-50d3-b3c1-008b1666b6d2",
+              "name": "kinds",
+              "value": "={{ {\n  product_title: { label: 'Product title', type: 'approval',\n    hint: 'Approve writes the title to Shopify. Edit lets you change it first. Reject sends your reason back to the title workflow.' },\n  price_alert: { label: 'Competitor price', type: 'alert', value_prefix: 'A$',\n    action: { text: 'Match price', confirm: 'Set your price to the competitor\\'s price in Shopify?' },\n    snooze_hours: [1, 24, 168],\n    hint: 'Match price sets your price in Shopify. Snooze brings this back later. Ignore closes it.' },\n  content_decay: { label: 'Content decay', type: 'route',\n    routes: [{ id: 'rewrite', text: 'Rewrite' }, { id: 'update', text: 'Update' }],\n    hint: 'Rewrite or Update puts the page on the content board. Ignore closes it.' }\n} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "Each kind: approval (Approve, Edit, Reject), alert (one action, Snooze, Ignore) or route (one button per team, Ignore). hint says what the buttons do; large_image shows image_url full width."
+    },
+    {
+      "id": "6d4d1077-27b6-5022-aac2-d47699232c9a",
+      "name": "Loop over requests",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        880,
+        450
+      ],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "7b48fa5b-bf8c-56ca-9b91-40da49174bd7",
+      "name": "Get open rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        550
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "item_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Loop over requests').first().json.item_id }}"
+            },
+            {
+              "keyName": "kind",
+              "condition": "eq",
+              "keyValue": "={{ $('Loop over requests').first().json.kind }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "ee2e45fb-21a0-5b2b-915a-1394b328e5b1",
+      "name": "Already waiting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        550
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fee4efac-ad93-5fe4-8db3-bcf7dc9b46c9",
+              "leftValue": "={{ $input.all().some(r => ['pending', 'processing', 'snoozed'].includes(r.json.status)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "notes": "One open card per item and kind."
+    },
+    {
+      "id": "f1fe3538-fe16-54d0-ab16-168c643b0dc7",
+      "name": "Save the row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        650
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $('Loop over requests').first().json.kind }}",
+            "item_id": "={{ $('Loop over requests').first().json.item_id }}",
+            "item_label": "={{ $('Loop over requests').first().json.item_label }}",
+            "current_value": "={{ String($('Loop over requests').first().json.current_value ?? '') }}",
+            "proposed_value": "={{ String($('Loop over requests').first().json.proposed_value ?? '') }}",
+            "context": "={{ $('Loop over requests').first().json.context || '' }}",
+            "status": "pending",
+            "requested_at": "={{ $now.toISO() }}",
+            "max_length": "={{ Number($('Loop over requests').first().json.max_length) || 0 }}",
+            "must_include": "={{ $('Loop over requests').first().json.must_include || '' }}",
+            "apply_workflow_id": "={{ $('Loop over requests').first().json.apply_workflow_id || '' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "item_id",
+              "displayName": "item_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "item_label",
+              "displayName": "item_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "current_value",
+              "displayName": "current_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_value",
+              "displayName": "proposed_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "context",
+              "displayName": "context",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "requested_at",
+              "displayName": "requested_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "max_length",
+              "displayName": "max_length",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "must_include",
+              "displayName": "must_include",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "apply_workflow_id",
+              "displayName": "apply_workflow_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ffd089b0-cddf-534b-8ecf-73388c7e8ecf",
+      "name": "Build the card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        650
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Builds the Block Kit card. Every button's value is only the row id: the text lives in the table.\nconst s = $('Ask settings').first().json;\nconst kinds = $('Kinds').first().json.kinds;\nconst req = $('Loop over requests').first().json;\nconst r = $input.first().json;\nconst k = kinds[r.kind] || { label: r.kind, type: 'approval' };\nconst id = String(r.id);\nconst pre = k.value_prefix || '';\nconst name = req.link ? `<${req.link}|${r.item_label}>` : r.item_label;\nconst plain = t => ({ type: 'plain_text', text: t });\nconst btn = (text, action, extra = {}) => ({ type: 'button', text: plain(text), action_id: 'approval_' + action, value: id, ...extra });\n\nconst blocks = [{ type: 'header', text: plain((k.type === 'approval' ? `${k.label} to review` : k.label).slice(0, 150)) }];\nconst main = k.type !== 'approval' ? `*${name}*\\n${r.context}`\n  : r.current_value ? `*${name}*\\n*Before*\\n${r.current_value}\\n*After*\\n${r.proposed_value}`\n  : `*${name}*\\n${r.proposed_value}`;\nconst section = { type: 'section', text: { type: 'mrkdwn', text: main.slice(0, 3000) } };\nconst image = req.image_url ? { type: 'image', image_url: req.image_url, alt_text: r.item_label.slice(0, 2000),\n  ...(req.image_title ? { title: plain(String(req.image_title).slice(0, 2000)) } : {}) } : null;\nif (image && !k.large_image) section.accessory = image;\nblocks.push(section);\n\n// The fact line sits under what it describes: the length of the proposed text, or the alert's numbers.\nconst facts = (k.type === 'approval'\n  ? [`${r.proposed_value.length}${r.max_length ? ' of ' + r.max_length : ''} characters`, r.context]\n  : k.type === 'alert' ? [r.current_value ? `Now ${pre}${r.current_value}` : '', r.proposed_value ? `${k.action.text} sets it to ${pre}${r.proposed_value}` : ''] : []).filter(Boolean);\nif (facts.length) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: facts.join(' · ') }] });\nif (image && k.large_image) blocks.push(image);\n\n// details: { label: value } from the caller. Short values sit side by side; long ones get their own line.\nconst details = Object.entries(req.details || {}).filter(([, v]) => v !== '' && v != null);\nconst short = details.filter(([, v]) => String(v).length <= 60);\nif (short.length) blocks.push({ type: 'section', fields: short.slice(0, 10).map(([l, v]) => ({ type: 'mrkdwn', text: `*${l}*\\n${v}` })) });\nfor (const [l, v] of details.filter(([, v]) => String(v).length > 60))\n  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*${l}*\\n${v}`.slice(0, 3000) } });\n\nif (k.hint) blocks.push({ type: 'context', block_id: 'approval_hint', elements: [{ type: 'mrkdwn', text: k.hint }] });\n\nconst hours = h => h < 24 ? `${h} hour${h > 1 ? 's' : ''}` : h % 168 === 0 ? `${h / 168} week${h > 168 ? 's' : ''}` : `${h / 24} day${h > 24 ? 's' : ''}`;\nlet elements;\nif (k.type === 'alert') elements = [\n  btn(k.action.text, 'action', { style: 'primary', ...(k.action.confirm ? { confirm: {\n    title: plain(k.action.text + '?'), text: { type: 'mrkdwn', text: k.action.confirm }, confirm: plain('Yes'), deny: plain('Cancel') } } : {}) }),\n  { type: 'static_select', action_id: 'approval_snooze', placeholder: plain('Snooze'),\n    options: (k.snooze_hours || [24]).map(h => ({ text: plain(hours(h)), value: id + '|' + h })) },\n  btn('Ignore', 'ignore'),\n];\nelse if (k.type === 'route') elements = [...k.routes.map(x => btn(x.text, 'route_' + x.id)), btn('Ignore', 'ignore')];\nelse elements = [btn('Approve', 'approve', { style: 'primary' }), btn('Edit', 'edit'), btn('Reject', 'reject', { style: 'danger' })];\nif (s.page_button) elements.push(btn('Open in page', 'page'));\nblocks.push({ type: 'actions', block_id: 'approval_actions', elements });\n\nreturn [{ json: { row_id: r.id, channel: s.slack_channel, text: `${k.label}: ${r.item_label}`.slice(0, 300), blocks } }];"
+      },
+      "notes": "Header, Before and After (or the alert fact), optional image and details, a context line, what the buttons do, then the buttons from Kinds."
+    },
+    {
+      "id": "8186f4d8-5735-5649-9530-73e7c98efb6f",
+      "name": "Post the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        650
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: $json.text, blocks: $json.blocks, unfurl_links: false, unfurl_media: false }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "HTTP rather than the Slack node: raw blocks in, channel and ts back."
+    },
+    {
+      "id": "53e04f32-58a6-56cc-b3cf-c43ea2e7a85c",
+      "name": "Posted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        650
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cae792a1-74d3-5fe0-930f-f87f7b6e0ecf",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "27f88344-be2c-5ef9-b2c2-228add3a805f",
+      "name": "Save channel and ts",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        570
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Build the card').first().json.row_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "={{ $json.channel }}",
+            "ts": "={{ $json.ts }}",
+            "card": "={{ JSON.stringify($('Build the card').first().json.blocks) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "card",
+              "displayName": "card",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "34592e35-bcc3-5073-9b9c-081a4da60fb9",
+      "name": "Mark failed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        770
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Build the card').first().json.row_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "failed",
+            "reason": "={{ 'Slack: ' + ($json.error || $json.message || 'no response') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "71ada34d-536c-534a-b241-b2297d302c62",
+      "name": "Return the result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// What the caller gets back, straight away.\n// The loop runs these nodes once per request, so read every run.\nconst run = n => { const out = []; for (let i = 0; i < 1000; i++) { let r; try { r = $(n).all(0, i); } catch (e) { break; } if (!r.length) break; out.push(...r.map(x => x.json)); } return out; };\nreturn [{ json: {\n  asked: run('Save channel and ts').map(r => ({ row_id: r.id, status: 'pending', channel: r.channel, ts: r.ts })),\n  skipped: run('Skip it').length,\n  failed: run('Mark failed').map(r => ({ row_id: r.id, reason: r.reason })),\n} }];"
+      }
+    },
+    {
+      "id": "b2c06b9c-a5f5-5f29-b9d3-5d29a85c177d",
+      "name": "Skip it",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        450
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f4c5c4e0-4642-568d-8887-38877d2ccad1",
+      "name": "Slack button click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-approvals",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "notes": "Your Slack app's Interactivity Request URL. Raw Body on, so the signature can be checked."
+    },
+    {
+      "id": "4a8e28c6-230b-55ae-ad7f-7bd217548e19",
+      "name": "Read the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        1400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Reads the raw body first: Slack signs the exact bytes it sent. (A Set node before this would drop them.)\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || ''; // no URLSearchParams in the Code node\nlet p = {};\ntry { p = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' '))); } catch (e) {}\nconst c = {\n  base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'] || '',\n  fresh: Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) <= 300,\n  retry: !!h['x-slack-retry-num'], type: p.type || '', app_id: p.api_app_id || '', team_id: p.team?.id || p.user?.team_id || '',\n  user_id: p.user?.id || '', response_url: p.response_url || '', trigger_id: p.trigger_id || '',\n};\nif (p.type === 'view_submission') {\n  const m = JSON.parse(p.view.private_metadata || '{}');\n  const v = p.view.state.values;\n  if (p.view.callback_id === 'approval_edit')\n    return [{ json: { ...c, action: 'edit_submit', row_id: Number(m.row_id), value: (v.value?.value?.value || '').trim() } }];\n  return [{ json: { ...c, action: 'reject_submit', row_id: Number(m.row_id),\n    reason: [v.reason?.reason?.selected_option?.value, (v.note?.note?.value || '').trim()].filter(Boolean).join(': ') } }];\n}\nconst a = p.actions?.[0] || {};\nconst action = String(a.action_id || '').replace(/^approval_/, '');\nif (action === 'snooze') {\n  const [row, hours] = String(a.selected_option?.value || '').split('|');\n  return [{ json: { ...c, action, row_id: Number(row), snooze_hours: Number(hours) } }];\n}\nreturn [{ json: { ...c, action, row_id: Number(a.value) || 0 } }];"
+      },
+      "notes": "Handles block_actions (buttons, the snooze menu) and view_submission (the two modals)."
+    },
+    {
+      "id": "ce940900-4fe7-514d-a01f-365ccf1c194e",
+      "name": "Click settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        1400
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "15b4acbe-2e84-5381-bcc7-7d6c50470b2e",
+              "name": "slack_app_id",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "bb5e9ca3-c207-55e9-aaa4-9c813dede17f",
+              "name": "slack_team_id",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "f46d849b-ab0a-5e69-8818-f5a767c96a83",
+              "name": "approver_ids",
+              "value": "={{ [] }}",
+              "type": "array"
+            },
+            {
+              "id": "8d46e7d9-de9e-5bb3-bd6d-83a66bc2d36a",
+              "name": "reject_reasons",
+              "value": "={{ ['Wrong details', 'Reads badly', 'Not needed'] }}",
+              "type": "array"
+            },
+            {
+              "id": "a09b1b33-7feb-5ca8-8f8c-9d14f75f00a5",
+              "name": "page_url",
+              "value": "https://your-n8n.example.com/webhook/slack-approvals-page",
+              "type": "string"
+            },
+            {
+              "id": "425ee3ed-30be-5a2e-a64e-e9a631aa54e8",
+              "name": "link_hours",
+              "value": 8,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "Blank slack_app_id or slack_team_id accepts any. approver_ids: Slack user IDs; empty means anyone in the channel."
+    },
+    {
+      "id": "87c24d0d-cb75-5677-8248-c606a8167889",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1400
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      },
+      "notes": "Crypto credential: Hmac Secret = your Slack app's Signing Secret."
+    },
+    {
+      "id": "5fd10490-2fad-5c10-962d-68abd7a1ecfb",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        1400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2af92315-a50a-5f2e-9a65-8ec4d648b59a",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected && $json.fresh }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Matches Slack and is under 5 minutes old, so a captured request can't be replayed."
+    },
+    {
+      "id": "bec96b84-cef4-5d33-b833-5d4e8e85f856",
+      "name": "Not from Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        1620
+      ],
+      "parameters": {
+        "options": {
+          "responseCode": 401
+        },
+        "respondWith": "text",
+        "responseBody": "={{ 'Bad signature' }}"
+      }
+    },
+    {
+      "id": "4c2c1ee5-5b76-51d8-a46c-9a24559fb3b3",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        1400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "49c727e9-dbec-5ca8-b459-871cb52d7fd9",
+              "leftValue": "={{ (!$json.slack_app_id || $json.app_id === $json.slack_app_id) && (!$json.slack_team_id || $json.team_id === $json.slack_team_id) && (!$json.approver_ids.length || $json.approver_ids.includes($json.user_id)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Your app, your workspace, and an approver."
+    },
+    {
+      "id": "9b1339e2-a42e-54f6-9acd-2248a8a251e1",
+      "name": "Answer, not allowed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        1620
+      ],
+      "parameters": {
+        "options": {},
+        "respondWith": "noData"
+      }
+    },
+    {
+      "id": "06e89139-6844-5b8a-bd9f-9c1f363857f8",
+      "name": "Say not allowed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        1620
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ response_type: 'ephemeral', replace_original: false, text: 'Only approvers can decide these cards.' }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Private reply to whoever clicked."
+    },
+    {
+      "id": "daa1cbc4-4d91-5302-bba9-39f755807a79",
+      "name": "Get pending row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        1400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.row_id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true,
+      "notes": "A second click, a Slack retry or a card already decided elsewhere finds nothing."
+    },
+    {
+      "id": "112a691e-2ef5-5279-b382-79302d1e790c",
+      "name": "Check the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        1400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Validates a modal submission, so Slack can show the error under the field.\nconst c = $('Sign the request').first().json;\nconst row = $input.first().json;\nconst found = !!row.id;\nlet errors = null;\nif (found && c.action === 'edit_submit') {\n  const v = c.value, max = Number(row.max_length) || 0;\n  const must = String(row.must_include || '').split(',').map(w => w.trim()).filter(Boolean);\n  const missing = must.filter(w => !v.toLowerCase().includes(w.toLowerCase()));\n  if (!v) errors = { value: 'Enter a value, or close this and press Reject.' };\n  else if (max && v.length > max) errors = { value: `That's ${v.length} characters. The limit is ${max}.` };\n  else if (missing.length) errors = { value: `Keep ${missing.join(', ')} in it.` };\n}\nconst exp = Math.floor(Date.now() / 1000) + 3600 * (Number(c.link_hours) || 8);\nconst { base, expected, sig, ...click } = c;\nreturn [{ json: { ...click, found, errors, exp, row: found ? row : null } }];"
+      }
+    },
+    {
+      "id": "56ed9c73-c926-58fd-ab98-f45895ef7e2e",
+      "name": "Answer Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        1400
+      ],
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "={{ $json.errors ? 'application/json' : 'text/plain' }}"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ $json.errors ? JSON.stringify({ response_action: 'errors', errors: $json.errors }) : '' }}"
+      },
+      "notes": "Inside Slack's 3 seconds. An empty 200 closes a modal; errors keep it open."
+    },
+    {
+      "id": "fb4ef16b-9dc2-5517-837c-13991ff26806",
+      "name": "Anything to do?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        1400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d0021194-2101-5072-8a94-309ce4cad592",
+              "leftValue": "={{ $json.found && !$json.errors && !$json.retry }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7bf328ff-e1dc-5d11-87e1-dba8441a454b",
+      "name": "Route the click",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2200,
+        1400
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Edit",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7441bae0-5444-57aa-809c-79a79111fad6",
+                    "leftValue": "={{ $json.action === 'edit' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Reject",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "600a296b-2507-55dd-86d9-a427ec2afcbd",
+                    "leftValue": "={{ $json.action === 'reject' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Open in page",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c44e0b07-042e-5c6d-bc02-e3f713ef817e",
+                    "leftValue": "={{ $json.action === 'page' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Decide",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2fd909f7-c6ac-58aa-94c5-9cee4cfa6225",
+                    "leftValue": "={{ ['approve', 'edit_submit', 'reject_submit', 'action', 'ignore', 'snooze'].includes($json.action) || $json.action.startsWith('route_') }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e455d07b-b50e-5203-a2dc-44e90e1c79f1",
+      "name": "Open the edit modal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2460,
+        1140
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/views.open",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((c => ({\n  trigger_id: c.trigger_id,\n  view: {\n    type: 'modal', callback_id: 'approval_edit', private_metadata: JSON.stringify({ row_id: c.row.id }),\n    title: { type: 'plain_text', text: 'Edit and approve' },\n    submit: { type: 'plain_text', text: 'Save and approve' },\n    close: { type: 'plain_text', text: 'Cancel' },\n    blocks: [\n      { type: 'context', elements: [{ type: 'mrkdwn', text: ('*' + c.row.item_label + '*\\nBefore: ' + (c.row.current_value || '_empty_')).slice(0, 3000) }] },\n      { type: 'input', block_id: 'value', label: { type: 'plain_text', text: 'New value' },\n        hint: { type: 'plain_text', text: [c.row.max_length ? 'Up to ' + c.row.max_length + ' characters.' : '', c.row.must_include ? 'Keep ' + c.row.must_include + '.' : ''].filter(Boolean).join(' ') || 'Saving approves it.' },\n        element: Object.assign({ type: 'plain_text_input', action_id: 'value', initial_value: c.row.proposed_value, multiline: c.row.proposed_value.length > 150 },\n          c.row.max_length ? { max_length: c.row.max_length } : {}) }\n    ]\n  }\n}))($('Check the click').first().json)) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "First Slack call after the click: trigger_id lasts 3 seconds and works once."
+    },
+    {
+      "id": "93632942-40a7-50b1-be5c-2b511641dff0",
+      "name": "Open the reject modal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2460,
+        1320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/views.open",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((c => ({\n  trigger_id: c.trigger_id,\n  view: {\n    type: 'modal', callback_id: 'approval_reject', private_metadata: JSON.stringify({ row_id: c.row.id }),\n    title: { type: 'plain_text', text: 'Reject' },\n    submit: { type: 'plain_text', text: 'Reject' },\n    close: { type: 'plain_text', text: 'Cancel' },\n    blocks: [\n      { type: 'context', elements: [{ type: 'mrkdwn', text: ('*' + c.row.item_label + '*\\n' + (c.row.proposed_value || c.row.context)).slice(0, 3000) }] },\n      { type: 'input', block_id: 'reason', optional: true, label: { type: 'plain_text', text: 'Why?' },\n        element: { type: 'static_select', action_id: 'reason', placeholder: { type: 'plain_text', text: 'Pick a reason' },\n          options: c.reject_reasons.map(r => ({ text: { type: 'plain_text', text: r }, value: r })) } },\n      { type: 'input', block_id: 'note', optional: true, label: { type: 'plain_text', text: 'Anything to add' },\n        element: { type: 'plain_text_input', action_id: 'note', multiline: true, max_length: 500 } }\n    ]\n  }\n}))($('Check the click').first().json)) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "Optional reason. It goes to your apply workflow, so the next draft can use it."
+    },
+    {
+      "id": "f52d235a-5de9-571e-b769-0134637493f0",
+      "name": "Sign a page link",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        1500
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.user_id + '|' + $json.exp }}",
+        "dataPropertyName": "page_sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      },
+      "notes": "Signs user|expiry for whoever clicked. Cards outlive links, so the card never carries one."
+    },
+    {
+      "id": "e794237d-2cfd-597b-81c2-8af6bb680f40",
+      "name": "Reply with the link",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2680,
+        1500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((c => ({\n  response_type: 'ephemeral', replace_original: false, text: 'Open the approvals page',\n  blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '*Everything waiting for a decision*\\nYour link works for ' + c.link_hours + ' hours.' },\n    accessory: { type: 'button', style: 'primary', action_id: 'approval_link', text: { type: 'plain_text', text: 'Open page' },\n      url: c.page_url + '?u=' + encodeURIComponent(c.user_id) + '&exp=' + c.exp + '&sig=' + c.page_sig } }]\n}))($json)) }}",
+        "options": {}
+      },
+      "notes": "Private reply in the channel, only the clicker sees it."
+    },
+    {
+      "id": "a8274df7-f405-53e8-b2f7-2f1d7c266160",
+      "name": "Mark processing",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2460,
+        1680
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.row.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "processing",
+            "final_value": "={{ $json.action === 'edit_submit' ? $json.value : $json.row.proposed_value }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "final_value",
+              "displayName": "final_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "notes": "Straight away, before the slow part, so a fast second click finds nothing pending."
+    },
+    {
+      "id": "c67c8ce7-3fe0-5638-a7e3-c2945eadbbec",
+      "name": "Decision for Apply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2680,
+        1680
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fca11ab0-d63d-525c-b8fe-7a81142d470d",
+              "name": "lane",
+              "value": "apply",
+              "type": "string"
+            },
+            {
+              "id": "bb63608f-c3e4-5893-9cf3-fa1caeeb6a62",
+              "name": "row_id",
+              "value": "={{ $('Check the click').first().json.row.id }}",
+              "type": "number"
+            },
+            {
+              "id": "55028fa9-ab7a-558f-a1da-b9965f923dff",
+              "name": "decision",
+              "value": "={{ ({ edit_submit: 'edit', reject_submit: 'reject' })[$('Check the click').first().json.action] || $('Check the click').first().json.action }}",
+              "type": "string"
+            },
+            {
+              "id": "cc7955a1-4f9e-5612-bcf6-99ddb75c2f81",
+              "name": "final_value",
+              "value": "={{ $('Check the click').first().json.value || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "1a71f91d-2b8a-59bb-a9c1-571489f92b63",
+              "name": "reason",
+              "value": "={{ $('Check the click').first().json.reason || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "f577ce26-5219-5b9d-b5bc-050fdf96fc07",
+              "name": "snooze_hours",
+              "value": "={{ $('Check the click').first().json.snooze_hours || 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "97120fda-9d56-5a79-928a-09966d82a7af",
+              "name": "user_id",
+              "value": "={{ $('Check the click').first().json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "870d863b-a833-5f3f-9d1b-5cb88fb2660c",
+              "name": "via",
+              "value": "slack",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "59318266-61ef-5cbd-9105-fc041e653026",
+      "name": "Send to Apply",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2900,
+        1680
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "notes": "Calls this same workflow ({{ $workflow.id }}), so it still works after import."
+    },
+    {
+      "id": "3af74ee2-a7d4-5539-9e7f-8241f8fb0084",
+      "name": "Nothing to do",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        1620
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "77c38bbb-1666-5eed-bfa2-1b5341a2b60e",
+      "name": "Apply the change",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2450
+      ],
+      "parameters": {},
+      "notes": "From Which lane? (lane apply): row_id, decision, final_value, reason, snooze_hours, user_id, via."
+    },
+    {
+      "id": "28d446cc-fca0-5021-ac70-cb86b992796a",
+      "name": "Apply settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        2450
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e9e4a277-eb69-5d6f-9c42-67dc44886706",
+              "name": "store_domain",
+              "value": "your-store.myshopify.com",
+              "type": "string"
+            },
+            {
+              "id": "5cb28c77-3fbb-59b2-9c46-a701ba1c491b",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "store_domain is only used by the demo Shopify branch."
+    },
+    {
+      "id": "a775a6ba-a362-5ff4-923f-e50d8dc3b4b1",
+      "name": "Get the row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        2450
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('Apply the change').first().json.row_id) }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "bd0e1a04-4327-5287-b97a-105f0d7f3226",
+      "name": "Plan the decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        2450
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Turns the decision into a status, the value to apply and the line the card will show.\nconst t = $('Apply the change').first().json;\nconst s = $('Apply settings').first().json;\nconst row = $input.first().json;\nif (!row.id) throw new Error('No approval row ' + t.row_id);\nconst d = String(t.decision);\nconst button = (JSON.parse(row.card || '[]').find(b => b.type === 'actions')?.elements || [])\n  .find(e => e.action_id === 'approval_' + d)?.text?.text;\nconst edited = d === 'edit' && t.final_value !== row.proposed_value;\nconst plans = {\n  approve: { status: 'approved', changes: true, value: row.proposed_value, word: 'Approved', icon: ':white_check_mark:', label: 'Approved' },\n  edit: { status: edited ? 'edited' : 'approved', changes: true, value: t.final_value, word: 'Approved', icon: ':white_check_mark:', label: edited ? 'Edited and approved' : 'Approved' },\n  action: { status: 'approved', changes: true, value: row.proposed_value, word: 'Done', icon: ':white_check_mark:', label: button || 'Done' },\n  reject: { status: 'rejected', changes: false, value: '', word: 'Rejected', icon: ':no_entry:', label: 'Rejected' },\n  ignore: { status: 'acknowledged', changes: false, value: '', word: 'Ignored', icon: ':heavy_minus_sign:', label: 'Ignored' },\n  snooze: { status: 'snoozed', changes: false, value: '', word: 'Snoozed', icon: ':zzz:', label: 'Snoozed' },\n};\nconst plan = plans[d] || (d.startsWith('route_')\n  ? { status: 'routed', changes: false, value: d.slice(6), word: 'Sent', icon: ':arrow_right:', label: 'Sent to ' + (button || d.slice(6)) } : null);\nif (!plan) throw new Error('Unknown decision ' + d);\nconst fmt = (date, o) => date.toLocaleString('en-AU', { timeZone: s.timezone, ...o });\nconst snooze_until = d === 'snooze' ? new Date(Date.now() + 3600e3 * (Number(t.snooze_hours) || 24)) : null;\nconst who = t.via === 'page' ? `<@${t.user_id}> on the page` : `<@${t.user_id}>`;\nlet note = `${plan.icon} ${plan.label} by ${who} · ${fmt(new Date(), { hour: 'numeric', minute: '2-digit' })}`;\nif (snooze_until) note = `${plan.icon} Snoozed by ${who} until ${fmt(snooze_until, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`;\nif (t.reason) note += `\\n>${t.reason}`;\nreturn [{ json: { ...row, decision: d, ...plan, final_value: plan.value, reason: t.reason || '', user_id: t.user_id,\n  note, snooze_until: snooze_until ? snooze_until.toISOString() : null, decided_at: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "23d76525-52d3-5d22-bdb7-6f8f9ad017ea",
+      "name": "Where it applies",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        880,
+        2450
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Your workflow",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c41ce7de-3b0e-5f0a-998f-cdebc139c417",
+                    "leftValue": "={{ !!$json.apply_workflow_id }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Shopify demo",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4daa32b1-05bd-51aa-a0b3-af4872215226",
+                    "leftValue": "={{ $json.changes && ['product_title', 'price_alert'].includes($json.kind) }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Nothing to apply"
+        }
+      },
+      "notes": "Your workflow gets every decision. The demo kinds write to Shopify on Approve, Edit or Match price."
+    },
+    {
+      "id": "2ab1e459-43c2-5927-be1c-2e5654b196dd",
+      "name": "Run your apply workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1340,
+        2250
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Plan the decision').first().json.apply_workflow_id }}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_id": "={{ $json.row_id }}",
+            "item_id": "={{ $json.item_id }}",
+            "kind": "={{ $json.kind }}",
+            "decision": "={{ $json.decision }}",
+            "final_value": "={{ $json.final_value }}",
+            "reason": "={{ $json.reason }}",
+            "decided_by": "={{ $json.decided_by }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "row_id",
+              "displayName": "row_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "item_id",
+              "displayName": "item_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "decision",
+              "displayName": "decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "final_value",
+              "displayName": "final_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Its trigger should accept all data. Return { ok: false, error } (or throw) to keep the card open."
+    },
+    {
+      "id": "265c56a3-3fa8-567d-a45e-fcf97336dc82",
+      "name": "Your apply payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        2250
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// What your apply workflow receives, for every decision on its kind.\nconst p = $input.first().json;\nreturn [{ json: { row_id: p.id, kind: p.kind, item_id: p.item_id, item_label: p.item_label, decision: p.decision,\n  final_value: p.final_value, reason: p.reason, decided_by: p.user_id, context: p.context } }];"
+      }
+    },
+    {
+      "id": "a2ec9e25-18f0-5b7c-bf68-f382736a1f8f",
+      "name": "Your workflow said OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        2250
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "49cf96a5-3b7f-53ef-9670-d00d50efcfb9",
+              "leftValue": "={{ $json.ok !== false }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "15a51585-493c-549d-977b-cc4f43c21eb3",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        2450
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "f1d3aee2-8769-57f1-a3c4-1d4042a3b566",
+      "name": "Read the live value",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        2450
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Live($id: ID!) {\n  node(id: $id) {\n    ... on Product { title }\n    ... on ProductVariant { price product { id } }\n  }\n}`, variables: { id: $('Plan the decision').first().json.item_id } }) }}",
+        "options": {}
+      },
+      "notes": "Someone may have changed it in Shopify since the card was posted."
+    },
+    {
+      "id": "63f95500-e541-5283-b302-4eaafee01d5a",
+      "name": "Unchanged in Shopify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        2450
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5a625c41-6867-503d-992d-b734d2519185",
+              "leftValue": "={{ (n => n && ($('Plan the decision').first().json.kind === 'price_alert' ? Number(n.price) === Number($('Plan the decision').first().json.current_value) : n.title === $('Plan the decision').first().json.current_value))($json.data?.node) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d73f7226-d958-5cd3-85fa-aa80da13167d",
+      "name": "Write to Shopify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        2450
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Apply settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify((p => p.kind === 'price_alert'\n  ? { query: `mutation Price($product: ID!, $variants: [ProductVariantsBulkInput!]!) {\n  productVariantsBulkUpdate(productId: $product, variants: $variants) {\n    productVariants { id price }\n    userErrors { field message }\n  }\n}`, variables: { product: $('Read the live value').first().json.data.node.product.id, variants: [{ id: p.item_id, price: p.final_value }] } }\n  : { query: `mutation Title($product: ProductUpdateInput!) {\n  productUpdate(product: $product) {\n    product { id title }\n    userErrors { field message }\n  }\n}`, variables: { product: { id: p.item_id, title: p.final_value } } })($('Plan the decision').first().json)) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "844d490e-2488-517a-bb26-099b5212ddbc",
+      "name": "Saved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2000,
+        2450
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "95a4b52b-3648-5b6f-95cf-dd8558037f2f",
+              "leftValue": "={{ !$json.errors && !(($json.data?.productUpdate || $json.data?.productVariantsBulkUpdate)?.userErrors || []).length }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8924fbd5-d619-51ba-a34f-2a60ca79d72e",
+      "name": "Mark decided",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        2250
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan the decision').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $('Plan the decision').first().json.status }}",
+            "final_value": "={{ $('Plan the decision').first().json.final_value }}",
+            "decided_by": "={{ $('Plan the decision').first().json.user_id }}",
+            "decided_at": "={{ $('Plan the decision').first().json.decided_at }}",
+            "reason": "={{ $('Plan the decision').first().json.reason }}",
+            "snooze_until": "={{ $('Plan the decision').first().json.snooze_until }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "final_value",
+              "displayName": "final_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "snooze_until",
+              "displayName": "snooze_until",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ea336b92-d752-562b-807f-32585569c94f",
+      "name": "Close the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2460,
+        2250
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (p => JSON.stringify({ channel: p.channel, ts: p.ts, text: p.word + ': ' + p.item_label, blocks: ((card, word, note, saved) => { const b = JSON.parse(card || '[]').filter(x => x.type !== 'actions' && x.block_id !== 'approval_hint'); if (b[0] && b[0].type === 'header') b[0] = { type: 'header', text: { type: 'plain_text', text: (b[0].text.text.replace(/ to review$/, '') + ': ' + word).slice(0, 150) } }; if (saved) b.push({ type: 'section', text: { type: 'mrkdwn', text: ('*Saved as*\\n' + saved).slice(0, 3000) } }); b.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }); return b; })(p.card, p.word, p.note, p.status === 'edited' ? p.final_value : '') }))($('Plan the decision').first().json) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "chat.update on the stored channel and ts: works for modal submissions and the page, and doesn't expire like response_url."
+    },
+    {
+      "id": "4ad7f075-e4ff-54e4-8adb-498e4bbf3e36",
+      "name": "Change found in Shopify",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1780,
+        2650
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "da11bf6d-ac55-5062-8cca-01dbe25dd97a",
+              "name": "lane",
+              "value": "close",
+              "type": "string"
+            },
+            {
+              "id": "2eb7c992-2eb6-5662-a872-f67d70b65cf6",
+              "name": "item_id",
+              "value": "={{ $('Plan the decision').first().json.item_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f7173642-9156-59a9-b522-3aea177a6d4d",
+              "name": "kind",
+              "value": "={{ $('Plan the decision').first().json.kind }}",
+              "type": "string"
+            },
+            {
+              "id": "2e2cf3cd-eb54-58bf-a537-e85e5f0f4ab1",
+              "name": "new_value",
+              "value": "={{ (n => $('Plan the decision').first().json.kind === 'price_alert' ? n.price : n.title)($('Read the live value').first().json.data.node) }}",
+              "type": "string"
+            },
+            {
+              "id": "6aa8f2a6-190d-5d26-b7da-f9f5095b62f9",
+              "name": "source",
+              "value": "Shopify",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "eb521e73-8e5f-5c41-8762-83038a8935dc",
+      "name": "Close it as changed",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        2650
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "notes": "Hands it to Sync, which closes the card the same way a Shopify webhook would."
+    },
+    {
+      "id": "20597f8a-fd87-5128-bc68-e6b19784c183",
+      "name": "Describe the error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        2610
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Gathers the reason from whichever branch failed.\nconst j = $input.first().json;\nconst msgs = [j.error?.message || (typeof j.error === 'string' ? j.error : ''), ...(j.errors || []).map(e => e.message),\n  ...((j.data?.productUpdate || j.data?.productVariantsBulkUpdate)?.userErrors || []).map(e => e.message)].filter(Boolean);\nreturn [{ json: { error: msgs.join('; ') || 'unknown error' } }];"
+      }
+    },
+    {
+      "id": "948842b9-7f4c-5744-8cad-89f1d165669f",
+      "name": "Back to pending",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2460,
+        2610
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan the decision').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "pending",
+            "reason": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0d1fb1f0-dd67-5ebb-87ac-49acc4e3b68e",
+      "name": "Reply with the error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2680,
+        2610
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Plan the decision').first().json.channel, thread_ts: $('Plan the decision').first().json.ts, text: ':x: That didn\\'t apply: ' + $('Describe the error').first().json.error + '. The buttons still work, so try again.' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "85fbca3d-c7ab-5398-bda3-b4a338a18e30",
+      "name": "Review page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        3020
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "slack-approvals-page",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "notes": "Opened from the private Open page button. n8n serves webhook HTML in a sandbox with no cookies, so the link is signed."
+    },
+    {
+      "id": "c4879d3e-550a-5f7a-826c-335c04034b6b",
+      "name": "Page settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        3020
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a7e5c87b-c334-5b7f-8331-3a2f33fa62e3",
+              "name": "decide_url",
+              "value": "https://your-n8n.example.com/webhook/slack-approvals-decide",
+              "type": "string"
+            },
+            {
+              "id": "b1fe5354-193e-5e03-aebc-cd1f15fba7d8",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "decide_url: the production URL of Page decision."
+    },
+    {
+      "id": "c6b5f1af-3489-58d6-8985-f23cfc4a0c0f",
+      "name": "Check the link",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        440,
+        3020
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.query.u + '|' + $json.query.exp }}",
+        "dataPropertyName": "expected",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "id": "e224fd98-8a0d-5aea-8e81-6d2449dc8349",
+      "name": "Link valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        3020
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "daa7e7c0-79b9-569d-ace9-42a8b16c9fa7",
+              "leftValue": "={{ $json.expected === $json.query.sig && Number($json.query.exp) > $now.toSeconds() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "03c5eeb9-ca04-5bb0-88fc-dbcb3307e17e",
+      "name": "Link expired",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        3200
+      ],
+      "parameters": {
+        "options": {
+          "responseCode": 403,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ '<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><body style=\"font:16px system-ui;padding:24px\">This link has expired. Press <b>Open in page</b> on any card for a new one.</body>' }}"
+      }
+    },
+    {
+      "id": "6bdb376d-663c-579c-92db-f3b74ab8c9a1",
+      "name": "Get pending rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        3020
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "2b6282f6-3bf7-5132-bb76-e465ce5c062a",
+      "name": "Build the page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        3020
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// A plain list of everything pending, with the buttons from each card.\nconst s = $('Page settings').first().json;\nconst q = s.query;\nconst rows = $input.all().map(i => i.json).filter(r => r.id);\nconst esc = t => String(t ?? '').replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\nconst md = t => esc(t).replace(/\\*([^*\\n]+)\\*/g, '<b>$1</b>').replace(/&lt;(https?:[^|]+)\\|([^&]+)&gt;/g, '<a href=\"$1\">$2</a>').replace(/\\n/g, '<br>');\nconst cards = rows.map(r => {\n  const blocks = JSON.parse(r.card || '[]');\n  const head = blocks.find(b => b.type === 'header')?.text?.text || r.kind;\n  const body = blocks.find(b => b.type === 'section')?.text?.text || esc(r.item_label);\n  const note = blocks.find(b => b.type === 'context')?.elements?.[0]?.text || '';\n  const buttons = (blocks.find(b => b.type === 'actions')?.elements || [])\n    .filter(e => e.type === 'button' && !['approval_edit', 'approval_page'].includes(e.action_id))\n    .map(e => `<button class=\"${e.style || ''}\" data-d=\"${esc(e.action_id.replace('approval_', ''))}\">${esc(e.text.text)}</button>`).join('');\n  const asked = new Date(r.requested_at).toLocaleString('en-AU', { timeZone: s.timezone, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });\n  return `<section class=\"card\" data-id=\"${r.id}\"><div class=\"kind\">${esc(head)} · asked ${esc(asked)}</div><div class=\"body\">${md(body)}</div>`\n    + `<div class=\"note\">${md(note)}</div><div class=\"buttons\">${buttons}</div><div class=\"done\"></div></section>`;\n}).join('');\nconst auth = JSON.stringify({ u: q.u, exp: q.exp, sig: q.sig });\nconst html = `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>Approvals</title><style>\nbody{margin:0;background:#f8f8f8;color:#1d1c1d;font:15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif}\nmain{max-width:860px;margin:0 auto;padding:24px 16px}h1{font-size:22px;margin:0 0 16px}\n.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px 16px;margin:0 0 12px}\n.kind{font-size:12px;color:#616061;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}.note{color:#616061;font-size:13px;margin-top:6px}\nbutton{font:inherit;font-weight:600;border:1px solid #bbb;background:#fff;border-radius:6px;padding:5px 14px;margin:10px 8px 0 0;cursor:pointer}\nbutton.primary{background:#007a5a;border-color:#007a5a;color:#fff}button.danger{color:#e01e5a;border-color:#e01e5a}button:disabled{opacity:.5}\n.done{margin-top:8px;font-weight:600}</style></head><body><main>\n<h1>${rows.length} waiting for a decision</h1>${cards || '<p>Nothing waiting. Nice.</p>'}</main>\n<script>\nconst AUTH = ${auth}, DECIDE = ${JSON.stringify(s.decide_url)};\ndocument.querySelectorAll('.card button').forEach(b => b.addEventListener('click', async () => {\n  const card = b.closest('.card'), out = card.querySelector('.done');\n  card.querySelectorAll('button').forEach(x => x.disabled = true);\n  out.textContent = 'Working...';\n  try {\n    const r = await fetch(DECIDE, { method: 'POST', body: new URLSearchParams({ ...AUTH, row_id: card.dataset.id, decision: b.dataset.d }) });\n    const j = await r.json();\n    out.textContent = j.message;\n    if (!j.ok) card.querySelectorAll('button').forEach(x => x.disabled = false);\n  } catch (e) { out.textContent = 'Could not reach n8n. Try again.'; card.querySelectorAll('button').forEach(x => x.disabled = false); }\n}));\n</script></body></html>`;\nreturn [{ json: { html } }];"
+      }
+    },
+    {
+      "id": "01beda7d-7802-5920-8aa0-2b08ad6c5e84",
+      "name": "Send the page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        3020
+      ],
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}"
+      }
+    },
+    {
+      "id": "d990e7b4-2b69-5fe5-acf5-519de5589307",
+      "name": "Page decision",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        3360
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-approvals-decide",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "notes": "The page's buttons post here with the same signed fields."
+    },
+    {
+      "id": "510994f1-3c0a-5d68-8841-6fa7532af046",
+      "name": "Check the page signature",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        220,
+        3360
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.body.u + '|' + $json.body.exp }}",
+        "dataPropertyName": "expected",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "id": "bdf10061-ca9f-526f-ad70-1c14560ed14f",
+      "name": "Signed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        3360
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6b245014-bc0e-56ab-8226-ce71c8068aa7",
+              "leftValue": "={{ $json.expected === $json.body.sig && Number($json.body.exp) > $now.toSeconds() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "de338bf3-fdbc-57fc-a2a0-15aeeb623c2e",
+      "name": "Refuse the decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        3540
+      ],
+      "parameters": {
+        "options": {
+          "responseCode": 403,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ ok: false, message: 'Link expired. Open a new one from any card.' }) }}"
+      }
+    },
+    {
+      "id": "8f762c61-4224-5406-b548-7b82b4cea1fc",
+      "name": "Get pending row for the page",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        3360
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($json.body.row_id) }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "6135d084-cbbf-54b1-aba7-097e5d5f40a5",
+      "name": "Still pending?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        3360
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bb38e4e4-f0a1-5d88-afec-4ca868c5c8d0",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "46c77724-f682-5d57-92b2-3a3121627efa",
+      "name": "Already decided",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        3540
+      ],
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ ok: true, message: 'Someone already decided this one.' }) }}"
+      }
+    },
+    {
+      "id": "9bf068e1-78b7-5b4c-a77a-dfac5d941471",
+      "name": "Mark processing from the page",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        3360
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "processing",
+            "final_value": "={{ $json.proposed_value }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "final_value",
+              "displayName": "final_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4df469bf-ca22-58ba-8940-11a62715005b",
+      "name": "Decision from the page",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1320,
+        3360
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "71d8a76d-351c-5d6b-9b66-628f9072a174",
+              "name": "lane",
+              "value": "apply",
+              "type": "string"
+            },
+            {
+              "id": "55380ec6-d61c-5c55-bec1-0c5f7c25eec7",
+              "name": "row_id",
+              "value": "={{ $('Get pending row for the page').first().json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "a49eac73-58cf-55ee-a6cc-766c5072578f",
+              "name": "decision",
+              "value": "={{ $('Check the page signature').first().json.body.decision }}",
+              "type": "string"
+            },
+            {
+              "id": "7dba43a5-024a-5234-a15e-92bfa1364720",
+              "name": "final_value",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "6a43ae62-7e07-5f94-b063-0eba80499300",
+              "name": "reason",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "e762eb35-5089-5423-962b-e1fe3e91753d",
+              "name": "snooze_hours",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "b7857146-66db-5dcb-a391-6b1c760375ac",
+              "name": "user_id",
+              "value": "={{ $('Check the page signature').first().json.body.u }}",
+              "type": "string"
+            },
+            {
+              "id": "450ab604-1583-5b8a-94d8-1b77e6e79b49",
+              "name": "via",
+              "value": "page",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "30ee1ec6-762b-59fe-863e-9e5df62ece09",
+      "name": "Apply from the page",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        3360
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "1d37fdad-a790-5eb8-8593-679ab5de75f4",
+      "name": "Read the outcome",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        3360
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get pending row for the page').first().json.id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "notes": "Execute Workflow hands back whichever node ran last, so read the row instead."
+    },
+    {
+      "id": "0a929f97-a0c3-5555-a944-365cea5da303",
+      "name": "Send the outcome",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        3360
+      ],
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ ok: $json.status !== 'pending', status: $json.status, message: ({ approved: 'Approved.', edited: 'Approved.', rejected: 'Rejected.', acknowledged: 'Ignored.', routed: 'Sent.', superseded: 'Already changed at the source, nothing to do.', pending: 'That didn\\'t apply: ' + $json.reason })[$json.status] || $json.status }) }}"
+      }
+    },
+    {
+      "id": "5c5d306a-11ac-592e-aa7a-292bc033442e",
+      "name": "Every day at 9",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        4070
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "notes": "In the workflow's time zone (Workflow settings > Timezone)."
+    },
+    {
+      "id": "1c4f05aa-0894-5959-8af8-49d96e688fa8",
+      "name": "Remind settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        4070
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "30b9daf2-e319-51b4-b6b6-e8bb11f4ae79",
+              "name": "remind_after_hours",
+              "value": 24,
+              "type": "number"
+            },
+            {
+              "id": "0e6ac196-f95f-556d-9313-11bcdff415f1",
+              "name": "expire_after_days",
+              "value": 7,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4c3f7d2c-3044-5097-a8c1-84647e655db3",
+      "name": "Get open rows to check",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        4070
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "snoozed"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "processing"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "85611f29-85e6-5136-a1ea-b98e53a41c6a",
+      "name": "Pick the due rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        4070
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One nudge, then expiry; snoozed alerts wake up; a row stuck in processing for an hour goes back to pending.\nconst s = $('Remind settings').first().json;\nconst now = Date.now(), hour = 3600e3;\nconst out = [];\nfor (const { json: r } of $input.all()) {\n  const age = (now - new Date(r.requested_at).getTime()) / hour;\n  let todo = null;\n  if (r.status === 'snoozed') { if (r.snooze_until && new Date(r.snooze_until).getTime() <= now) todo = 'wake'; }\n  else if (age >= 24 * s.expire_after_days) todo = 'expire';\n  else if (r.status === 'processing') { if ((now - new Date(r.updatedAt).getTime()) / hour >= 1) todo = 'unstick'; }\n  else if (age >= s.remind_after_hours && !r.reminded_at) todo = 'remind';\n  if (todo && r.ts) out.push({ json: { ...r, todo, age_hours: Math.round(age) } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "96d56842-8b7a-5add-9df2-f224c37da8b8",
+      "name": "What is due",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        880,
+        4070
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Remind",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2952aece-9eca-5a19-8776-1e3ba6070e2e",
+                    "leftValue": "={{ $json.todo === 'remind' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Expire",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fd341c3d-e530-5941-ad0e-202ef8efc813",
+                    "leftValue": "={{ $json.todo === 'expire' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Wake",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "05eda715-b288-5365-a7cc-3e348d74b6c8",
+                    "leftValue": "={{ $json.todo === 'wake' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "Unstick",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "91910dda-2b9f-5b6f-81d4-b3655934af8b",
+                    "leftValue": "={{ $json.todo === 'unstick' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b212d45c-8e8e-5a21-b253-58098c4faf8d",
+      "name": "Nudge in the thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        3910
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Pick the due rows').item.json.channel, thread_ts: $('Pick the due rows').item.json.ts, text: ':bell: Still waiting for a decision. Asked ' + $('Pick the due rows').item.json.age_hours + ' hours ago.' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "21d18e72-dc5d-5529-83cd-8afa74a96c59",
+      "name": "Mark reminded",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        3910
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick the due rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reminded_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "reminded_at",
+              "displayName": "reminded_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5254eb34-88e5-5549-b60e-cf2a5f86b886",
+      "name": "Mark expired",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        4070
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick the due rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "expired",
+            "decided_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "609ce1f4-fe6b-597e-a998-665997788f11",
+      "name": "Show expired on the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        4070
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (r => JSON.stringify({ channel: r.channel, ts: r.ts, text: 'Expired: ' + r.item_label, blocks: ((card, word, note, saved) => { const b = JSON.parse(card || '[]').filter(x => x.type !== 'actions' && x.block_id !== 'approval_hint'); if (b[0] && b[0].type === 'header') b[0] = { type: 'header', text: { type: 'plain_text', text: (b[0].text.text.replace(/ to review$/, '') + ': ' + word).slice(0, 150) } }; if (saved) b.push({ type: 'section', text: { type: 'mrkdwn', text: ('*Saved as*\\n' + saved).slice(0, 3000) } }); b.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }); return b; })(r.card, 'Expired', ':hourglass: Expired after ' + $('Remind settings').first().json.expire_after_days + ' days with no decision. Nothing was applied.') }))($('Pick the due rows').item.json) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "3f47306b-86ef-5b7c-af48-3f25c65bb578",
+      "name": "Wake it up",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        4230
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick the due rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "pending",
+            "snooze_until": "={{ null }}",
+            "decided_by": "",
+            "decided_at": "={{ null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "snooze_until",
+              "displayName": "snooze_until",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "37e4735f-f92a-5291-b016-6ee1e88b7ea5",
+      "name": "Put the buttons back",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        4230
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Pick the due rows').item.json.channel, ts: $('Pick the due rows').item.json.ts, text: 'Back from snooze: ' + $('Pick the due rows').item.json.item_label, blocks: JSON.parse($('Pick the due rows').item.json.card) }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "a9acba2e-d727-5186-a647-1e0d6ed68264",
+      "name": "Say it is back",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        4230
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Pick the due rows').item.json.channel, thread_ts: $('Pick the due rows').item.json.ts, reply_broadcast: true, text: ':alarm_clock: Snooze is over. This one still needs a decision.' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "e2da6a83-88f2-54a6-a1df-23d2e1cb1092",
+      "name": "Back to pending after a stall",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        4390
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick the due rows').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "pending"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7831d5c2-a5aa-5000-b039-fb0b7e64c686",
+      "name": "Close approval",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        4760
+      ],
+      "parameters": {},
+      "notes": "From Which lane? (lane close): item_id, new_value, source, and optionally kind. Any workflow that sees an item change can call it."
+    },
+    {
+      "id": "0ba19e48-d792-5c2d-8987-98c96729400f",
+      "name": "Shopify product updated",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        4980
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shopify-product-updated",
+        "responseMode": "onReceived",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "notes": "Setup subscribes this URL to products/update."
+    },
+    {
+      "id": "532b394f-ba16-58b8-89ed-ebdc619dadf8",
+      "name": "Read the Shopify webhook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        4980
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Raw body first (Shopify signs the exact bytes), then one change per thing a card can be about.\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nlet p = {};\ntry { p = JSON.parse(raw); } catch (e) {}\nconst changes = [{ item_id: p.admin_graphql_api_id, kind: 'product_title', new_value: p.title, source: 'Shopify' },\n  ...(p.variants || []).map(v => ({ item_id: v.admin_graphql_api_id, kind: 'price_alert', new_value: v.price, source: 'Shopify' }))];\nreturn [{ json: { raw, expected: h['x-shopify-hmac-sha256'] || '', changes: changes.filter(c => c.item_id) } }];"
+      }
+    },
+    {
+      "id": "4d97672d-2dad-5349-879b-f571ab6ad76a",
+      "name": "Check Shopify's signature",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        440,
+        4980
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.raw }}",
+        "dataPropertyName": "sig",
+        "encoding": "base64"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Shopify webhook secret"
+        }
+      },
+      "notes": "Crypto credential: Hmac Secret = your Shopify app's client secret."
+    },
+    {
+      "id": "445eb8e1-3e4e-5e91-bd23-ff8426947fbb",
+      "name": "From Shopify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        4980
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "faaa0c89-7cd9-53f0-a091-e05a665b5ed3",
+              "leftValue": "={{ $json.sig === $json.expected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "365235eb-de5e-5812-bdae-baeb93f7752e",
+      "name": "One item per change",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        880,
+        4980
+      ],
+      "parameters": {
+        "fieldToSplitOut": "changes",
+        "options": {}
+      }
+    },
+    {
+      "id": "7ee1dcbb-7548-5e02-a5ad-e201752b534d",
+      "name": "Sync settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        4760
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "41d91c1d-aaa9-5a41-a2a3-edb24ba249b8",
+              "name": "statuses_to_close",
+              "value": "={{ ['pending', 'processing', 'snoozed'] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "Rows in these states get closed when the source changes."
+    },
+    {
+      "id": "d526bd20-3a86-5b26-a4c0-7b1b9516833c",
+      "name": "Find open rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        4760
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "item_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.item_id }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": false
+    },
+    {
+      "id": "6af0e51b-ee8c-5b70-8315-216d07cf120d",
+      "name": "Pick the stale ones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        4760
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Keeps open rows whose current value no longer matches the source.\n// A change that matches what was proposed or approved is this workflow's own write landing, so it's skipped.\nconst changes = $('Sync settings').all().map(i => i.json);\nconst open = $('Sync settings').first().json.statuses_to_close;\nconst same = (a, b) => (isFinite(a) && isFinite(b) && a !== '' && b !== '') ? Number(a) === Number(b) : String(a) === String(b);\nconst out = [], seen = new Set();\nfor (const { json: r } of $input.all()) {\n  const c = changes.find(c => c.item_id === r.item_id && (!c.kind || c.kind === r.kind));\n  if (!c || !open.includes(r.status) || seen.has(r.id)) continue;\n  if ([r.current_value, r.proposed_value, r.final_value].some(v => v != null && v !== '' && same(v, c.new_value))) continue;\n  seen.add(r.id);\n  out.push({ json: { ...r, new_value: String(c.new_value ?? ''), source: c.source || 'the source' } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "a34bf672-8077-521e-842c-82c76fcc7a4b",
+      "name": "Mark superseded",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        4760
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "superseded",
+            "final_value": "={{ $json.new_value }}",
+            "decided_by": "={{ $json.source }}",
+            "decided_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "final_value",
+              "displayName": "final_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9dfb038d-0a96-58ff-9df7-ae7295396754",
+      "name": "Show it changed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        4760
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (r => JSON.stringify({ channel: r.channel, ts: r.ts, text: 'Already changed: ' + r.item_label, blocks: ((card, word, note, saved) => { const b = JSON.parse(card || '[]').filter(x => x.type !== 'actions' && x.block_id !== 'approval_hint'); if (b[0] && b[0].type === 'header') b[0] = { type: 'header', text: { type: 'plain_text', text: (b[0].text.text.replace(/ to review$/, '') + ': ' + word).slice(0, 150) } }; if (saved) b.push({ type: 'section', text: { type: 'mrkdwn', text: ('*Saved as*\\n' + saved).slice(0, 3000) } }); b.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }); return b; })(r.card, 'Already changed', ':information_source: Already changed in ' + r.source + ': ' + r.new_value + '. Nothing to do.') }))($('Pick the stale ones').item.json) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Setup settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup settings": {
+      "main": [
+        [
+          {
+            "node": "Create approvals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create approvals": {
+      "main": [
+        [
+          {
+            "node": "Using the Shopify demo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Using the Shopify demo?": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Setup": {
+      "main": [
+        [
+          {
+            "node": "Subscribe to product updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Called by a workflow": {
+      "main": [
+        [
+          {
+            "node": "Which lane?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which lane?": {
+      "main": [
+        [
+          {
+            "node": "Apply the change",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Close approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a test card": {
+      "main": [
+        [
+          {
+            "node": "Test cards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test cards": {
+      "main": [
+        [
+          {
+            "node": "Ask settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask settings": {
+      "main": [
+        [
+          {
+            "node": "Kinds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kinds": {
+      "main": [
+        [
+          {
+            "node": "Loop over requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop over requests": {
+      "main": [
+        [
+          {
+            "node": "Return the result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get open rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get open rows": {
+      "main": [
+        [
+          {
+            "node": "Already waiting?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already waiting?": {
+      "main": [
+        [
+          {
+            "node": "Skip it",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save the row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip it": {
+      "main": [
+        [
+          {
+            "node": "Loop over requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the row": {
+      "main": [
+        [
+          {
+            "node": "Build the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the card": {
+      "main": [
+        [
+          {
+            "node": "Post the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the card": {
+      "main": [
+        [
+          {
+            "node": "Posted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Posted?": {
+      "main": [
+        [
+          {
+            "node": "Save channel and ts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save channel and ts": {
+      "main": [
+        [
+          {
+            "node": "Loop over requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark failed": {
+      "main": [
+        [
+          {
+            "node": "Loop over requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision for Apply": {
+      "main": [
+        [
+          {
+            "node": "Send to Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Read the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the click": {
+      "main": [
+        [
+          {
+            "node": "Click settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Click settings": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not from Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Get pending row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer, not allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer, not allowed": {
+      "main": [
+        [
+          {
+            "node": "Say not allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get pending row": {
+      "main": [
+        [
+          {
+            "node": "Check the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the click": {
+      "main": [
+        [
+          {
+            "node": "Answer Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Slack": {
+      "main": [
+        [
+          {
+            "node": "Anything to do?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to do?": {
+      "main": [
+        [
+          {
+            "node": "Route the click",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing to do",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route the click": {
+      "main": [
+        [
+          {
+            "node": "Open the edit modal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Open the reject modal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sign a page link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign a page link": {
+      "main": [
+        [
+          {
+            "node": "Reply with the link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark processing": {
+      "main": [
+        [
+          {
+            "node": "Decision for Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Change found in Shopify": {
+      "main": [
+        [
+          {
+            "node": "Close it as changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply the change": {
+      "main": [
+        [
+          {
+            "node": "Apply settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply settings": {
+      "main": [
+        [
+          {
+            "node": "Get the row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the row": {
+      "main": [
+        [
+          {
+            "node": "Plan the decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan the decision": {
+      "main": [
+        [
+          {
+            "node": "Where it applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Where it applies": {
+      "main": [
+        [
+          {
+            "node": "Your apply payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark decided",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Your apply payload": {
+      "main": [
+        [
+          {
+            "node": "Run your apply workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run your apply workflow": {
+      "main": [
+        [
+          {
+            "node": "Your workflow said OK?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Describe the error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Your workflow said OK?": {
+      "main": [
+        [
+          {
+            "node": "Mark decided",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Describe the error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Read the live value",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the live value": {
+      "main": [
+        [
+          {
+            "node": "Unchanged in Shopify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unchanged in Shopify?": {
+      "main": [
+        [
+          {
+            "node": "Write to Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Change found in Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Shopify": {
+      "main": [
+        [
+          {
+            "node": "Saved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Saved?": {
+      "main": [
+        [
+          {
+            "node": "Mark decided",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Describe the error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark decided": {
+      "main": [
+        [
+          {
+            "node": "Close the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Describe the error": {
+      "main": [
+        [
+          {
+            "node": "Back to pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back to pending": {
+      "main": [
+        [
+          {
+            "node": "Reply with the error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision from the page": {
+      "main": [
+        [
+          {
+            "node": "Apply from the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review page": {
+      "main": [
+        [
+          {
+            "node": "Page settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page settings": {
+      "main": [
+        [
+          {
+            "node": "Check the link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the link": {
+      "main": [
+        [
+          {
+            "node": "Link valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link valid?": {
+      "main": [
+        [
+          {
+            "node": "Get pending rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Link expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get pending rows": {
+      "main": [
+        [
+          {
+            "node": "Build the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the page": {
+      "main": [
+        [
+          {
+            "node": "Send the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page decision": {
+      "main": [
+        [
+          {
+            "node": "Check the page signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the page signature": {
+      "main": [
+        [
+          {
+            "node": "Signed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signed?": {
+      "main": [
+        [
+          {
+            "node": "Get pending row for the page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refuse the decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get pending row for the page": {
+      "main": [
+        [
+          {
+            "node": "Still pending?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still pending?": {
+      "main": [
+        [
+          {
+            "node": "Mark processing from the page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Already decided",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark processing from the page": {
+      "main": [
+        [
+          {
+            "node": "Decision from the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply from the page": {
+      "main": [
+        [
+          {
+            "node": "Read the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the outcome": {
+      "main": [
+        [
+          {
+            "node": "Send the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day at 9": {
+      "main": [
+        [
+          {
+            "node": "Remind settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remind settings": {
+      "main": [
+        [
+          {
+            "node": "Get open rows to check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get open rows to check": {
+      "main": [
+        [
+          {
+            "node": "Pick the due rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick the due rows": {
+      "main": [
+        [
+          {
+            "node": "What is due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What is due": {
+      "main": [
+        [
+          {
+            "node": "Nudge in the thread",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark expired",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wake it up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Back to pending after a stall",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nudge in the thread": {
+      "main": [
+        [
+          {
+            "node": "Mark reminded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark expired": {
+      "main": [
+        [
+          {
+            "node": "Show expired on the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wake it up": {
+      "main": [
+        [
+          {
+            "node": "Put the buttons back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Put the buttons back": {
+      "main": [
+        [
+          {
+            "node": "Say it is back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close approval": {
+      "main": [
+        [
+          {
+            "node": "Sync settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shopify product updated": {
+      "main": [
+        [
+          {
+            "node": "Read the Shopify webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the Shopify webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Shopify's signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Shopify's signature": {
+      "main": [
+        [
+          {
+            "node": "From Shopify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Shopify?": {
+      "main": [
+        [
+          {
+            "node": "One item per change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per change": {
+      "main": [
+        [
+          {
+            "node": "Sync settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync settings": {
+      "main": [
+        [
+          {
+            "node": "Find open rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find open rows": {
+      "main": [
+        [
+          {
+            "node": "Pick the stale ones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick the stale ones": {
+      "main": [
+        [
+          {
+            "node": "Mark superseded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark superseded": {
+      "main": [
+        [
+          {
+            "node": "Show it changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}
