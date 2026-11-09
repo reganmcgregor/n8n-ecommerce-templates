@@ -16,6 +16,7 @@ Free n8n templates for running an online store: monitoring competitor prices, ad
 | [Ecommerce internal linking](ecommerce-internal-linking/) | Fills breadcrumb, sub-collection, brand, spec and related-collection link fields from your menu and collection rules every day, with Liquid snippets to show them on a stock theme, and runs a weekly orphan and broken-link audit. No AI model needed. |
 | [Automated inventory management](automated-inventory-management/) | Syncs supplier CSV stock and unit cost into a Shopify location of its own every 3 hours, holds broken feeds, and proposes discontinued products for archive and redirect in Slack. No AI model needed. |
 | [Slack approvals](slack-approval-workflow-n8n/) | Human-in-the-loop review for any n8n workflow: Block Kit cards in Slack to approve, edit in a modal or reject with a reason, actionable alerts with Snooze, signed review pages for long lists, and cards that close themselves when the change happens somewhere else first. No AI model needed. |
+| [n8n workflow monitoring](n8n-workflow-monitoring/) | Watches every workflow on your n8n instance: one Slack alert per outage instead of one per failure, schedules that stopped firing, runs that finished with nothing in them, a line when each recovers, and a morning all-clear. Reads the n8n API with a read-only key. No AI model needed. |
 
 ## Getting started
 

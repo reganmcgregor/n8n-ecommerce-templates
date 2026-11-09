@@ -1,0 +1,1644 @@
+{
+  "name": "n8n workflow monitoring (Supabase template)",
+  "nodes": [
+    {
+      "id": "46dc10e6-f24c-5ef4-9e6b-6f03bda2d79d",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        -200
+      ],
+      "parameters": {
+        "content": "## n8n workflow monitoring\nCatches the four ways an automation goes quiet: it **errors**, it **never starts**, it **runs but does nothing**, or the monitor itself stops. One alert per outage, a line when it's fixed, and a morning all-clear so silence looks wrong.\n\n### How it works\n1. **Setup** creates three data tables.\n2. **Catch** is the error workflow. Every workflow that names this one under *Settings > Error workflow* reports its failures here: saved, then one Slack alert per workflow per cooldown (email if Slack fails and the fallback is on).\n3. **Log a run** (optional): call it at the end of a workflow with an item count, so empty runs can alert.\n4. **Watch** (every 15 min) reads every published workflow with a Schedule Trigger through the n8n API, works out how often it should run, and flags **stalled**, **failing** and **empty** workflows, then **recovered** ones.\n5. **Digest** (daily 08:00) posts the all-clear, or what's wrong, plus workflows with no error workflow set. Optional heartbeat ping.\n6. **Demo** fails on purpose so you can see an alert.\n\n### Setup\n1. Credentials: **n8n API** (Settings > n8n API, a *Read only* key), **Slack API** (bot token with `chat:write`). Optional email fallback: enable the three **Email** nodes and add an **SMTP** credential.\n2. Fill in each lane's **settings** node (channel, email, `n8n_url`).\n3. Run **Setup**, then publish this workflow.\n4. In every workflow you want watched: *Settings > Error workflow >* this workflow.\n5. Test: enable **Every 5 minutes (demo)** for 10 minutes, then disable it again.\n\n### Customisation\nTune a workflow in the `monitor_watch` table: `override_gap_minutes`, `min_items` with `empty_runs_before_alert`, or `enabled = false`. Tag a workflow `no-monitor` to skip it. Swap the Slack nodes for Teams, Telegram or email.",
+        "width": 900,
+        "height": 700,
+        "color": 1
+      }
+    },
+    {
+      "id": "a7308667-255a-5ca8-88b6-6fcd7ae8f31c",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -200
+      ],
+      "parameters": {
+        "content": "## 1. Setup (run once)\nCreates `monitor_failures`, `monitor_runs` and `monitor_watch`. Re-running keeps existing tables.",
+        "width": 520,
+        "height": 330,
+        "color": 7
+      }
+    },
+    {
+      "id": "076151be-7d3d-5d5d-a651-3c36288c2381",
+      "name": "Lane Catch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        190
+      ],
+      "parameters": {
+        "content": "## 2. Catch: the error workflow\nn8n runs this when a workflow that names this one as its error workflow fails. The failure is saved first, then one alert per workflow per `cooldown_minutes`. Repeats are saved for Watch and the digest.",
+        "width": 2040,
+        "height": 690,
+        "color": 7
+      }
+    },
+    {
+      "id": "4af4db3b-b0f5-511b-8718-9889ad962e61",
+      "name": "Lane Log",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        940
+      ],
+      "parameters": {
+        "content": "## 3. Log a run (optional)\nCall from the end of any workflow with Execute Workflow: `workflow_id`, `workflow_name`, `items`, `note`. Lets Watch spot runs that succeed with nothing in them.",
+        "width": 520,
+        "height": 330,
+        "color": 7
+      }
+    },
+    {
+      "id": "ca1f94e4-a9e4-516d-8e70-b98b42c375ce",
+      "name": "Lane Watch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1330
+      ],
+      "parameters": {
+        "content": "## 4. Watch (every 15 minutes)\nReads published workflows and their recent executions from the n8n API. Flags stalled (no run within the expected gap), failing (a burst of errors) and empty runs, once per cooldown, then says when each recovers.",
+        "width": 2720,
+        "height": 510,
+        "color": 7
+      }
+    },
+    {
+      "id": "65756853-bcf4-5d51-ab96-c984611d4c9c",
+      "name": "Lane Digest",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1900
+      ],
+      "parameters": {
+        "content": "## 5. Digest (daily 08:00)\nOne post every morning, even when all is well: a monitor that only speaks on failure looks the same as one that's broken. Lists what isn't covered, pings an optional heartbeat, trims old rows.",
+        "width": 2700,
+        "height": 610,
+        "color": 7
+      }
+    },
+    {
+      "id": "fcaf6b4f-7d86-574c-8bd8-6bed53c1e734",
+      "name": "Lane Demo",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2570
+      ],
+      "parameters": {
+        "content": "## 6. Demo\nFails on purpose. The Error Trigger only fires for automatic runs, so enable the 5-minute schedule for a few runs to see Catch work, then disable it.",
+        "width": 520,
+        "height": 510,
+        "color": 7
+      }
+    },
+    {
+      "id": "5656c52b-8ae1-54d2-994a-a538e35f5d2f",
+      "name": "Risk Demo",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        440,
+        2690
+      ],
+      "parameters": {
+        "content": "### Turn this off again\nWhile enabled, the demo fails every 5 minutes: 288 failed executions a day.",
+        "width": 360,
+        "height": 150,
+        "color": 3
+      }
+    },
+    {
+      "id": "27e74a55-8f51-5a6f-85d1-6c7d02af7bc9",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -40
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "28ea3542-2978-50ef-be96-b7aa29105392",
+      "name": "Create the tables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "create table if not exists monitor_failures (\n  id integer generated by default as identity primary key,\n  workflow_id text,\n  workflow_name text,\n  execution_id text,\n  execution_url text,\n  node_name text,\n  error_message text,\n  mode text,\n  failed_at timestamptz,\n  alerted boolean,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);\ncreate index if not exists monitor_failures_0 on monitor_failures (workflow_id, failed_at);\ncreate index if not exists monitor_failures_1 on monitor_failures (failed_at);\ncreate table if not exists monitor_runs (\n  id integer generated by default as identity primary key,\n  workflow_id text,\n  workflow_name text,\n  items integer,\n  note text,\n  ran_at timestamptz,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);\ncreate index if not exists monitor_runs_0 on monitor_runs (workflow_id, ran_at);\ncreate table if not exists monitor_watch (\n  id integer generated by default as identity primary key,\n  workflow_id text unique not null,\n  workflow_name text,\n  schedule text,\n  max_gap_minutes integer,\n  override_gap_minutes integer,\n  min_items integer,\n  empty_runs_before_alert integer,\n  enabled boolean,\n  alerting boolean,\n  alert_kind text,\n  last_alert_at timestamptz,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Runs supabase/schema.sql: three tables, if they are not there yet."
+    },
+    {
+      "id": "609f437d-3def-5d3c-ae89-d04b88819e0a",
+      "name": "When a workflow fails",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        470
+      ],
+      "parameters": {},
+      "notes": "Fires for automatic runs of any workflow whose Settings > Error workflow is this one. This workflow is its own error workflow too."
+    },
+    {
+      "id": "4b42a156-0a01-525f-9660-ac63379a342e",
+      "name": "Catch settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        470
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c44bc150-6b8e-5ac4-9272-015e2c62c0ac",
+              "name": "slack_channel",
+              "value": "#n8n-alerts",
+              "type": "string"
+            },
+            {
+              "id": "c386469e-9f37-50e6-9a6f-6bd97792dacf",
+              "name": "alert_email",
+              "value": "you@example.com",
+              "type": "string"
+            },
+            {
+              "id": "9a5740cc-4b65-5081-8d6e-f0ce16863b21",
+              "name": "from_email",
+              "value": "n8n@example.com",
+              "type": "string"
+            },
+            {
+              "id": "1f87ea0e-7f1f-52ab-8781-3e974d7a2ac3",
+              "name": "cooldown_minutes",
+              "value": 120,
+              "type": "number"
+            },
+            {
+              "id": "efcff532-36e3-5662-a464-7e24a7dbfb5b",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "slack_channel: a name such as #n8n-alerts or a channel ID. alert_email gets the alert only if Slack fails."
+    },
+    {
+      "id": "b0e8ba80-1fab-5dec-bc81-05dce541aeb1",
+      "name": "Read the failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        470
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Two payload shapes: a failed execution (execution.*) and a trigger that couldn't start (trigger.*, no execution id).\nconst j = $input.first().json;\nconst ex = j.execution || {};\nconst tr = j.trigger || {};\nconst wf = j.workflow || {};\nconst err = ex.error || tr.error || {};\nlet message = String(err.message || 'Unknown error').trim();\nif (err.description && !message.includes(err.description)) message += ' ' + String(err.description).trim();\nreturn [{ json: {\n  workflow_id: String(wf.id || ''),\n  workflow_name: wf.name || 'Unknown workflow',\n  execution_id: ex.id ? String(ex.id) : '',\n  execution_url: ex.url || '',\n  node_name: ex.lastNodeExecuted || (err.node && err.node.name) || (tr.error && tr.error.node && tr.error.node.name) || '',\n  error_message: message.replace(/\\s+/g, ' ').slice(0, 2000),\n  mode: ex.id ? (ex.mode || 'trigger') : 'activation',\n  failed_at: $now.toISO(),\n} }];"
+      },
+      "notes": "Why Code: two payload shapes and a tidy message would take four or five Set and If nodes."
+    },
+    {
+      "id": "2201217a-1b15-5830-bf01-ddb372324225",
+      "name": "Save the failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        470
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into monitor_failures (workflow_id, workflow_name, execution_id, execution_url, node_name, error_message, mode, failed_at, alerted) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.workflow_id)) ?? null, (($json.workflow_name)) ?? null, (($json.execution_id)) ?? null, (($json.execution_url)) ?? null, (($json.node_name)) ?? null, (($json.error_message)) ?? null, (($json.mode)) ?? null, (($json.failed_at)) ?? null, ((false)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Saved before anything else, so a failed alert still leaves a record."
+    },
+    {
+      "id": "785f569a-5401-5e3a-bd86-d42961c20d9e",
+      "name": "Alerted recently?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        470
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from monitor_failures where workflow_id = $1 and alerted = $2 and failed_at > $3 order by id",
+        "options": {
+          "queryReplacement": "={{ [ (($('Read the failure').first().json.workflow_id)) ?? null, ((true)) ?? null, (($now.minus({ minutes: $('Catch settings').first().json.cooldown_minutes }).toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "notes": "Any alert for this workflow inside the cooldown?"
+    },
+    {
+      "id": "e89e3e62-d907-5891-a94b-dfaa39fe22dd",
+      "name": "In cooldown?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        470
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "579bc7e8-b1b4-5fca-bdfa-83b44daa0a57",
+              "leftValue": "={{ $input.all().some(i => i.json.id) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Yes: stay quiet. The row is saved, and Watch reports a burst."
+    },
+    {
+      "id": "27eb4a76-40aa-58e8-82e2-4bb2d672dbbb",
+      "name": "Saved, no alert",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        350
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "86bfeb99-abee-52bd-9792-21b63ca3ea92",
+      "name": "Post the alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1320,
+        530
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Catch settings').first().json.slack_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ ({ blocks: [{ type: 'header', text: { type: 'plain_text', emoji: true, text: String('🔴 ' + $('Read the failure').first().json.workflow_name + ' failed').slice(0, 150) } }, { type: 'section', text: { type: 'mrkdwn', text: String((f => (f.node_name ? 'Stopped at *' + f.node_name + '*\\n' : '') + '```' + f.error_message.slice(0, 600).replace(/```/g, \"'''\").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '```' + (f.mode === 'activation' ? '\\nThe trigger failed, so the workflow never started.' : '') + (f.execution_url ? '\\n<' + f.execution_url + '|Open the execution>' : ''))($('Read the failure').first().json)).slice(0, 2900) } }, { type: 'context', elements: [{ type: 'mrkdwn', text: 'n8n workflow monitor · ' + $now.setZone($('Catch settings').first().json.timezone).toFormat('d LLL, h:mm a') }] }] }) }}",
+        "text": "={{ String('🔴 ' + $('Read the failure').first().json.workflow_name + ' failed').slice(0, 150) }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3 times. If Slack still fails (Slack is the outage, a wrong channel, a revoked token), the error output sends the same text by email."
+    },
+    {
+      "id": "0f0d48c0-e213-5e6b-8380-ceceaacfe429",
+      "name": "Email the alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        710
+      ],
+      "parameters": {
+        "fromEmail": "={{ $('Catch settings').first().json.from_email }}",
+        "toEmail": "={{ $('Catch settings').first().json.alert_email }}",
+        "subject": "={{ String('🔴 ' + $('Read the failure').first().json.workflow_name + ' failed').slice(0, 150) }}",
+        "emailFormat": "text",
+        "text": "={{ String((f => (f.node_name ? 'Stopped at *' + f.node_name + '*\\n' : '') + '```' + f.error_message.slice(0, 600).replace(/```/g, \"'''\").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '```' + (f.mode === 'activation' ? '\\nThe trigger failed, so the workflow never started.' : '') + (f.execution_url ? '\\n<' + f.execution_url + '|Open the execution>' : ''))($('Read the failure').first().json)).replace(/<([^|>]+)\\|([^>]+)>/g, '$2: $1').replace(/[*_]/g, '') }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "name": "SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "disabled": true,
+      "notes": "Optional fallback, off by default: enable it and add an SMTP credential. Runs only when the Slack post failed. If it fails too, the execution goes red."
+    },
+    {
+      "id": "85562c80-da34-5b0f-bee0-6bbe60f648ab",
+      "name": "Mark alerted",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        530
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update monitor_failures set alerted = $1, \"updatedAt\" = now() where id = $2 returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((!$json.error)) ?? null, (($('Save the failure').first().json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "alerted = true once Slack or the email took it. With the email fallback off, a failed Slack post leaves it false."
+    },
+    {
+      "id": "236fa68c-25ce-5efe-8443-4430ada5b9c9",
+      "name": "Log a run",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        1100
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "workflow_id",
+              "type": "string"
+            },
+            {
+              "name": "workflow_name",
+              "type": "string"
+            },
+            {
+              "name": "items",
+              "type": "number"
+            },
+            {
+              "name": "note",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "notes": "The only Execute Workflow Trigger on this canvas. Callers: Execute Workflow, this workflow by ID, Wait for sub-workflow completion off."
+    },
+    {
+      "id": "2091c42d-650a-5bb5-b3e7-fcd5f4089b6a",
+      "name": "Save the run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        1100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into monitor_runs (workflow_id, workflow_name, items, note, ran_at) values ($1, $2, $3, $4, $5) returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((String($json.workflow_id || \"\"))) ?? null, (($json.workflow_name)) ?? null, ((Number($json.items) || 0)) ?? null, (($json.note || \"\")) ?? null, (($now.toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "4b1042c8-a349-5186-87ee-54b2e412f212",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1490
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "notes": "On n8n Cloud, hourly keeps the execution count down (about 720 a month instead of 2,900)."
+    },
+    {
+      "id": "bb24c391-4def-5fd9-896a-8cee618a2c54",
+      "name": "Watch settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1490
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ecdae149-6f53-5fde-bf1e-72f013fc8c44",
+              "name": "slack_channel",
+              "value": "#n8n-alerts",
+              "type": "string"
+            },
+            {
+              "id": "d74fba6e-62b0-5d93-8503-54d338e98cf3",
+              "name": "alert_email",
+              "value": "you@example.com",
+              "type": "string"
+            },
+            {
+              "id": "cb3ddc01-3ea2-573b-b3f1-c938e2ba87fd",
+              "name": "from_email",
+              "value": "n8n@example.com",
+              "type": "string"
+            },
+            {
+              "id": "d9a5b216-0714-53fb-a5ee-e890c1bd8532",
+              "name": "n8n_url",
+              "value": "https://your-n8n.example.com",
+              "type": "string"
+            },
+            {
+              "id": "fdf03a8c-98d4-57dd-96d1-e63bfa090d04",
+              "name": "only_tag",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "01c19a65-61b8-5762-81ae-6e7a388faefd",
+              "name": "ignore_tag",
+              "value": "no-monitor",
+              "type": "string"
+            },
+            {
+              "id": "9e360a54-69f3-5ca6-a2d9-8347b4771f3b",
+              "name": "grace_ratio",
+              "value": 0.5,
+              "type": "number"
+            },
+            {
+              "id": "6a03895a-d924-5baf-8af6-9e81af279a47",
+              "name": "grace_min_minutes",
+              "value": 30,
+              "type": "number"
+            },
+            {
+              "id": "1a70f4db-e56b-58dd-93ae-14d2c4a73f08",
+              "name": "failing_threshold",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "0074b084-6dcd-56ae-a84f-3e5cfb621f76",
+              "name": "cooldown_minutes",
+              "value": 120,
+              "type": "number"
+            },
+            {
+              "id": "e762b799-9f65-5ce0-ae4d-c02507979aa0",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "only_tag: watch only workflows with this tag (blank = all). grace: a workflow is stalled after its expected gap plus the larger of grace_min_minutes or gap x grace_ratio."
+    },
+    {
+      "id": "b6bb2440-ab1d-5319-9cb5-d906699f7719",
+      "name": "Get published workflows",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        440,
+        1490
+      ],
+      "parameters": {
+        "resource": "workflow",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "activeWorkflows": true,
+          "tags": "={{ $json.only_tag }}",
+          "excludePinnedData": true
+        }
+      },
+      "credentials": {
+        "n8nApi": {
+          "name": "n8n API"
+        }
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "8064742f-5a2c-5721-b51f-99c7e475dbf2",
+      "name": "Get watch rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1490
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from monitor_watch order by id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "notes": "Your overrides and each workflow's alert state."
+    },
+    {
+      "id": "f2ac3cc5-aec9-5848-b06f-267847e6b114",
+      "name": "Work out the schedules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1490
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Works out how often each published workflow should run, from its Schedule Trigger.\n// Why Code: no node parses a schedule rule or a cron expression.\nconst s = $('Watch settings').first().json;\nconst self = $workflow.id;\nconst rows = {};\nfor (const { json: r } of $('Get watch rows').all()) if (r && r.workflow_id) rows[String(r.workflow_id)] = r;\n\nconst DAY = 1440;\nconst fmt = m => m >= DAY ? (m % DAY ? Math.round(m / 60) + ' h' : (m / DAY) + (m === DAY ? ' day' : ' days')) : m >= 60 ? (m % 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : (m / 60) + ' h') : m + ' min';\n\nfunction expand(field, lo, hi, names = []) {\n  const set = new Set();\n  for (let part of String(field).toUpperCase().split(',')) {\n    names.forEach((n, i) => { part = part.replace(new RegExp('\\\\b' + n + '\\\\b', 'g'), String(i + lo)); });\n    let [range, step] = part.split('/');\n    step = step ? Number(step) : 1;\n    let a = lo, b = hi;\n    if (range !== '*' && range !== '?') {\n      const m = range.match(/^(\\d+)(?:-(\\d+))?$/);\n      if (!m) return null;\n      a = Number(m[1]); b = m[2] !== undefined ? Number(m[2]) : (step > 1 ? hi : a);\n    }\n    for (let v = a; v <= b; v += step) set.add(v);\n  }\n  return set;\n}\n\nfunction cronGap(expr) {\n  let f = String(expr || '').trim().split(/\\s+/);\n  if (f.length === 6) f = f.slice(1);              // n8n allows a seconds field first\n  if (f.length !== 5) return null;\n  const min = expand(f[0], 0, 59), hour = expand(f[1], 0, 23), dom = expand(f[2], 1, 31);\n  const mon = expand(f[3], 1, 12, ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC']);\n  const dow = expand(f[4].replace(/\\b7\\b/g, '0'), 0, 6, ['SUN','MON','TUE','WED','THU','FRI','SAT']);\n  if (!min || !hour || !dom || !mon || !dow) return null;\n  const domAny = f[2] === '*' || f[2] === '?', dowAny = f[4] === '*' || f[4] === '?';\n  const times = [];\n  const start = Date.UTC(2026, 0, 5);                // any Monday; 62 days covers monthly schedules\n  for (let d = 0; d < 62; d++) {\n    const day = new Date(start + d * 864e5);\n    if (!mon.has(day.getUTCMonth() + 1)) continue;\n    const okDom = dom.has(day.getUTCDate()), okDow = dow.has(day.getUTCDay());\n    if (!(domAny && dowAny ? true : domAny ? okDow : dowAny ? okDom : (okDom || okDow))) continue;\n    for (const h of [...hour].sort((a, b) => a - b)) for (const m of [...min].sort((a, b) => a - b)) times.push(d * DAY + h * 60 + m);\n  }\n  if (times.length < 2) return null;\n  let gap = 0;\n  for (let i = 1; i < times.length; i++) gap = Math.max(gap, times[i] - times[i - 1]);\n  return gap;\n}\n\nfunction ruleGap(iv) {\n  const field = iv.field || 'days';\n  if (field === 'cronExpression') return { gap: cronGap(iv.expression), text: 'cron ' + iv.expression };\n  if (field === 'seconds') return { gap: 1, text: 'every ' + (iv.secondsInterval || 30) + ' s' };\n  if (field === 'minutes') { const n = iv.minutesInterval || 5; return { gap: n, text: 'every ' + fmt(n) }; }\n  if (field === 'hours') { const n = (iv.hoursInterval || 1) * 60; return { gap: n, text: 'every ' + fmt(n) }; }\n  if (field === 'days') { const n = (iv.daysInterval || 1); return { gap: n * DAY, text: n === 1 ? 'daily' : 'every ' + n + ' days' }; }\n  if (field === 'weeks') {\n    const n = iv.weeksInterval || 1;\n    const days = [...new Set((iv.triggerAtDay && iv.triggerAtDay.length ? iv.triggerAtDay : [0]).map(Number))].sort((a, b) => a - b);\n    if (n > 1 || days.length === 1) return { gap: n * 7 * DAY, text: n > 1 ? 'every ' + n + ' weeks' : 'weekly' };\n    let gap = 0;\n    for (let i = 0; i < days.length; i++) gap = Math.max(gap, ((days[(i + 1) % days.length] - days[i] + 7) % 7 || 7) * DAY);\n    return { gap, text: days.length === 5 && days.join() === '1,2,3,4,5' ? 'weekdays' : days.length + ' days a week' };\n  }\n  if (field === 'months') { const n = iv.monthsInterval || 1; return { gap: n * 31 * DAY, text: n === 1 ? 'monthly' : 'every ' + n + ' months' }; }\n  return { gap: null, text: field };\n}\n\nconst out = [];\nfor (const { json: w } of $('Get published workflows').all()) {\n  if (!w || !w.id || w.id === self) continue;\n  const tags = (w.tags || []).map(t => t.name);\n  if (s.ignore_tag && tags.includes(s.ignore_tag)) continue;\n  const row = rows[String(w.id)] || {};\n  if (row.enabled === false) continue;\n  const override = Number(row.override_gap_minutes) > 0 ? Number(row.override_gap_minutes) : null;\n  const triggers = (w.nodes || []).filter(n => n.type === 'n8n-nodes-base.scheduleTrigger' && !n.disabled);\n  if (!triggers.length && !override) continue;      // webhook-only: Catch still sees its failures\n  let gap = null; const texts = [];\n  for (const t of triggers) for (const iv of ((t.parameters.rule || {}).interval || [{}])) {\n    const r = ruleGap(iv); texts.push(r.text);\n    if (r.gap) gap = gap === null ? r.gap : Math.min(gap, r.gap);\n  }\n  const inferred = gap ? Math.round(gap + Math.max(s.grace_min_minutes, gap * s.grace_ratio)) : null;\n  out.push({ json: {\n    workflow_id: String(w.id), workflow_name: w.name, schedule: texts.join(', ') || 'manual gap',\n    expected_minutes: override || gap, max_gap_minutes: inferred, limit_minutes: override || inferred,\n    saves_success: !(w.settings && w.settings.saveDataSuccessExecution === 'none'),\n    updated_at: w.updatedAt, row,\n  } });\n}\nreturn out;"
+      },
+      "notes": "One item per watched workflow, with its expected gap. Skips this workflow, webhook-only workflows and anything tagged ignore_tag."
+    },
+    {
+      "id": "2242cde4-7838-5cc0-a8c1-0e576dbcc385",
+      "name": "Get recent executions",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        1490
+      ],
+      "parameters": {
+        "resource": "execution",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 50,
+        "filters": {
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $json.workflow_id }}"
+          }
+        },
+        "options": {}
+      },
+      "credentials": {
+        "n8nApi": {
+          "name": "n8n API"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "The last 50 executions of each watched workflow, any status."
+    },
+    {
+      "id": "6dccec95-2748-56a5-9930-c2fdc8d22d7f",
+      "name": "Get recent runs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1320,
+        1490
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from monitor_runs where ran_at > $1 order by id",
+        "options": {
+          "queryReplacement": "={{ [ (($now.minus({ days: 7 }).toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "notes": "Logged runs from the last week, for the empty-run check."
+    },
+    {
+      "id": "4c2cc723-19e7-51d3-bf91-1a2a82af8332",
+      "name": "Judge each workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        1490
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Judges each workflow: stalled, failing, empty, or recovered. Outputs only rows whose state changed.\nconst s = $('Watch settings').first().json;\nconst now = Date.now();\nconst plan = $('Work out the schedules').all().map(i => i.json);\nconst execs = $('Get recent executions').all().map(i => i.json).filter(e => e && e.id && e.mode !== 'manual');\nconst runs = $('Get recent runs').all().map(i => i.json).filter(r => r && r.workflow_id);\nconst fmt = m => m >= 2880 ? Math.round(m / 1440) + ' days' : m >= 120 ? Math.round(m / 60) + ' h' : m >= 60 ? '1 h ' + (m - 60) + ' min' : m + ' min';\nconst link = id => s.n8n_url ? ' <' + s.n8n_url.replace(/\\/$/, '') + '/workflow/' + id + '/executions|Executions>' : '';\n\nconst out = [];\nfor (const p of plan) {\n  const row = p.row || {};\n  const mine = execs.filter(e => String(e.workflowId) === p.workflow_id);\n  const last = Math.max(0, ...mine.map(e => Date.parse(e.startedAt) || 0));\n  const since = last || Date.parse(p.updated_at) || now;            // never ran: count from when it was last saved\n  const idle = Math.floor((now - since) / 60000);\n  const fails = mine.filter(e => ['error', 'crashed'].includes(e.status) && Date.parse(e.startedAt) > now - 3600e3).length;\n  const minItems = Number(row.min_items) > 0 ? Number(row.min_items) : null;\n  const k = Number(row.empty_runs_before_alert) > 0 ? Number(row.empty_runs_before_alert) : 3;\n  const recent = runs.filter(r => String(r.workflow_id) === p.workflow_id || (!r.workflow_id && r.workflow_name === p.workflow_name))\n                     .sort((a, b) => Date.parse(b.ran_at) - Date.parse(a.ran_at)).slice(0, k);\n\n  let issue = '', line = '';\n  if (p.saves_success && p.limit_minutes && idle > p.limit_minutes) {\n    issue = 'stalled';\n    line = last ? `no run for ${fmt(idle)} (expected every ${fmt(p.expected_minutes)})` : `no run in the ${fmt(idle)} since it was last saved`;\n  } else if (fails >= s.failing_threshold) {\n    issue = 'failing'; line = `${fails} failed runs in the last hour`;\n  } else if (minItems && recent.length >= k && recent.every(r => Number(r.items) < minItems)) {\n    issue = 'empty'; line = (k === 1 ? 'the last run had ' : `the last ${k} runs all had `) + (minItems === 1 ? 'no items' : `fewer than ${minItems} items (latest: ${Number(recent[0].items)})`);\n  }\n\n  const was = row.alerting === true;\n  const cooled = !row.last_alert_at || now - Date.parse(row.last_alert_at) > s.cooldown_minutes * 60000;\n  let say = '';\n  if (issue && (!was || row.alert_kind !== issue || cooled)) say = issue;\n  else if (!issue && was) say = 'recovered';\n\n  const changed = !row.workflow_id || row.workflow_name !== p.workflow_name || row.schedule !== p.schedule\n    || (Number(row.max_gap_minutes) || null) !== p.max_gap_minutes || say;\n  if (!changed) continue;\n  out.push({ json: {\n    workflow_id: p.workflow_id, workflow_name: p.workflow_name, schedule: p.schedule, max_gap_minutes: p.max_gap_minutes,\n    alerting: !!issue, alert_kind: issue,\n    last_alert_at: say && say !== 'recovered' ? new Date(now).toISOString() : (row.last_alert_at || null),\n    say, line: issue ? line + link(p.workflow_id) : '',\n    repeat: !!(say && was && row.alert_kind === say),\n  } });\n}\nreturn out;"
+      },
+      "executeOnce": true,
+      "notes": "Stalled: no execution within the gap. Failing: failing_threshold errors in an hour. Empty: the last N logged runs under min_items. One alert per cooldown; recovered when it clears."
+    },
+    {
+      "id": "4b9c0ad6-c041-5774-b64d-679ea2aa1f9b",
+      "name": "Save the state",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        1490
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into monitor_watch (workflow_id, workflow_name, schedule, max_gap_minutes, alerting, alert_kind, last_alert_at) values ($1, $2, $3, $4, $5, $6, $7) on conflict (workflow_id) do update set workflow_name = excluded.workflow_name, schedule = excluded.schedule, max_gap_minutes = excluded.max_gap_minutes, alerting = excluded.alerting, alert_kind = excluded.alert_kind, last_alert_at = excluded.last_alert_at, \"updatedAt\" = now() returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.workflow_id)) ?? null, (($json.workflow_name)) ?? null, (($json.schedule)) ?? null, (($json.max_gap_minutes)) ?? null, (($json.alerting)) ?? null, (($json.alert_kind)) ?? null, (($json.last_alert_at)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Leaves your columns (override_gap_minutes, min_items, empty_runs_before_alert, enabled) alone."
+    },
+    {
+      "id": "8ec02e61-51cb-5890-95c0-5f0b036447ae",
+      "name": "Build the message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        1490
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One message for everything this run found. Nothing to say, no message.\nconst rows = $('Judge each workflow').all().map(i => i.json).filter(r => r.say);\nif (!rows.length) return [];\nconst icon = { stalled: '🔴', failing: '🟠', empty: '🟡', recovered: '✅' };\nconst order = ['stalled', 'failing', 'empty', 'recovered'];\nrows.sort((a, b) => order.indexOf(a.say) - order.indexOf(b.say));\nconst bad = rows.filter(r => r.say !== 'recovered');\nconst lines = rows.map(r => r.say === 'recovered'\n  ? `${icon.recovered} *${r.workflow_name}* recovered`\n  : `${icon[r.say]} *${r.workflow_name}* ${r.say}${r.repeat ? ' (still)' : ''}: ${r.line}`);\nreturn [{ json: {\n  title: bad.length ? `Workflow health: ${bad.length} issue${bad.length > 1 ? 's' : ''}` : 'Workflow health: recovered',\n  body: lines.join('\\n'),\n} }];"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "9d7e5069-02d8-5496-a31b-7b0b11141f52",
+      "name": "Post the health alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2200,
+        1490
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Watch settings').first().json.slack_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ ({ blocks: [{ type: 'header', text: { type: 'plain_text', emoji: true, text: String($json.title).slice(0, 150) } }, { type: 'section', text: { type: 'mrkdwn', text: String($json.body).slice(0, 2900) } }, { type: 'context', elements: [{ type: 'mrkdwn', text: 'n8n workflow monitor · ' + $now.setZone($('Watch settings').first().json.timezone).toFormat('d LLL, h:mm a') }] }] }) }}",
+        "text": "={{ String($json.title).slice(0, 150) }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3 times. If Slack still fails (Slack is the outage, a wrong channel, a revoked token), the error output sends the same text by email."
+    },
+    {
+      "id": "c89a2bac-c16f-59bf-833b-16905e6e5a06",
+      "name": "Email the health alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2440,
+        1670
+      ],
+      "parameters": {
+        "fromEmail": "={{ $('Watch settings').first().json.from_email }}",
+        "toEmail": "={{ $('Watch settings').first().json.alert_email }}",
+        "subject": "={{ String($json.title).slice(0, 150) }}",
+        "emailFormat": "text",
+        "text": "={{ String($json.body).replace(/<([^|>]+)\\|([^>]+)>/g, '$2: $1').replace(/[*_]/g, '') }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "name": "SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "disabled": true,
+      "notes": "Optional fallback, off by default: enable it and add an SMTP credential. Runs only when the Slack post failed. If it fails too, the execution goes red."
+    },
+    {
+      "id": "389bbed0-6aa9-5049-8505-6b4a0de6e465",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        2160
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "notes": "08:00 in the workflow timezone (Settings > Timezone)."
+    },
+    {
+      "id": "2037b7cf-4b6c-554b-b50c-407e762c2dee",
+      "name": "Digest settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        2160
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7cec2a0d-7789-5bff-aa41-476d29d8c481",
+              "name": "slack_channel",
+              "value": "#n8n-alerts",
+              "type": "string"
+            },
+            {
+              "id": "b7fa435a-9831-53df-ba69-2af8e95731fd",
+              "name": "alert_email",
+              "value": "you@example.com",
+              "type": "string"
+            },
+            {
+              "id": "6029b1fc-41ca-52f4-a5f6-fcd485ff006a",
+              "name": "from_email",
+              "value": "n8n@example.com",
+              "type": "string"
+            },
+            {
+              "id": "521f069f-ae8f-53ba-886c-a68720119187",
+              "name": "only_tag",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "012774e3-e638-535a-bb18-9fefa0c412b4",
+              "name": "ignore_tag",
+              "value": "no-monitor",
+              "type": "string"
+            },
+            {
+              "id": "6cf341a6-2f90-5e82-b80b-6251ec177871",
+              "name": "heartbeat_url",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "690cd0b9-ac70-545e-ac29-09b78a1459ea",
+              "name": "keep_days",
+              "value": 30,
+              "type": "number"
+            },
+            {
+              "id": "af94c5fa-30bb-5d0d-ac22-32a33a812423",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "heartbeat_url: a check URL from Healthchecks.io or similar, pinged after every digest. Blank = off. keep_days: rows older than this are deleted."
+    },
+    {
+      "id": "fc5b1058-63a9-5975-93e4-adb4e4b0e989",
+      "name": "Get the last 24 hours of failures",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        2160
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from monitor_failures where failed_at > $1 order by id",
+        "options": {
+          "queryReplacement": "={{ [ (($now.minus({ hours: 24 }).toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "9e895ed2-398c-5acf-87db-216d6fd21386",
+      "name": "Get the watch list",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        2160
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from monitor_watch order by id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "41f55e23-f870-556a-ba68-8d6ee16a6aec",
+      "name": "Get workflows for the digest",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        880,
+        2160
+      ],
+      "parameters": {
+        "resource": "workflow",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "activeWorkflows": true,
+          "tags": "={{ $('Digest settings').first().json.only_tag }}",
+          "excludePinnedData": true
+        }
+      },
+      "credentials": {
+        "n8nApi": {
+          "name": "n8n API"
+        }
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "13904f81-b992-5028-a939-23cb60807f34",
+      "name": "Build the digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        2160
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Posts every day. All clear is one line; otherwise what's wrong, the day's failures, and what isn't covered.\nconst s = $('Digest settings').first().json;\nconst self = $workflow.id;\nconst fails = $('Get the last 24 hours of failures').all().map(i => i.json).filter(f => f && f.workflow_id !== undefined && f.id);\nconst watch = $('Get the watch list').all().map(i => i.json).filter(r => r && r.workflow_id);\nconst wfs = $('Get workflows for the digest').all().map(i => i.json).filter(w => w && w.id && w.id !== self\n  && !(s.ignore_tag && (w.tags || []).some(t => t.name === s.ignore_tag)));\nconst live = new Set(wfs.map(w => String(w.id)));\nconst watched = watch.filter(r => r.enabled !== false && live.has(String(r.workflow_id)));\nconst alerting = watched.filter(r => r.alerting);\nconst icon = { stalled: '🔴', failing: '🟠', empty: '🟡' };\nconst clip = (t, n) => { t = String(t || '').replace(/\\s+/g, ' '); return t.length > n ? t.slice(0, n - 1) + '…' : t; };\n\nconst groups = {};\nfor (const f of fails) {\n  const g = groups[f.workflow_name] = groups[f.workflow_name] || { n: 0, last: f };\n  g.n++; if (Date.parse(f.failed_at) > Date.parse(g.last.failed_at)) g.last = f;\n}\nconst names = Object.keys(groups).sort((a, b) => groups[b].n - groups[a].n);\nconst noHandler = wfs.filter(w => !w.settings || w.settings.errorWorkflow !== self).map(w => w.name);\nconst noSaves = wfs.filter(w => w.settings && w.settings.saveDataSuccessExecution === 'none').map(w => w.name);\nconst noGap = watched.filter(r => !(Number(r.max_gap_minutes) > 0) && !(Number(r.override_gap_minutes) > 0)).map(r => r.workflow_name);\n\nconst lines = [];\nlet status = 'ok';\nif (!alerting.length && !fails.length) {\n  lines.push(`✅ *All clear*: ${watched.length} workflow${watched.length === 1 ? '' : 's'} watched, no failures in the last 24 hours.`);\n} else {\n  for (const r of alerting) lines.push(`${icon[r.alert_kind] || '🔴'} *${r.workflow_name}* is ${r.alert_kind}`);\n  if (names.length) {\n    if (alerting.length) lines.push('');\n    lines.push(`*Failures in the last 24 hours* (${fails.length})`);\n    for (const n of names.slice(0, 10)) {\n      const g = groups[n], t = DateTime.fromISO(g.last.failed_at).setZone(s.timezone).toFormat('h:mm a');\n      lines.push(`• *${n}*: ${g.n}×, last at ${t}${g.last.node_name ? ' in `' + g.last.node_name + '`' : ''}`);\n      lines.push(`    _${clip(g.last.error_message, 160)}_`);\n    }\n    if (names.length > 10) lines.push(`• and ${names.length - 10} more`);\n  }\n  lines.push('', `_${watched.length - alerting.length} of ${watched.length} watched workflows are fine._`);\n  status = alerting.length || names.some(n => groups[n].n >= 3) ? 'error' : 'warn';\n}\nconst gaps = [];\nif (noHandler.length) gaps.push(`${noHandler.length} published workflow${noHandler.length === 1 ? ' has' : 's have'} no error workflow: ${clip(noHandler.join(', '), 300)}`);\nif (noSaves.length) gaps.push(`not saving successful runs, so stalls can't be seen: ${clip(noSaves.join(', '), 200)}`);\nif (noGap.length) gaps.push(`schedule not understood, set override_gap_minutes: ${clip(noGap.join(', '), 200)}`);\nif (gaps.length) lines.push('', '*Not covered*', ...gaps.map(g => '• ' + g));\nconst head = { ok: '✅', warn: '🟡', error: '🔴' }[status];\nreturn [{ json: { title: `${head} n8n daily health`, body: lines.join('\\n').trim(), status } }];"
+      },
+      "executeOnce": true,
+      "notes": "All clear is one line. Otherwise: alerting workflows, failures grouped by workflow, then what isn't covered."
+    },
+    {
+      "id": "72597445-ecad-593e-a460-4a290eac7a9a",
+      "name": "Post the digest",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1320,
+        2160
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Digest settings').first().json.slack_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ ({ blocks: [{ type: 'header', text: { type: 'plain_text', emoji: true, text: String($json.title).slice(0, 150) } }, { type: 'section', text: { type: 'mrkdwn', text: String($json.body).slice(0, 2900) } }, { type: 'context', elements: [{ type: 'mrkdwn', text: 'n8n workflow monitor · ' + $now.setZone($('Digest settings').first().json.timezone).toFormat('d LLL, h:mm a') }] }] }) }}",
+        "text": "={{ String($json.title).slice(0, 150) }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3 times. If Slack still fails (Slack is the outage, a wrong channel, a revoked token), the error output sends the same text by email."
+    },
+    {
+      "id": "b6348420-1780-512d-a861-b9f45916acb6",
+      "name": "Email the digest",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        2340
+      ],
+      "parameters": {
+        "fromEmail": "={{ $('Digest settings').first().json.from_email }}",
+        "toEmail": "={{ $('Digest settings').first().json.alert_email }}",
+        "subject": "={{ String($json.title).slice(0, 150) }}",
+        "emailFormat": "text",
+        "text": "={{ String($json.body).replace(/<([^|>]+)\\|([^>]+)>/g, '$2: $1').replace(/[*_]/g, '') }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "name": "SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "disabled": true,
+      "notes": "Optional fallback, off by default: enable it and add an SMTP credential. Runs only when the Slack post failed. If it fails too, the execution goes red."
+    },
+    {
+      "id": "b44661f3-2e88-530e-b085-6baa69ddda77",
+      "name": "Heartbeat set?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        2160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "499ccb7d-34f5-5fc6-9ba4-c2112af917c9",
+              "leftValue": "={{ !!$('Digest settings').first().json.heartbeat_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "c6732192-e376-55db-9805-dbad7b596a05",
+      "name": "Ping the heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        2060
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Digest settings').first().json.heartbeat_url }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "notes": "An outside check (Healthchecks.io or similar) that emails you when this ping stops: it catches n8n itself being down."
+    },
+    {
+      "id": "5a440567-a14d-5e2d-8b41-00eae79fd4dc",
+      "name": "Delete old failures",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2200,
+        2160
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "delete from monitor_failures where failed_at < $1 returning id",
+        "options": {
+          "queryReplacement": "={{ [ (($now.minus({ days: $('Digest settings').first().json.keep_days }).toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "21a1a1d0-432e-5cbe-a41d-1ba9bbd0c549",
+      "name": "Delete old runs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2420,
+        2160
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "delete from monitor_runs where ran_at < $1 returning id",
+        "options": {
+          "queryReplacement": "={{ [ (($now.minus({ days: $('Digest settings').first().json.keep_days }).toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "d12a39cf-73c5-56e2-807b-7245cd4adca4",
+      "name": "Every 5 minutes (demo)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        2730
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "disabled": true,
+      "notes": "Disabled. Enable it, publish, wait for two runs, then disable it again."
+    },
+    {
+      "id": "f5a26f64-d69b-5de7-8511-72394a5e4d89",
+      "name": "Try it by hand",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2910
+      ],
+      "parameters": {},
+      "notes": "A manual run fails here too, but Catch stays silent: the Error Trigger only fires for automatic runs."
+    },
+    {
+      "id": "64933ad8-ac48-5f62-be49-d3b2584f7776",
+      "name": "Fail on purpose",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        240,
+        2810
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "Demo failure: the supplier feed returned 0 rows"
+      },
+      "notes": "Stop and Error: the node to use when the data is wrong, so the failure reaches your error workflow."
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Create the tables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the alert": {
+      "main": [
+        [
+          {
+            "node": "Mark alerted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email the alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When a workflow fails": {
+      "main": [
+        [
+          {
+            "node": "Catch settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Catch settings": {
+      "main": [
+        [
+          {
+            "node": "Read the failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the failure": {
+      "main": [
+        [
+          {
+            "node": "Save the failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the failure": {
+      "main": [
+        [
+          {
+            "node": "Alerted recently?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerted recently?": {
+      "main": [
+        [
+          {
+            "node": "In cooldown?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "In cooldown?": {
+      "main": [
+        [
+          {
+            "node": "Saved, no alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post the alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email the alert": {
+      "main": [
+        [
+          {
+            "node": "Mark alerted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log a run": {
+      "main": [
+        [
+          {
+            "node": "Save the run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the health alert": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Email the health alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Watch settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch settings": {
+      "main": [
+        [
+          {
+            "node": "Get published workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get published workflows": {
+      "main": [
+        [
+          {
+            "node": "Get watch rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get watch rows": {
+      "main": [
+        [
+          {
+            "node": "Work out the schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Work out the schedules": {
+      "main": [
+        [
+          {
+            "node": "Get recent executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get recent executions": {
+      "main": [
+        [
+          {
+            "node": "Get recent runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get recent runs": {
+      "main": [
+        [
+          {
+            "node": "Judge each workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Judge each workflow": {
+      "main": [
+        [
+          {
+            "node": "Save the state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the state": {
+      "main": [
+        [
+          {
+            "node": "Build the message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the message": {
+      "main": [
+        [
+          {
+            "node": "Post the health alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the digest": {
+      "main": [
+        [
+          {
+            "node": "Heartbeat set?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every morning": {
+      "main": [
+        [
+          {
+            "node": "Digest settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Digest settings": {
+      "main": [
+        [
+          {
+            "node": "Get the last 24 hours of failures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the last 24 hours of failures": {
+      "main": [
+        [
+          {
+            "node": "Get the watch list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the watch list": {
+      "main": [
+        [
+          {
+            "node": "Get workflows for the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get workflows for the digest": {
+      "main": [
+        [
+          {
+            "node": "Build the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the digest": {
+      "main": [
+        [
+          {
+            "node": "Post the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email the digest": {
+      "main": [
+        [
+          {
+            "node": "Heartbeat set?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Heartbeat set?": {
+      "main": [
+        [
+          {
+            "node": "Ping the heartbeat",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete old failures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping the heartbeat": {
+      "main": [
+        [
+          {
+            "node": "Delete old failures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete old failures": {
+      "main": [
+        [
+          {
+            "node": "Delete old runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 5 minutes (demo)": {
+      "main": [
+        [
+          {
+            "node": "Fail on purpose",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try it by hand": {
+      "main": [
+        [
+          {
+            "node": "Fail on purpose",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

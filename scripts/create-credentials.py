@@ -77,7 +77,7 @@ def postgres_from_url(url):
     }
 
 
-def build(cred):
+def build(cred, base=None, key=None):
     """Ask for one credential's values and return n8n's data object for its type."""
     t = cred["type"]
     print(f"\n{cred['name']} ({t}){': ' + cred['help'] if cred.get('help') else ''}")
@@ -96,6 +96,14 @@ def build(cred):
     if t == "httpHeaderAuth":
         key = ask(f"  {cred.get('secret_label', 'API key')}", secret=True)
         return {"name": cred.get("header", "Authorization"), "value": cred.get("prefix", "Bearer ") + key}
+    if t == "n8nApi":  # the template reads this instance through its own API
+        if base and key and ask("  Use the n8n URL and API key you just gave? (y/n)", default="y").lower().startswith("y"):
+            return {"apiKey": key, "baseUrl": base + "/api/v1"}
+        url = ask("  n8n URL to watch, e.g. https://n8n.example.com").rstrip("/")
+        return {"apiKey": ask("  API key for that instance (Read only scopes are enough)", secret=True), "baseUrl": url + "/api/v1"}
+    if t == "smtp":
+        return {"host": ask("  SMTP host"), "port": int(ask("  Port", default="465")), "secure": ask("  SSL/TLS (y/n)", default="y").lower().startswith("y"),
+                "user": ask("  User"), "password": ask("  Password", secret=True)}
     if t == "postgres":
         return postgres_from_url(ask("  Connection string (Supabase: Connect > Session pooler)", secret=True))
     raise SystemExit(f"credentials.json lists a type this script doesn't know: {t}")
@@ -142,7 +150,7 @@ def main():
             if again.strip().lower() != "y":
                 made.append((cred, existing[(cred["name"], cred["type"])], "kept"))
                 continue
-        data = build(cred)
+        data = build(cred, base, key)
         res = api(base, key, "POST", "/credentials", {"name": cred["name"], "type": cred["type"], "data": data})
         data.clear()
         made.append((cred, res.get("id"), "created"))

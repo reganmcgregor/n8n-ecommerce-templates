@@ -57,7 +57,7 @@ The templates with an AI step use one Chat Model sub-node, set to the Ollama nod
 
 To use another provider, swap the Chat Model sub-node for that provider's (OpenAI, Anthropic, OpenRouter and so on). The chain or agent it's attached to doesn't change.
 
-The competitor price monitoring, ecommerce internal linking and automated inventory management templates have no AI step. Add products to Shopify uses one Basic LLM Chain for the title and short description. AI product titles uses one Basic LLM Chain for the title. AI product descriptions uses one Basic LLM Chain for the intro, and asks for plain paragraphs rather than JSON, so it needs no parser. Shopify collections SEO uses one to name each proposed collection, and category page SEO one to write each intro and its meta tags. Those two ask for a small JSON reply and read it in a Code node rather than a Structured Output Parser, because models on Ollama Cloud sometimes wrap JSON in a code fence or leave a trailing comma (even with Output Format set to JSON), and a parser rejects that.
+The competitor price monitoring, ecommerce internal linking, automated inventory management and n8n workflow monitoring templates have no AI step. Add products to Shopify uses one Basic LLM Chain for the title and short description. AI product titles uses one Basic LLM Chain for the title. AI product descriptions uses one Basic LLM Chain for the intro, and asks for plain paragraphs rather than JSON, so it needs no parser. Shopify collections SEO uses one to name each proposed collection, and category page SEO one to write each intro and its meta tags. Those two ask for a small JSON reply and read it in a Code node rather than a Structured Output Parser, because models on Ollama Cloud sometimes wrap JSON in a code fence or leave a trailing comma (even with Output Format set to JSON), and a parser rejects that.
 
 Product data enrichment uses one Basic LLM Chain to extract the attributes, plus an optional one that reads text from product images. Shopify product images uses two Basic LLM Chains that send a photo as the user message (Message Type **Image (Binary)**), so it needs a vision-capable model; `gemma4:31b` on Ollama Cloud is one. With Output Format JSON, the chain sometimes hands back the parsed object and sometimes `text` holding JSON in a code fence, so the template reads both. Shopify collection sorting has no chat model; its optional blend mode uses embeddings (below).
 
@@ -100,6 +100,19 @@ Used only for pages that block a plain request.
 3. Select it on the template's `Firecrawl scrape` node.
 
 If you'd rather not use it, set `use_firecrawl` to false in the template's settings.
+
+## n8n API (workflow monitoring)
+
+The n8n workflow monitoring template reads your own instance through n8n's public API: which workflows are published, their schedules and their recent executions. It never changes a workflow.
+
+1. In n8n, open **Settings > n8n API** and click **Create an API key**. Give it a label such as `Workflow monitoring`, choose the **Read only** scopes, and pick an expiry (keys last 30 days by default). Copy the key: n8n shows it once.
+2. Create an **n8n API** credential: API Key = the key, Base URL = your n8n address followed by `/api/v1`, such as `https://n8n.example.com/api/v1`.
+
+The API is available on self-hosted n8n and on paid n8n Cloud plans, not during the Cloud free trial.
+
+## Email (SMTP, optional)
+
+The n8n workflow monitoring template can email an alert when its Slack post fails. Its three Email nodes ship disabled; enable them and create an **SMTP** credential with your provider's host, port, user and password (for Gmail, an app password on port 465 with SSL/TLS on).
 
 ## Create the credentials from your terminal
 
