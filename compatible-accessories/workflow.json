@@ -452,12 +452,12 @@
       "typeVersion": 1,
       "position": [
         -60,
-        540
+        340
       ],
       "parameters": {
         "content": "## Find (called by Match)\nFor each accessory: its manufacturer page in `custom.manufacturer_url`, any extra URL fields you list, and (optional) a Google search on the manufacturer's own domain, which fills in a missing manufacturer page. Fetches each page (PDFs too), keeps it only if it names the accessory's model, and saves the text in `accessory_sources`.",
         "width": 4600,
-        "height": 1060,
+        "height": 1260,
         "color": 7
       }
     },
@@ -679,7 +679,7 @@
       "typeVersion": 2.2,
       "position": [
         2420,
-        660
+        500
       ],
       "parameters": {
         "conditions": {
@@ -714,7 +714,7 @@
       "typeVersion": 4.2,
       "position": [
         3300,
-        660
+        500
       ],
       "parameters": {
         "method": "POST",
@@ -740,8 +740,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3240,
-        480
+        3520,
+        440
       ],
       "parameters": {
         "content": "### Writes to Shopify\nFills the Manufacturer page field when it was empty and the search found the page.",
@@ -757,7 +757,7 @@
       "typeVersion": 4.2,
       "position": [
         2640,
-        660
+        500
       ],
       "parameters": {
         "url": "={{ $json.page_found.replace(/^https?:\\/\\/google\\.com\\/goto/i, 'https://www.google.com/goto') }}",
@@ -791,7 +791,7 @@
       "typeVersion": 2,
       "position": [
         2860,
-        660
+        500
       ],
       "parameters": {
         "mode": "runOnceForEachItem",
@@ -806,7 +806,7 @@
       "typeVersion": 2.2,
       "position": [
         3080,
-        660
+        500
       ],
       "parameters": {
         "conditions": {
