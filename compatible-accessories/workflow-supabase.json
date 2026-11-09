@@ -2343,15 +2343,15 @@
         3940
       ],
       "parameters": {
-        "content": "## Publish (called by Review, every 15 minutes as a backstop)\nRe-reads each manufacturer page to check the quote is still there, then adds approved accessories to each product's Complementary products (never more than `max_complementary`, never removing your own picks) and fills each accessory's Compatible with list. Writes check Shopify's compareDigest, so an edit made in the meantime isn't overwritten.",
+        "content": "## Publish (called by Review, hourly as a backstop)\nRe-reads each manufacturer page to check the quote is still there, then adds approved accessories to each product's Complementary products (never more than `max_complementary`, never removing your own picks) and fills each accessory's Compatible with list. Writes check Shopify's compareDigest, so an edit made in the meantime isn't overwritten.",
         "width": 4600,
         "height": 820,
         "color": 7
       }
     },
     {
-      "id": "45d8624d-b60b-530a-85d2-99d2075aa83a",
-      "name": "Every 15 minutes",
+      "id": "aa650b15-81b3-5ded-ba5b-87e00064099f",
+      "name": "Every hour at :30",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -2362,8 +2362,9 @@
         "rule": {
           "interval": [
             {
-              "field": "minutes",
-              "minutesInterval": 15
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 30
             }
           ]
         }
@@ -3923,7 +3924,7 @@
         ]
       ]
     },
-    "Every 15 minutes": {
+    "Every hour at :30": {
       "main": [
         [
           {

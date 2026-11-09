@@ -117,7 +117,7 @@ Open **Run once to set up** and click **Execute workflow**. You get three data t
 
 ## Schedule
 
-Publish the workflow. Match runs every hour and the Publish backstop every 15 minutes, in the workflow's time zone (Workflow settings > Timezone). The Review webhook only works while the workflow is published. Set an Error Workflow too, so a crashed run reaches you. Once the backlog is done, run Match daily, or tag new accessories as they arrive.
+Publish the workflow. Match runs every hour and the Publish backstop every hour at half past, in the workflow's time zone (Workflow settings > Timezone). An approval in Slack starts Publish straight away; the backstop only catches anything left approved. That's about 1,440 schedule runs a month plus one webhook run per Slack click; the Find and Publish lanes run as sub-workflows when another lane calls them, which don't count towards n8n Cloud's quota. The Review webhook only works while the workflow is published. Set an Error Workflow too, so a crashed run reaches you. Once the backlog is done, run Match daily, or tag new accessories as they arrive.
 
 ## Troubleshooting
 
