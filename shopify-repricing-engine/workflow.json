@@ -705,7 +705,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ query: \"query Variants($cursor: String, $q: String) {\\n  productVariants(first: 250, after: $cursor, query: $q) {\\n    pageInfo { hasNextPage endCursor }\\n    nodes {\\n      id\\n      sku\\n      price\\n      compareAtPrice\\n      displayName\\n      inventoryItem { unitCost { amount } }\\n      product { id status productType }\\n    }\\n  }\\n}\", variables: { cursor: null, q: $('Pricing settings').first().json.product_query } }) }}",
+        "jsonBody": "={{ JSON.stringify({ query: `query Variants($cursor: String, $q: String) {\n  productVariants(first: 250, after: $cursor, query: $q) {\n    pageInfo { hasNextPage endCursor }\n    nodes {\n      id\n      sku\n      price\n      compareAtPrice\n      displayName\n      inventoryItem { unitCost { amount } }\n      product { id status productType }\n    }\n  }\n}`, variables: { cursor: null, q: $('Pricing settings').first().json.product_query } }) }}",
         "options": {
           "pagination": {
             "pagination": {
@@ -1284,7 +1284,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ query: \"mutation Reprice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {\\n  productVariantsBulkUpdate(productId: $productId, variants: $variants) {\\n    productVariants { id price }\\n    userErrors { field message }\\n  }\\n}\", variables: { productId: $json.product_id, variants: $json.variants } }) }}",
+        "jsonBody": "={{ JSON.stringify({ query: `mutation Reprice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {\n  productVariantsBulkUpdate(productId: $productId, variants: $variants) {\n    productVariants { id price }\n    userErrors { field message }\n  }\n}`, variables: { productId: $json.product_id, variants: $json.variants } }) }}",
         "options": {
           "batching": {
             "batch": {
@@ -2992,7 +2992,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ query: \"mutation Reprice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {\\n  productVariantsBulkUpdate(productId: $productId, variants: $variants) {\\n    productVariants { id price }\\n    userErrors { field message }\\n  }\\n}\", variables: { productId: $('Get the change').first().json.product_id, variants: [{ id: $('Get the change').first().json.variant_id, price: Number($('Get the change').first().json.from_price).toFixed(2) }] } }) }}",
+        "jsonBody": "={{ JSON.stringify({ query: `mutation Reprice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {\n  productVariantsBulkUpdate(productId: $productId, variants: $variants) {\n    productVariants { id price }\n    userErrors { field message }\n  }\n}`, variables: { productId: $('Get the change').first().json.product_id, variants: [{ id: $('Get the change').first().json.variant_id, price: Number($('Get the change').first().json.from_price).toFixed(2) }] } }) }}",
         "options": {}
       },
       "onError": "continueRegularOutput"
