@@ -3,7 +3,7 @@
 An n8n template that matches each accessory you sell to the products it fits, using only what the accessory's manufacturer says on its own page. Code finds the products you sell that the page names (any brand), an AI model proposes matches with a verbatim quote for each, code checks every quote, a second AI pass audits what's left, and you approve each accessory in Slack. Approved accessories go to the product's **Complementary products** (the Search & Discovery field a stock theme such as Horizon shows), and each accessory gets a **Compatible with** list of plain links.
 
 - **Setup** creates the `accessory_sources`, `accessory_reviews` and `accessory_matches` data tables, turns on Shopify's standard **Complementary products** field, and creates the **Model number (MPN)** (`custom.mpn`), **Manufacturer page** (`custom.manufacturer_url`) and **Compatible with** (`custom.compatible_with`, a list of products) fields.
-- **Find** (called by Match) reads each accessory's manufacturer page, plus any extra URL fields you list (a datasheet field, say). With `use_search` on, it fills a missing manufacturer page from a Google search on the brand's own domain through DataForSEO. It fetches each page (PDFs too, with an optional Firecrawl fallback for sites that refuse a plain request) and keeps the text only if it names the accessory's own model.
+- **Find** (called by Match) reads each accessory's manufacturer page, plus any extra URL fields you list (a datasheet field, say). With `use_search` on, it fills a missing manufacturer page from a Google search through DataForSEO, keeping the first result on one of the brand's own domains that names the model (not its shop, forum or support site). It fetches each page (PDFs too, with an optional Firecrawl fallback for sites that refuse a plain request) and keeps the text only if it names the accessory's own model.
 - **Match** takes up to `batch_size` accessories tagged `accessories` an hour (or the IDs in `product_ids`) and reads your whole catalogue. For each accessory it:
   - finds the products you sell whose model number appears on its pages, as a whole token (`UVC-G5-PTZ` never matches `UVC-G5-PTZ-W`), any brand. No candidates means no model call;
   - asks the model which of them the page says the accessory fits, each with a quote;
@@ -22,7 +22,7 @@ The full walkthrough is in the guide: [How to Add Compatible Accessories to Shop
 - The free Search & Discovery app if you want to see and edit complementary products in its Recommendations page (the template writes the same field directly).
 - A Slack app with a bot token (`chat:write`; invite the bot to your review channel, or add `chat:write.public`), Interactivity turned on, and its signing secret.
 - An AI model. The template uses Ollama Cloud with `gemma4:31b` for both the draft and the audit; any chat model sub-node works.
-- Optional: DataForSEO, to find missing manufacturer pages (about US$0.002 to US$0.003 a search); Firecrawl, for sites that refuse a plain request.
+- Optional: DataForSEO, to find missing manufacturer pages (about US$0.0035 a search at depth 20); Firecrawl, for sites that refuse a plain request.
 - Model numbers. Setup creates `custom.mpn`; fill it in by hand, in the bulk editor, or by CSV import with a column headed `Model number (MPN) (product.metafields.custom.mpn)`. When it's empty the template uses the first variant's SKU. A model number needs letters and digits and at least four characters to be matched.
 - Each accessory's manufacturer page in `custom.manufacturer_url` (`Manufacturer page (product.metafields.custom.manufacturer_url)` in a CSV), unless you turn on `use_search`.
 
@@ -137,7 +137,7 @@ Rows in `accessory_sources` with `wrong_model` or `empty` say why a page wasn't 
 
 ### The search finds the wrong page, or none
 
-Google sometimes ignores `site:` and returns resellers, which the template skips. Check `manufacturer_domains` holds the brand's own domain, or fill in the manufacturer page by hand.
+The search is a plain one (`site:` costs more and Google often ignores it), so most results are resellers, which the template skips; Google returns links through `google.com/goto`, which Find resolves to the real address. Check `manufacturer_domains` holds the brand's own domain, or fill in the manufacturer page by hand.
 
 ### A match wasn't added
 
