@@ -13,7 +13,7 @@ An n8n template that matches each accessory you sell to the products it fits, us
 - **Review** answers Slack at once, then checks the signature and age. **Exclude** strikes one match off the card; **Approve remaining** approves the rest and starts Publish; **Reject all** keeps Shopify as it is. A click on an old card changes nothing, and nothing you excluded or rejected is proposed again.
 - **Publish** re-reads each manufacturer page to check the quote is still there, then adds each approved accessory to its product's Complementary products. It keeps what's already in the list, stops at `max_complementary` (Shopify's limit is 10) and never removes anything, and writes with Shopify's `compareDigest`, so an edit made in the meantime isn't overwritten. It fills the accessory's Compatible with list and replies in the card's thread. `dry_run` is on until you turn it off.
 
-The full walkthrough is in the guide: [How to Add Compatible Accessories to Shopify Complementary Products Automatically](GUIDE_URL).
+The full walkthrough is in the guide: [How to Add Compatible Accessories to Shopify Complementary Products Automatically](https://www.reganmcgregor.com.au/shopify-complementary-products/).
 
 ## What you need
 
