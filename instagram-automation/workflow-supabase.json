@@ -1,0 +1,5459 @@
+{
+  "name": "Instagram product posts (Supabase template)",
+  "nodes": [
+    {
+      "id": "33a27e15-9437-5cb4-b9db-ec70825e5754",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        -200
+      ],
+      "parameters": {
+        "content": "## Instagram product posts\nTurns your Shopify products into Instagram posts: the real product photo in your own frame, a caption written from the product data, a person approves it in Slack, and a paced queue posts it through the official Instagram API. No AI touches the image, and no price goes on it.\n\n### How it works\n1. **Setup** creates the `instagram_posts` and `instagram_token` tables. **Connect** is a form where you paste your Instagram access token once.\n2. **Draft** (every morning, and after each Approve or Skip) keeps `max_waiting` drafts in Slack: one post per product, oldest first. A vision model checks the main photo, a chat model writes the words, and **Check the post** builds the caption and flags anything that breaks a rule.\n3. **Frame** is the web page for the image. **Render** screenshots it with Firecrawl and keeps the JPEG in Shopify Files.\n4. **Review** takes Slack's clicks: Approve, Edit, Skip, Cancel. **Book** gives an approved post the next slot in your pace.\n5. **Publish** (every 15 minutes) posts whatever is due through the Instagram API.\n6. **Token** (weekly) refreshes your token before its 60 days run out. **Report** (Mondays) says what posted and when the queue runs dry.\n\n### Setup\nCredentials: Shopify (client ID and secret, `read_products`, `read_files`, `write_files`), Slack bot token and signing secret, Ollama, Firecrawl. Run Setup, publish the workflow, open the **Save your Instagram token** form and paste a token from your Meta app (Instagram API with Instagram Login). Set your Slack app's Request URL to **Slack button click**'s production URL. Full steps in the README.\n\n### Customisation\nProducts, pace and caption rules are in **Draft settings** and **Book settings**. The frame is plain HTML in **Build the page** (colours, fonts and logo in **Frame settings**). Turn `require_approval` off to book posts without a person, once you trust the checks.",
+        "width": 900,
+        "height": 1500,
+        "color": 1
+      }
+    },
+    {
+      "id": "db1c9e57-3287-5f2d-a610-af4d133bfb91",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -200
+      ],
+      "parameters": {
+        "content": "## 1. Setup (run once)\nCreates `instagram_posts` and `instagram_token`. Running it again keeps them.",
+        "width": 540,
+        "height": 400,
+        "color": 7
+      }
+    },
+    {
+      "id": "a0c53997-2dfb-533e-a724-6a8924f2370c",
+      "name": "Lane Connect",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        240
+      ],
+      "parameters": {
+        "content": "## 2. Connect Instagram (form)\nPaste a long-lived access token from your Meta app. It's checked against Instagram, then saved with your account id. Only signed-in n8n users can open the form.",
+        "width": 1640,
+        "height": 400,
+        "color": 7
+      }
+    },
+    {
+      "id": "31d5ec6c-35ab-5eb0-919b-8ed2ef02df47",
+      "name": "Lane Draft",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        680
+      ],
+      "parameters": {
+        "content": "## 3. Draft (every morning, and after each Approve or Skip)\nKeeps up to `max_waiting` drafts in Slack. One post per product, ever, oldest first. Vision model for the photo, chat model for the words, then the checks and the frame.",
+        "width": 4400,
+        "height": 1060,
+        "color": 7
+      }
+    },
+    {
+      "id": "44a4c487-201b-5017-9241-c69605346067",
+      "name": "Lane Card",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1780
+      ],
+      "parameters": {
+        "content": "## 4. Card\nOne renderer for every state of a post (draft, scheduled, publishing, posted, skipped, failed). Posts a new card or updates the existing one.",
+        "width": 2080,
+        "height": 400,
+        "color": 7
+      }
+    },
+    {
+      "id": "75cfbcd5-58a0-5085-b348-a2b80582aeac",
+      "name": "Lane Frame",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2220
+      ],
+      "parameters": {
+        "content": "## 5. Frame (web page)\nThe 1080 x 1350 page for the image, drawn from the saved row only. Open `?id=<post id>` in a browser to design it.",
+        "width": 1200,
+        "height": 400,
+        "color": 7
+      }
+    },
+    {
+      "id": "d39493aa-b0ff-53f9-a4df-03fa54ee4c5a",
+      "name": "Lane Render",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2660
+      ],
+      "parameters": {
+        "content": "## 6. Render\nFirecrawl screenshots the frame page, wsrv.nl turns it into a JPEG, Shopify Files keeps it at a lasting public URL. Instagram fetches it from there when the post goes out.",
+        "width": 3400,
+        "height": 440,
+        "color": 7
+      }
+    },
+    {
+      "id": "da96f665-5da7-57dc-b359-efc3a6789db3",
+      "name": "Lane Review",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        3140
+      ],
+      "parameters": {
+        "content": "## 7. Review (Slack's Request URL)\nChecks Slack's signature first. Approve books a slot, Edit opens a modal (a new headline redraws the frame), Skip means this product never gets a post, Cancel takes a scheduled post back to a draft.",
+        "width": 3840,
+        "height": 1320,
+        "color": 7
+      }
+    },
+    {
+      "id": "da645538-6485-561d-baaa-a043304ab6fe",
+      "name": "Lane Book",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        4500
+      ],
+      "parameters": {
+        "content": "## 8. Book\nOne slot after the last scheduled or posted post: a week divided by `posts_per_week`, jittered, inside posting hours. Only a draft or failed post with an image can be booked.",
+        "width": 2300,
+        "height": 240,
+        "color": 7
+      }
+    },
+    {
+      "id": "ac2c850e-820a-5516-a7b3-780de04be950",
+      "name": "Lane Publish",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        4780
+      ],
+      "parameters": {
+        "content": "## 9. Publish (every 15 minutes)\nOne due post a run: create the media container, wait until Instagram says FINISHED, publish, read the permalink. Errors leave the post failed with the reason on the card.",
+        "width": 4720,
+        "height": 880,
+        "color": 7
+      }
+    },
+    {
+      "id": "657c7432-d2b4-503f-8601-21e59d78545f",
+      "name": "Lane Token",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        5700
+      ],
+      "parameters": {
+        "content": "## 10. Token (weekly)\nInstagram tokens last 60 days. This refreshes yours every week and warns the log channel if it fails or is close to running out.",
+        "width": 1640,
+        "height": 400,
+        "color": 7
+      }
+    },
+    {
+      "id": "07272b9e-e4b1-5d79-a8d8-d61dbcf612b5",
+      "name": "Lane Report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        6140
+      ],
+      "parameters": {
+        "content": "## 11. Report (Mondays)\nWhat posted last week, what's scheduled and when the queue runs out, and how long drafts have been waiting.",
+        "width": 1200,
+        "height": 500,
+        "color": 7
+      }
+    },
+    {
+      "id": "50d1850d-5640-5b87-900e-08ecc6107a06",
+      "name": "Risk Instagram",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        5340
+      ],
+      "parameters": {
+        "content": "### Posts to Instagram\nCreates a real, public post. Test with one product on an account you don't mind, or set `first_slot_after` ahead and Cancel.",
+        "width": 420,
+        "height": 140,
+        "color": 3
+      }
+    },
+    {
+      "id": "662273e4-82e4-531c-824f-940adfa6d435",
+      "name": "Risk Shopify Files",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        700,
+        2960
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify Files\nAdds one image file per post, and deletes the old one when a frame is redrawn.",
+        "width": 400,
+        "height": 130,
+        "color": 3
+      }
+    },
+    {
+      "id": "52ae5c7e-281f-5cf1-acf5-49b5c36a098a",
+      "name": "Risk Token",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        560
+      ],
+      "parameters": {
+        "content": "### Your token is stored in a table\nAnyone who can open this n8n instance can read `instagram_token`. Keep the instance private.",
+        "width": 440,
+        "height": 140,
+        "color": 3
+      }
+    },
+    {
+      "id": "9ae641f7-fa55-5ced-932d-adf6dd84cafb",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "605e0a48-ebfc-52fb-abee-d240d9cecaea",
+      "name": "Create instagram_posts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "create table if not exists instagram_posts (\n  id integer generated by default as identity primary key,\n  product_id text,\n  product_title text,\n  handle text,\n  headline text,\n  product_line text,\n  caption text,\n  alt_text text,\n  source_image text,\n  photo_kind text,\n  image_url text,\n  shopify_file_id text,\n  link text,\n  problems text,\n  status text,\n  slack_channel text,\n  slack_ts text,\n  decided_by text,\n  decided_at timestamptz,\n  scheduled_for timestamptz,\n  container_id text,\n  media_id text,\n  post_url text,\n  posted_at timestamptz,\n  error text,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);\ncreate table if not exists instagram_token (\n  id integer generated by default as identity primary key,\n  account text,\n  token text,\n  ig_user_id text,\n  username text,\n  expires_at timestamptz,\n  refreshed_at timestamptz,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);\ncreate unique index if not exists instagram_posts_product on instagram_posts (product_id);\ncreate index if not exists instagram_posts_status on instagram_posts (status);\ncreate unique index if not exists instagram_token_account on instagram_token (account);",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "executeOnce": true,
+      "notes": "Reuses the table if it already exists."
+    },
+    {
+      "id": "db0d07b4-4ebe-5f35-bf1d-dc1751aa50d7",
+      "name": "Save your Instagram token",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        440
+      ],
+      "parameters": {
+        "authentication": "n8nUserAuth",
+        "formTitle": "Connect Instagram",
+        "formDescription": "Paste the access token from your Meta app (Instagram > API setup with Instagram login > Generate token). It is checked with Instagram, then saved for the Publish and Token lanes.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Access token",
+              "fieldType": "password",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "path": "instagram-token-pg"
+        }
+      },
+      "webhookId": "2bf388ec-be89-54f3-b99b-38b86b4f082d",
+      "notes": "Only signed-in n8n users can open this form."
+    },
+    {
+      "id": "2810c35f-3dc0-5fe9-be77-44f9c69aa1f3",
+      "name": "Connect settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        440
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "79bb1e17-9dc6-5db4-8c71-7bcaacfcf06d",
+              "name": "api_base",
+              "value": "https://graph.instagram.com/v25.0",
+              "type": "string"
+            },
+            {
+              "id": "19d78393-aa63-595a-9fd8-112defa866c3",
+              "name": "token",
+              "value": "={{ $json['Access token'].trim() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b803f0fa-6be5-5f56-8842-abdb41e9d801",
+      "name": "Check the token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        440
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.api_base }}/me?fields=user_id,username",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Which professional account the token belongs to."
+    },
+    {
+      "id": "fddfd0f5-7265-59f8-8f9c-e1b835afd190",
+      "name": "Read the account",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The account id and username, or why the token was refused. A token from the dashboard lasts 60 days.\n// Instagram's own words from an HTTP error ('400 - \"{\\\"error\\\":{\\\"message\\\": ...}}\"'), else the raw message.\nconst igError = e => { const m = String(e?.message || e || ''); let t = m.slice(m.indexOf(' - ') + 3);\n  for (let i = 0; i < 2; i++) { try { t = JSON.parse(t); } catch (x) { break; } if (typeof t !== 'string') break; }\n  return (t && t.error && (t.error.error_user_msg || t.error.message)) || m; };\nconst me = $input.first().json || {};\nconst ok = !!me.user_id && !me.error;\nreturn [{ json: { ok, account: 'instagram', token: $('Connect settings').first().json.token, ig_user_id: String(me.user_id || ''), username: me.username || '',\n  expires_at: new Date(Date.now() + 60 * 864e5).toISOString(), refreshed_at: new Date().toISOString(),\n  error: ok ? '' : String(igError(me.error) || 'No account came back').slice(0, 300) } }];"
+      }
+    },
+    {
+      "id": "fade905b-21c3-546d-bda2-37fd4c44fa47",
+      "name": "Token works?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4f248b63-585a-54ad-a559-1e765341856a",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c0c8ee12-63f6-5ba1-b4c8-1148ae30d479",
+      "name": "Save the token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into instagram_token (account, token, ig_user_id, username, expires_at, refreshed_at) values ($1, $2, $3, $4, $5, $6) on conflict (account) do update set token = excluded.token, ig_user_id = excluded.ig_user_id, username = excluded.username, expires_at = excluded.expires_at, refreshed_at = excluded.refreshed_at, \"updatedAt\" = now() returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"instagram\")) ?? null, (($json.token)) ?? null, (($json.ig_user_id)) ?? null, (($json.username)) ?? null, (((x => x ? new Date(x).toISOString() : null)($json.expires_at))) ?? null, (((x => x ? new Date(x).toISOString() : null)($json.refreshed_at))) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "c175398b-08b3-576e-8d48-c3ac0e089678",
+      "name": "Connected",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        360
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "Instagram connected",
+        "completionMessage": "={{ 'Saved the token for @' + $('Read the account').first().json.username + '. The Token lane refreshes it every week.' }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "ed2845b8-476c-55de-aba5-7190771da59c",
+      "name": "Not connected",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        540
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "That token did not work",
+        "completionMessage": "={{ 'Instagram said: ' + $('Read the account').first().json.error }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "1064207d-ae4d-579b-b402-0481ab5d9f22",
+      "name": "Called by this workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        1520
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "notes": "The other lanes call this workflow with lane: top_up, card, render or book."
+    },
+    {
+      "id": "962c029f-8455-5d59-a543-8e5f98853f9f",
+      "name": "Which lane?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        220,
+        1520
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "top_up",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5a6db07b-6252-5c64-bc1a-84ca48528091",
+                    "leftValue": "={{ $json.lane === 'top_up' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "card",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4093800d-bb7d-5f80-b3f9-dc5d544e31c4",
+                    "leftValue": "={{ $json.lane === 'card' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "render",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "35d75062-679e-515d-ba14-b71e3dac1e2a",
+                    "leftValue": "={{ $json.lane === 'render' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "book",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1639518e-9ae4-5f43-a918-a4d1fa683578",
+                    "leftValue": "={{ $json.lane === 'book' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8c9cd486-3035-5fac-8fdb-2596881ce085",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        820
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "49de4315-3e0c-5b30-b255-7d36961f382a",
+      "name": "Draft posts now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1000
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "3c6e497c-4c9a-5ad1-9e87-d7c1186164d1",
+      "name": "Draft settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        880
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "10696a46-5a22-575d-bea5-dfcead08aba8",
+              "name": "store_domain",
+              "value": "your-store.myshopify.com",
+              "type": "string"
+            },
+            {
+              "id": "c5e902a7-25c0-538b-bf8d-cf5119cf5abf",
+              "name": "store_name",
+              "value": "Your Store",
+              "type": "string"
+            },
+            {
+              "id": "cfd2521b-ed75-576a-b604-1e54059cd14b",
+              "name": "store_url",
+              "value": "https://www.your-store.com",
+              "type": "string"
+            },
+            {
+              "id": "361fd382-c19e-51b9-b7c2-69d72f1bb470",
+              "name": "store_description",
+              "value": "an online store for (what you sell)",
+              "type": "string"
+            },
+            {
+              "id": "e2c8ca21-99eb-5fe7-96be-7e687d8b591b",
+              "name": "language",
+              "value": "Australian English",
+              "type": "string"
+            },
+            {
+              "id": "5717f97c-633b-5965-8044-3810e121ffff",
+              "name": "style_rules",
+              "value": "Metres rather than yards or feet.",
+              "type": "string"
+            },
+            {
+              "id": "c4ff4c25-b132-561e-8f2d-548331add219",
+              "name": "locale",
+              "value": "en-AU",
+              "type": "string"
+            },
+            {
+              "id": "cd313b90-5cef-5f12-ad78-7d2d9734a3a4",
+              "name": "slack_channel",
+              "value": "#instagram",
+              "type": "string"
+            },
+            {
+              "id": "e3b8cd8d-aff1-5e6c-b852-eebc877452ee",
+              "name": "product_query",
+              "value": "status:active published_status:published",
+              "type": "string"
+            },
+            {
+              "id": "920a83da-af48-53d3-ac9b-e96138ef8d59",
+              "name": "max_products",
+              "value": 1000,
+              "type": "number"
+            },
+            {
+              "id": "121f4cf4-516d-5b21-a35d-506382e9c3b7",
+              "name": "skip_words",
+              "value": "\\b(mount|bracket|cable|adapter|power supply|battery pack|replacement|spare)\\b",
+              "type": "string"
+            },
+            {
+              "id": "a82a9ada-0178-5a97-9ef4-b22b69796804",
+              "name": "max_waiting",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "0a885e1e-4672-5d4f-8697-5d2a991903fc",
+              "name": "min_photo_px",
+              "value": 600,
+              "type": "number"
+            },
+            {
+              "id": "1691e314-b0bd-5462-af05-ab2c540fee0f",
+              "name": "utm",
+              "value": "utm_source=instagram&utm_medium=social&utm_campaign=product_posts",
+              "type": "string"
+            },
+            {
+              "id": "c42d6a9d-b0d3-55c6-92ce-16ecd7ce979c",
+              "name": "closing_line",
+              "value": "{price} at {store}. Tap the link in our bio.",
+              "type": "string"
+            },
+            {
+              "id": "559bb4ba-1b58-548e-a9dc-511b70bcc5d3",
+              "name": "closing_line_no_price",
+              "value": "Specs and price at {store}. Tap the link in our bio.",
+              "type": "string"
+            },
+            {
+              "id": "25da1262-fb4d-53b8-a33a-76d84ba3fe71",
+              "name": "max_hashtags",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "257c72ab-39bd-541e-ab8e-ab5b22f901ca",
+              "name": "banned_words",
+              "value": "\\b(best|cheapest|guaranteed|free shipping|sale|buy now|look no further|perfect for|great fit|solid choice)\\b",
+              "type": "string"
+            },
+            {
+              "id": "70ad5a25-91b1-5ecd-99e5-4b0f9305c13a",
+              "name": "keep_terms",
+              "value": "={{ ['IP', 'PoE', 'NVR', 'HD', 'AI', 'PTZ', '4K', '2K', '4G', '5G', 'LTE', 'QHD', 'Wi-Fi', 'CCTV', 'USB', 'microSD'] }}",
+              "type": "array"
+            },
+            {
+              "id": "638294e9-c77f-50bb-ae5f-c94b58d3d0f3",
+              "name": "chat_model",
+              "value": "gemma4:31b",
+              "type": "string"
+            },
+            {
+              "id": "5964203a-f9c0-501b-a676-0107cd3f5724",
+              "name": "vision_model",
+              "value": "gemma4:31b",
+              "type": "string"
+            },
+            {
+              "id": "8d819707-7e1f-57f9-a063-7589be569b66",
+              "name": "require_approval",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Every store-specific value for drafting lives here. product_query uses Shopify search syntax (product_type:, tag:, vendor:)."
+    },
+    {
+      "id": "372da093-c685-5b5d-9437-11aca30155b2",
+      "name": "Get all posts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        880
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts order by id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "notes": "Every post so far: what is waiting, which products already have one."
+    },
+    {
+      "id": "dbe5344e-984f-5623-8689-df564d5dd1c0",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        880
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Draft settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "246a996d-cd99-5147-9117-4908e7290904",
+      "name": "Get products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        880
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Draft settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'query Products($q: String!, $after: String) { products(first: 100, after: $after, query: $q, sortKey: CREATED_AT) { pageInfo { hasNextPage endCursor } nodes { id legacyResourceId title handle vendor productType createdAt onlineStoreUrl descriptionHtml category { name } priceRangeV2 { minVariantPrice { amount currencyCode } } featuredMedia { ... on MediaImage { image { url width height } } } } } }', variables: { q: $('Draft settings').first().json.product_query, after: null } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { q: $('Draft settings').first().json.product_query, after: $response.body.data.products.pageInfo.endCursor } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.products.pageInfo.hasNextPage }}",
+              "limitPagesFetched": true,
+              "maxRequests": "={{ Math.ceil($('Draft settings').first().json.max_products / 100) }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      },
+      "executeOnce": true,
+      "notes": "100 products a page, oldest first, until max_products."
+    },
+    {
+      "id": "dcb61050-584e-502c-897b-d51664ea39f6",
+      "name": "Pick the next products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        880
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One post per product, ever: a product with any row (draft, scheduled, posted, skipped, failed) is never picked again.\n// Oldest products first. Skips accessories by word, small photos, products without a price or a description.\n// Only the free slots in max_waiting are filled.\nconst s = $('Draft settings').first().json;\nconst posts = $('Get all posts').all().map(i => i.json).filter(r => r.product_id);\nconst pages = $('Get products').all().map(i => i.json);\nconst bad = pages.find(p => p.errors);\nif (bad) throw new Error('Shopify: ' + JSON.stringify(bad.errors).slice(0, 300));\nconst products = pages.flatMap(p => p.data?.products?.nodes || []);\nconst free = Math.max(0, s.max_waiting - posts.filter(r => r.status === 'draft').length);\nif (!free) return [];\nconst done = new Set(posts.map(r => String(r.product_id)));\nconst text = h => String(h || '').replace(/<li[^>]*>/gi, '; ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\\s+/g, ' ').replace(/^[;\\s]+/, '').trim();\nconst skip = s.skip_words ? new RegExp(s.skip_words, 'i') : null;\nconst out = [];\nfor (const p of products) {\n  const id = String(p.legacyResourceId);\n  if (done.has(id) || (skip && skip.test(p.title))) continue;\n  const img = p.featuredMedia?.image;\n  if (!img || Math.min(img.width || 0, img.height || 0) < s.min_photo_px) continue;\n  const amount = Number(p.priceRangeV2?.minVariantPrice?.amount);\n  if (!(amount > 0) || text(p.descriptionHtml).length < 30) continue;\n  const money = new Intl.NumberFormat(s.locale, { style: 'currency', currency: p.priceRangeV2.minVariantPrice.currencyCode,\n    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 }).format(amount);\n  const desc = String(p.descriptionHtml || '');\n  const cut = desc.search(/<h[2-4]/i);\n  const url = p.onlineStoreUrl || (s.store_url.replace(/\\/$/, '') + '/products/' + p.handle);\n  const src = img.url.split('?')[0];\n  out.push({ json: {\n    product_id: id, product_title: p.title, handle: p.handle, brand: p.vendor || '', product_type: p.category?.name || p.productType || '',\n    intro: text(cut >= 0 ? desc.slice(0, cut) : desc).slice(0, 800), specs: text(cut >= 0 ? desc.slice(cut) : '').slice(0, 3000),\n    price: money, source_image: img.url, photo_url: src + '?width=1024',\n    link: url + (url.includes('?') ? '&' : '?') + s.utm\n  } });\n  if (out.length >= free) break;\n}\nreturn out;"
+      },
+      "notes": "Oldest products without a post, up to the free draft slots."
+    },
+    {
+      "id": "a3d2d247-afef-5b45-bd9c-cf9d96898abe",
+      "name": "Look at the photo",
+      "type": "@n8n/n8n-nodes-langchain.ollama",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        880
+      ],
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Draft settings').first().json.vision_model }}"
+        },
+        "inputType": "url",
+        "imageUrls": "={{ $json.photo_url }}",
+        "text": "Look at this product photo. Reply with JSON only: {\"kind\": one of \"product\" (the product on a plain background), \"in_use\" (installed or in a real setting), \"packaging\" (a retail box), \"diagram\" (dimensions, a spec sheet, mostly text), \"other\"; \"alt\": one plain sentence under 200 characters describing what is visible: the product type, its colour and shape. No brand claims, no sales words.}",
+        "simplify": true,
+        "options": {
+          "temperature": 0.1,
+          "format": "json",
+          "num_predict": 200
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "name": "Ollama Cloud"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "notes": "Vision model: what kind of photo it is, and a description for the alt text."
+    },
+    {
+      "id": "a2eac22a-ab40-5b2c-adc1-d1354197b977",
+      "name": "Read the photo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        880
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The vision model's answer per photo, plus the input for the writer. A box shot or a diagram still gets a draft, flagged on the card.\nconst picked = $('Pick the next products').all().map(i => i.json);\nconst out = [];\n$input.all().forEach((it, i) => {\n  const p = picked[i]; if (!p) return;\n  const r = it.json || {};\n  let txt = r.content ?? r.text ?? r.response ?? r.message?.content ?? r.output ?? '';\n  if (typeof txt !== 'string') txt = JSON.stringify(txt);\n  let v = {};\n  try { v = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)); } catch (e) {}\n  const kind = ['product', 'in_use', 'packaging', 'diagram', 'other'].includes(v.kind) ? v.kind : '';\n  const alt = String(v.alt || '').replace(/\\s+/g, ' ').trim().slice(0, 300);\n  const lines = ['Product: ' + p.product_title, 'Brand: ' + (p.brand || 'unknown'), 'Product type: ' + (p.product_type || 'unknown'),\n    'Intro: ' + (p.intro || 'none'), 'Specs: ' + (p.specs || 'none')];\n  out.push({ json: { ...p, photo_kind: kind || null, photo_alt: alt, prompt_input: lines.join('\\n') } });\n});\nreturn out;"
+      },
+      "notes": "Keeps the photo kind and description; builds the writer input."
+    },
+    {
+      "id": "bd2b1d2d-c033-5aef-821d-6466a1ca380c",
+      "name": "Write the post",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1980,
+        880
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt_input }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You write Instagram posts for {{ $('Draft settings').first().json.store_name }}, {{ $('Draft settings').first().json.store_description }}. The voice is someone who knows the products: plain-spoken, friendly, keen on good gear. You get one product. Reply with these lines and nothing else:\nHeadline: ...\nProduct line: ...\nHook: ...\nBody: ...\nFact: ...\nFact: ...\nFact: ...\nHashtags: ...\n\nHeadline: the words on the image. Two short beats, each ending with a full stop, 12 to 28 characters in total, about what the product does for the owner or its standout feature. Examples of the shape: \"Solar powered. No wiring.\" \"Sharp at night. One cable.\" Only claims the product data supports.\nProduct line: brand, model and a short product type, then one or two key specs, joined with \" · \". 55 characters at most.\nHook: one sentence, 60 to 120 characters, opening with what the owner gets. Talk to \"you\".\nBody: two sentences, 120 to 260 characters: what it is, and the places and people it suits.\nFact: three lines, each one short fact from the product data, 4 to 12 words, no full stop.\nHashtags: 3 to {{ $('Draft settings').first().json.max_hashtags }} lowercase hashtags separated by spaces, specific to the product type, power or use. The brand only if it is this product's brand.\n\nRules:\n- Only facts in the product data. Never add a spec, a number or a feature, and never call it something it is not.\n- Calm and upbeat. No fear and no hype.\n- Write model numbers as given.\n- No price, links, emojis or phone numbers. Never mention the image, photo or post itself.\n- Use contractions (it's, you'll) like people talk.\n- Vary the wording from product to product. Never write \"great fit\", \"solid choice\", \"perfect for\" or \"look no further\".\n- Write in {{ $('Draft settings').first().json.language }}. {{ $('Draft settings').first().json.style_rules }}\n- Never use the long dash character."
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "notes": "One call per product: headline, product line, hook, body, three facts, hashtags."
+    },
+    {
+      "id": "14c7d625-dae9-5c87-ad36-d3fddfa905da",
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        1080
+      ],
+      "parameters": {
+        "model": "={{ $('Draft settings').first().json.chat_model }}",
+        "options": {
+          "temperature": 0.5,
+          "numPredict": 700
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "name": "Ollama Cloud"
+        }
+      }
+    },
+    {
+      "id": "97d90559-d314-5989-b89b-c597fa6199b4",
+      "name": "Check the post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        880
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Parse the model's lines, build the caption in a fixed shape (hook, body, facts, the price line, hashtags) and hold it to the rules.\n// Safe fixes are made here (dashes, casing, spelling, hashtag shape); anything else is a warning on the card. A model failure saves nothing.\nconst s = $('Draft settings').first().json;\nconst items = $('Read the photo').all().map(i => i.json);\nconst out = [];\n$input.all().forEach((it, i) => {\n  const p = items[i]; if (!p) return;\n  const raw = String(it.json.text || it.json.output || '');\n  if (it.json.error || !raw.trim()) return;   // tried again next run\n  const grab = label => (raw.match(new RegExp('^\\\\s*\\\\**' + label + '\\\\**\\\\s*:\\\\s*(.+)$', 'gim')) || []).map(l => l.replace(/^[^:]*:\\s*/, '').trim().replace(/^[\"“]|[\"”]$/g, ''));\n  const fix = x => x.replace(/—|–/g, ', ').replace(/\\s+,/g, ',').replace(/#\\w+/g, '').replace(/\\s{2,}/g, ' ').trim();\n  const caps = x => s.keep_terms.reduce((t, k) => t.replace(new RegExp('\\\\b' + k.replace(/-/g, '-?') + '\\\\b', 'gi'), k), x);\n  const local = x => /australian|british|new zealand|canadian/i.test(s.language)\n    ? x.replace(/\\bcolor(s|ed|ful)?\\b/gi, (m, e) => (m[0] === 'C' ? 'Colour' : 'colour') + (e || '')).replace(/\\bcenter(s|d)?\\b/gi, (m, e) => (m[0] === 'C' ? 'Centre' : 'centre') + (e || '')).replace(/\\b(meter|meters)\\b/gi, m => m.replace(/er/i, 're'))\n    : x;\n  const clean = x => local(caps(fix(x || '')));\n  const headline = clean(grab('Headline')[0]).replace(/\\.{2,}/g, '.');\n  const productLine = clean(grab('Product line')[0]).replace(/\\s*[|•·]\\s*|\\s+-\\s+/g, ' · ').replace(/(\\s·\\s)+/g, ' · ');\n  const hook = clean(grab('Hook')[0]), body = clean(grab('Body')[0]);\n  const facts = grab('Fact').map(f => clean(f).replace(/[.\\s]+$/, '')).filter(Boolean).slice(0, 3);\n  const tags = [...new Set(String(grab('Hashtags')[0] || '').split(/[\\s,]+/).map(h => '#' + h.toLowerCase().replace(/[^a-z0-9]/g, '')).filter(h => h.length > 2))].slice(0, s.max_hashtags);\n  const close = (p.price ? s.closing_line.replace('{price}', p.price) : s.closing_line_no_price).replace('{store}', s.store_name);\n  const caption = [hook, body, facts.map(f => '• ' + f).join('\\n'), close, tags.join(' ')].filter(Boolean).join('\\n\\n');\n  const alt = (p.photo_alt ? p.photo_alt.replace(/\\.?$/, '.') + ' ' : p.product_title + '. ') + 'Text on the image: ' + headline + ' ' + productLine;\n  const problems = [];\n  if (!headline) problems.push('No headline for the frame.');\n  if (headline.length > 30) problems.push(`Headline is ${headline.length} characters (30 fits the frame).`);\n  if (productLine.length > 58) problems.push(`Product line is ${productLine.length} characters; it will be cut off on the frame.`);\n  if (caption.length > 2200) problems.push(`Caption is ${caption.length} characters (2,200 max).`);\n  if (facts.length < 3) problems.push(`Only ${facts.length} facts.`);\n  if (tags.length < 3) problems.push(`Only ${tags.length} hashtags.`);\n  const all = [headline, productLine, hook, body, facts.join(' ')].join(' ');\n  if (/https?:\\/\\/|www\\./i.test(all)) problems.push('Has a web link.');\n  if (/[$€£]\\s?\\d/.test(all)) problems.push('Mentions a price outside the closing line.');\n  if (/\\p{Extended_Pictographic}/u.test(all)) problems.push('Has an emoji.');\n  const banned = s.banned_words ? all.replace(new RegExp(s.store_name, 'g'), '').match(new RegExp(s.banned_words, 'i')) : null;\n  if (banned) problems.push(`Uses \"${banned[0]}\".`);\n  if (/\\b(this|the) (image|photo|picture|post)\\b/i.test(all)) problems.push('Talks about the image instead of the product.');\n  if (p.photo_kind && !['product', 'in_use'].includes(p.photo_kind)) problems.push(`The main photo looks like ${({ packaging: 'the box', diagram: 'a diagram or spec sheet' })[p.photo_kind] || 'something other than the product'}, not the product. Consider Skip, or change the main image in Shopify.`);\n  out.push({ json: { ...p, headline, product_line: productLine, caption, alt_text: alt.slice(0, 1000), problems: JSON.stringify(problems) } });\n});\nreturn out;"
+      },
+      "notes": "Builds the caption; safe fixes; everything else is a warning on the card."
+    },
+    {
+      "id": "76e61545-a107-55ce-9d0f-372b91863c48",
+      "name": "Save the draft",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2540,
+        880
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into instagram_posts (product_id, product_title, handle, headline, product_line, caption, alt_text, source_image, photo_kind, link, problems, status, slack_channel) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.product_id)) ?? null, (($json.product_title)) ?? null, (($json.handle)) ?? null, (($json.headline)) ?? null, (($json.product_line)) ?? null, (($json.caption)) ?? null, (($json.alt_text)) ?? null, (($json.source_image)) ?? null, (($json.photo_kind)) ?? null, (($json.link)) ?? null, (($json.problems)) ?? null, ((\"draft\")) ?? null, (($('Draft settings').first().json.slack_channel)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "421e0406-c49e-5e6f-b41a-9a76514fd621",
+      "name": "Frame for the draft",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2760,
+        880
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e3e706ba-b24a-5870-b4d6-dc0e20dde8a0",
+              "name": "lane",
+              "value": "render",
+              "type": "string"
+            },
+            {
+              "id": "7056c82e-3419-534f-9d9b-6af87c5bf5cd",
+              "name": "post_id",
+              "value": "={{ String($json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "99f1edd7-1855-5c31-8c52-b3802ed010b6",
+      "name": "Draw the frame",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2980,
+        880
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "Render lane: screenshot the frame page and keep it in Shopify Files."
+    },
+    {
+      "id": "3ecd3368-ef05-54c5-bb06-219da882ff98",
+      "name": "Card for the draft",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3200,
+        880
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "567c12bb-493b-5e4e-a4b7-52c0859afa46",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "73c10a2e-b5a7-52df-92b7-bd2a1d55a7a0",
+              "name": "post_id",
+              "value": "={{ String($json.post_id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "36fa49f8-a1ca-55c6-a808-f0c7a4b61cd3",
+      "name": "Post the card",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3420,
+        880
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "1bf42777-ea43-5e69-a225-47c06f2c572d",
+      "name": "Approval needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3640,
+        880
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "523b852e-f926-5a52-b0fc-2e1383196584",
+              "leftValue": "={{ $('Draft settings').first().json.require_approval }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "df193e0d-4d06-5ed7-bc06-a64293338602",
+      "name": "Auto booking",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3860,
+        1000
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e4e8beee-97cf-56f8-8950-2818a0fc4dcf",
+              "name": "lane",
+              "value": "book",
+              "type": "string"
+            },
+            {
+              "id": "e625301c-814b-5bfd-83e5-991e2a7c9ad1",
+              "name": "post_id",
+              "value": "={{ String($json.post_id) }}",
+              "type": "string"
+            },
+            {
+              "id": "0e826aa9-7fd9-5c45-8b1d-92fefabe67e9",
+              "name": "user",
+              "value": "auto",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3d0f2eb9-76c8-5915-b6cb-e8e90dd8e38a",
+      "name": "Book without approval",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4080,
+        1000
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "Only when require_approval is off."
+    },
+    {
+      "id": "fcca6b11-84d9-5184-941d-686b6c97efa3",
+      "name": "Card settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        1980
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "db572e1e-0208-5c4b-91d7-61054ab35096",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            },
+            {
+              "id": "f0fac5ea-4966-5828-ad4c-e7d763bdb4e1",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "15001265-70c5-562f-b645-f6978d95048e",
+      "name": "Get the post for the card",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        1980
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts where id::text = $1::text order by id limit 1",
+        "options": {
+          "queryReplacement": "={{ [ (($('Called by this workflow').first().json.post_id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "f8978f35-38b2-5dda-891f-e506a2e226e7",
+      "name": "Build the card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1980
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One Slack card for one post, in whatever state it is in. Every lane redraws the card through here, so it always matches the row.\nconst s = $('Card settings').first().json;\nconst r = $input.first().json;\nconst esc = x => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst when = t => t ? DateTime.fromISO(new Date(t).toISOString()).setZone(s.timezone).toFormat('ccc d LLL, h:mm a').replace('AM', 'am').replace('PM', 'pm') : '';\nconst head = { draft: 'Instagram draft', scheduled: 'Scheduled', publishing: 'Posting now', skipped: 'Skipped', posted: 'On Instagram', failed: 'Post failed' }[r.status] || 'Instagram';\nconst v = String(r.id);\nconst blocks = [{ type: 'header', text: { type: 'plain_text', text: (head + ': ' + r.product_title).slice(0, 150) } }];\nif (r.status === 'skipped') {\n  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'Skipped by ' + esc(r.decided_by || 'someone') + '. This product won\\'t get another Instagram post.' }, { type: 'mrkdwn', text: s.workflow_name }] });\n  return [{ json: { channel: r.slack_channel, ts: r.slack_ts || '', id: r.id, text: 'Skipped: ' + r.product_title, blocks } }];\n}\nif (r.image_url) blocks.push({ type: 'image', image_url: r.image_url, alt_text: String(r.alt_text || r.product_title).slice(0, 1900) });\nelse blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':hourglass: The image is not ready yet.' + (r.error ? ' ' + esc(r.error) : ' Edit and save to draw it again.') } });\nblocks.push({ type: 'section', fields: [\n  { type: 'mrkdwn', text: '*Headline* (' + String(r.headline || '').length + ')\\n' + esc(r.headline) },\n  { type: 'mrkdwn', text: '*Product line* (' + String(r.product_line || '').length + ')\\n' + esc(r.product_line) }] });\nblocks.push({ type: 'section', text: { type: 'mrkdwn', text: ('*Caption* (' + String(r.caption || '').length + ')\\n' + esc(r.caption)).slice(0, 2900) } });\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'Alt text: ' + esc(r.alt_text).slice(0, 600) }] });\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'Product page: <' + r.link + '|' + esc(String(r.link || '').split('?')[0].replace('https://', '')) + '>' }] });\nlet problems = []; try { problems = JSON.parse(r.problems || '[]'); } catch (e) {}\nif (problems.length && r.status === 'draft') blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':warning: ' + problems.map(esc).join('\\n:warning: ') } });\nif (r.status === 'failed' && r.error) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':x: ' + esc(r.error).slice(0, 500) } });\nconst btn = (text, id, style) => Object.assign({ type: 'button', text: { type: 'plain_text', text }, action_id: id, value: v }, style ? { style } : {});\nif (r.status === 'draft') blocks.push({ type: 'actions', elements: [btn('Approve', 'ig_approve', 'primary'), btn('Edit', 'ig_edit'), btn('Skip', 'ig_skip', 'danger')] });\nif (r.status === 'scheduled') blocks.push({ type: 'actions', elements: [btn('Cancel', 'ig_cancel', 'danger')] });\nif (r.status === 'failed') blocks.push({ type: 'actions', elements: [btn('Try again', 'ig_approve', 'primary'), btn('Edit', 'ig_edit'), btn('Skip', 'ig_skip', 'danger')] });\nif (r.status === 'posted' && r.post_url) blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open post' }, url: r.post_url, action_id: 'ig_open' }] });\nconst by = r.decided_by === 'auto' ? 'automatically' : 'by ' + esc(r.decided_by || 'someone');\nconst note = {\n  draft: 'Approve books the next free slot. Edit changes the words (a new headline redraws the image). Skip means this product gets no post.',\n  scheduled: ':calendar: Approved ' + by + '. Posts on ' + when(r.scheduled_for) + '. Cancel takes it back to a draft.',\n  publishing: ':hourglass_flowing_sand: Posting to Instagram now.',\n  posted: ':white_check_mark: On Instagram since ' + when(r.posted_at) + '.',\n  failed: 'Not posted. Try again books a new slot.'\n}[r.status] || '';\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }, { type: 'mrkdwn', text: s.workflow_name }] });\nreturn [{ json: { channel: r.slack_channel, ts: r.slack_ts || '', id: r.id, text: head + ': ' + r.product_title, blocks } }];"
+      },
+      "notes": "Every state of a post in one renderer."
+    },
+    {
+      "id": "fe9fb359-adbe-539c-b5cc-3447ed81c5da",
+      "name": "Post or update the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        1980
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ts ? 'https://slack.com/api/chat.update' : 'https://slack.com/api/chat.postMessage' }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ts ? { channel: $json.channel, ts: $json.ts, text: $json.text, blocks: $json.blocks } : { channel: $json.channel, text: $json.text, blocks: $json.blocks, unfurl_links: false, unfurl_media: false }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "A new post gets a card; anything else updates its card."
+    },
+    {
+      "id": "751fd74e-d2c3-5c91-8212-1d3d308436cd",
+      "name": "New card?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        1980
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "72442a7a-40d1-5f4f-8462-87665a3ff15a",
+              "leftValue": "={{ $json.ok === true && !$('Build the card').first().json.ts }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fb8b1647-4621-5f4b-82c6-b91c356e89b2",
+      "name": "Save where the card is",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        1920
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_posts set slack_channel = $1, slack_ts = $2, \"updatedAt\" = now() where id = $3::integer returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.channel)) ?? null, (($json.ts)) ?? null, (($('Build the card').first().json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "e33a2c3a-ab60-5cb3-97ac-04c5a5e6a35b",
+      "name": "Card done",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        1980
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa3832dc-1824-5e04-b98b-58970a92189f",
+              "name": "post_id",
+              "value": "={{ String($('Build the card').first().json.id) }}",
+              "type": "string"
+            },
+            {
+              "id": "52574814-ecef-5c6f-8e07-a592e2d7d5e5",
+              "name": "ok",
+              "value": "={{ $('Post or update the card').first().json.ok === true }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "2afd02d4-1a24-5c2a-b9e7-1b2997d94e29",
+      "name": "Frame page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        2420
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "instagram-post-frame-pg",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "16d37547-9f8c-5ade-8708-fdd5777e13e8",
+      "notes": "Firecrawl opens this page; open it in a browser to design the frame."
+    },
+    {
+      "id": "6ddcdfad-8f02-5caf-97c9-ed72fd348b1f",
+      "name": "Frame settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        2420
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "386fadee-2652-556d-a492-c915cf893a0b",
+              "name": "store_name",
+              "value": "Your Store",
+              "type": "string"
+            },
+            {
+              "id": "75bc11d3-8055-5988-b1ee-d6fb52fd34b0",
+              "name": "store_url_text",
+              "value": "your-store.com",
+              "type": "string"
+            },
+            {
+              "id": "4e7b9f49-9a3f-51a2-b5e9-12b21643c586",
+              "name": "logo_url",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d434032f-77d6-56a4-9b69-1efc2ccdec76",
+              "name": "font",
+              "value": "Inter",
+              "type": "string"
+            },
+            {
+              "id": "bc3bb671-a9d5-5bef-b1d4-ffa1681cfd89",
+              "name": "text_colour",
+              "value": "#111827",
+              "type": "string"
+            },
+            {
+              "id": "169c9b66-38d0-5598-88c9-1e0fe1e81a77",
+              "name": "muted_colour",
+              "value": "#4B5563",
+              "type": "string"
+            },
+            {
+              "id": "820601cd-c417-5a05-916f-e385461703ce",
+              "name": "accent_colour",
+              "value": "#2563EB",
+              "type": "string"
+            },
+            {
+              "id": "a08b94a5-5b83-56f0-9294-6ffa81674cc2",
+              "name": "panel_colour",
+              "value": "#F3F4F6",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Your fonts (any Google Font), colours and logo. No price ever goes on the image."
+    },
+    {
+      "id": "8f021d45-760e-5192-bb89-97674a8c7c54",
+      "name": "Get the post for the frame",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        2420
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts where id::text = $1::text order by id limit 1",
+        "options": {
+          "queryReplacement": "={{ [ ((String($('Frame page').first().json.query.id || '0').replace(/[^0-9]/g, ''))) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "6ae76906-fa8e-5135-9771-f96dabd98b70",
+      "name": "Build the page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        2420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The frame as a 1080 x 1350 web page (4:5, the tallest Instagram feed shape): the real product photo in a panel,\n// then the headline and the product line, then your name. Drawn from the saved row only.\nconst f = $('Frame settings').first().json;\nconst r = $input.first().json;\nconst esc = x => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nif (!r.id) return [{ json: { html: '<!doctype html><title>Not found</title><p>No post with that id.</p>', status: 404 } }];\nconst photo = String(r.source_image || '').split('?')[0] + '?width=1400';\nconst size = String(r.headline || '').length > 24 ? 72 : 84;\nconst brand = f.logo_url ? `<img src=\"${esc(f.logo_url)}\" alt=\"${esc(f.store_name)}\">` : `<span>${esc(f.store_name)}</span>`;\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=1080\">\n<link href=\"https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.font)}:wght@400;600;800&display=block\" rel=\"stylesheet\">\n<style>*{box-sizing:border-box;margin:0}html,body{width:1080px;height:1350px;background:#fff}\nbody{font-family:'${f.font}',sans-serif;color:${f.text_colour};display:flex;flex-direction:column;padding:64px}\n.photo{flex:0 0 820px;background:${f.panel_colour};border-radius:32px;display:flex;align-items:center;justify-content:center;overflow:hidden}\n.photo img{max-width:86%;max-height:86%;object-fit:contain;mix-blend-mode:multiply}\n.words{flex:1;display:flex;flex-direction:column;justify-content:center;padding:28px 8px 8px}\nh1{font-size:${size}px;line-height:1.02;font-weight:800;letter-spacing:-0.02em}\n.line{margin-top:18px;font-size:32px;color:${f.muted_colour};white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.foot{display:flex;justify-content:space-between;align-items:center;font-size:30px;font-weight:600}\n.foot img{height:56px}.foot .dot{width:14px;height:14px;border-radius:50%;background:${f.accent_colour};display:inline-block;margin-right:14px}\n.foot .url{color:${f.muted_colour};font-weight:400}\n</style></head><body><div class=\"photo\"><img src=\"${esc(photo)}\" alt=\"\"></div>\n<div class=\"words\"><h1>${esc(r.headline)}</h1><p class=\"line\">${esc(r.product_line)}</p></div>\n<div class=\"foot\"><span><i class=\"dot\"></i>${brand}</span><span class=\"url\">${esc(f.store_url_text)}</span></div></body></html>`;\nreturn [{ json: { html, status: 200 } }];"
+      },
+      "notes": "Plain HTML and CSS. The photo is placed as it is; nothing is edited."
+    },
+    {
+      "id": "65439627-10ee-5cdd-a353-f5b2080857ba",
+      "name": "Send the page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        2420
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "e1007448-4210-58fb-ba21-f7abaa00c2a4",
+      "name": "Render settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        2860
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2a83c224-e6d4-5129-a468-a4fcecd61af7",
+              "name": "store_domain",
+              "value": "your-store.myshopify.com",
+              "type": "string"
+            },
+            {
+              "id": "192a8744-86d6-54ef-aa44-1b94bdf75895",
+              "name": "frame_page_url",
+              "value": "https://your-n8n.example.com/webhook/instagram-post-frame-pg",
+              "type": "string"
+            },
+            {
+              "id": "8e4301e8-8555-5404-a8cc-dfd8605012ec",
+              "name": "jpeg_template",
+              "value": "https://wsrv.nl/{name}.jpg?url={url}&output=jpg&q=90",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "frame_page_url: the production URL of Frame page (publish the workflow first)."
+    },
+    {
+      "id": "0a27fede-88a1-5b3b-88d8-a1a5a4cbd653",
+      "name": "Get the post to draw",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        2860
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts where id::text = $1::text order by id limit 1",
+        "options": {
+          "queryReplacement": "={{ [ (($('Called by this workflow').first().json.post_id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "d731aaf5-2155-5aa4-b56c-c73fe13f4179",
+      "name": "Screenshot the frame",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        2860
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/scrape",
+        "options": {
+          "timeout": 90000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $('Render settings').first().json.frame_page_url + '?id=' + $json.id + '&v=' + Date.now(), waitFor: 2500, formats: [ { type: 'screenshot', fullPage: false, quality: 95, viewport: { width: 1080, height: 1350 } } ] }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Firecrawl"
+        }
+      },
+      "notes": "One Firecrawl credit per frame. The screenshot URL is temporary, so it is kept in Shopify next."
+    },
+    {
+      "id": "57e2ce8b-aefd-54dc-95fe-356ccd8fa637",
+      "name": "Name the file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        2860
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The screenshot as a JPEG named after the product, by way of wsrv.nl (Instagram only takes JPEG). A failed screenshot is passed on with its error.\nconst s = $('Render settings').first().json;\nconst r = $('Get the post to draw').first().json;\nconst shot = $input.first().json?.data?.screenshot || '';\nconst name = ('instagram-' + String(r.product_title || 'post').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60) + '-' + r.id + '-' + Date.now()).replace(/-+/g, '-');\nreturn [{ json: { id: r.id, old_file_id: r.shopify_file_id || '', alt: r.alt_text || '',\n  source: shot ? s.jpeg_template.replace('{name}', name).replace('{url}', encodeURIComponent(shot)) : '',\n  error: shot ? '' : 'Firecrawl: ' + String($input.first().json?.error?.message || $input.first().json?.error || 'no screenshot').slice(0, 200) } }];"
+      }
+    },
+    {
+      "id": "146dc4f6-eb04-51cb-98f7-e35cfac47bf6",
+      "name": "Get Shopify token for Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        2860
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Render settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "f349d5ad-6fda-582a-a04f-d343f35d1dd4",
+      "name": "Keep it in Shopify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        2860
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Render settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Render').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation Keep($files: [FileCreateInput!]!) { fileCreate(files: $files) { files { id fileStatus } userErrors { field message } } }', variables: { files: $('Name the file').first().json.source ? [ { originalSource: $('Name the file').first().json.source, contentType: 'IMAGE', alt: String($('Name the file').first().json.alt).slice(0, 500) } ] : [] } }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Shopify Files keeps the JPEG at a lasting public URL."
+    },
+    {
+      "id": "359f5b3a-0eab-5595-868c-350bded32dc6",
+      "name": "Let Shopify process",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        2860
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "unit": "seconds",
+        "amount": 15
+      },
+      "webhookId": "331fba5a-07e4-519e-a711-9cc31d13b13c",
+      "notes": "Shopify fetches and processes the image in the background."
+    },
+    {
+      "id": "ce2d340b-a27a-5439-8463-8272aaa8014b",
+      "name": "Read the file",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        2860
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Render settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Render').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'query File($id: ID!) { node(id: $id) { ... on MediaImage { id fileStatus image { url } } } }', variables: { id: $('Keep it in Shopify').first().json.data?.fileCreate?.files?.[0]?.id || 'gid://shopify/MediaImage/0' } }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6652c796-ce27-500e-87a7-f2d23f32ed3d",
+      "name": "Collect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        2860
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The image's lasting URL, or why there isn't one.\nconst n = $('Name the file').first().json;\nconst made = $('Keep it in Shopify').first().json;\nconst f = $input.first().json?.data?.node || {};\nconst id = made?.data?.fileCreate?.files?.[0]?.id || '';\n// format=pjpg: Shopify's CDN sends WebP to anything that accepts it, and Instagram only takes JPEG.\nconst url = f.fileStatus === 'READY' && f.image?.url ? f.image.url + (f.image.url.includes('?') ? '&' : '?') + 'format=pjpg' : '';\nconst error = n.error || (!id ? 'Shopify: ' + JSON.stringify(made?.data?.fileCreate?.userErrors || made?.errors || 'no file').slice(0, 200) : (!url ? 'Shopify is still processing the image (' + (f.fileStatus || 'unknown') + '). Edit and save to draw it again.' : ''));\nreturn [{ json: { id: n.id, file_id: id || n.old_file_id, image_url: url, error, old_file_id: url && n.old_file_id && n.old_file_id !== id ? n.old_file_id : '' } }];"
+      }
+    },
+    {
+      "id": "6ebe537d-71e9-5ac0-b761-8b230e85cbfa",
+      "name": "Save the image",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2420,
+        2860
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_posts set image_url = $1, shopify_file_id = $2, error = $3, \"updatedAt\" = now() where id = $4::integer returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.image_url)) ?? null, (($json.file_id)) ?? null, (($json.error)) ?? null, (($json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "5cc88eb0-853d-5610-b055-61ac21349dd7",
+      "name": "Old image to delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        2860
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b65d2b0d-7d65-5400-9914-264b54b6b9f2",
+              "leftValue": "={{ !!$('Collect').first().json.old_file_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3819267f-e224-5ac4-b2d3-9b16f01beff8",
+      "name": "Delete the old image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        2800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Render settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Render').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation Drop($ids: [ID!]!) { fileDelete(fileIds: $ids) { deletedFileIds userErrors { field message } } }', variables: { ids: [ $('Collect').first().json.old_file_id ] } }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ec253cfc-da3f-503b-a23f-f253abbdb281",
+      "name": "Frame done",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3080,
+        2860
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "36ca5870-3196-5cd3-8ff6-058720e54846",
+              "name": "post_id",
+              "value": "={{ String($('Collect').first().json.id) }}",
+              "type": "string"
+            },
+            {
+              "id": "4dd2ac29-7da6-5af0-bfeb-37962cd12134",
+              "name": "image_url",
+              "value": "={{ $('Collect').first().json.image_url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "notes": "What the caller gets back."
+    },
+    {
+      "id": "cf750357-2eac-5803-bd2c-1b018127940f",
+      "name": "Slack button click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        3560
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram-post-review-pg",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "webhookId": "b16ed30a-bc7f-5171-b9d5-a3d27ee87779",
+      "notes": "Your Slack app's Interactivity Request URL."
+    },
+    {
+      "id": "5ce0e0b8-e40f-520e-a6c9-3bd27effc4cd",
+      "name": "Read the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        3560
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Slack sends the click as a form field called payload. Keep the raw body for the signature check.\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nif (Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) > 300) throw new Error('Stale request');\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || '';   // no URLSearchParams in the Code node\nconst b = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' ')));\nconst sig = { base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'] };\nconst user = b.user?.username || b.user?.name || b.user?.id || 'someone';\nif (b.type === 'view_submission') {\n  const m = JSON.parse(b.view.private_metadata || '{}');\n  const v = b.view.state.values;\n  const val = k => v[k]?.[k]?.value ?? null;\n  return [{ json: { ...sig, action: 'edit_submit', post_id: String(m.post_id), user,\n    edit: { headline: val('headline'), product_line: val('product_line'), caption: val('caption'), alt_text: val('alt_text') } } }];\n}\nconst a = (b.actions || [])[0] || {};\nreturn [{ json: { ...sig, action: String(a.action_id || '').replace('ig_', ''), post_id: String(a.value || ''), user,\n  trigger_id: b.trigger_id, response_url: b.response_url || '' } }];"
+      },
+      "notes": "Raw body, timestamp check, then the payload."
+    },
+    {
+      "id": "acacf718-d756-538e-a44c-3211b16f456c",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        440,
+        3560
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      },
+      "notes": "HMAC-SHA256 with your Slack app's signing secret."
+    },
+    {
+      "id": "97e59004-7660-5c81-b0f6-d66823bfa2fd",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        3560
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4d185e55-6080-51ae-ac29-ca581a3002ef",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bfcefbbf-95b7-5d1d-b7d1-7ee05cebce3c",
+      "name": "Not from Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        3720
+      ],
+      "parameters": {
+        "options": {
+          "responseCode": 401
+        },
+        "respondWith": "text",
+        "responseBody": "={{ 'Invalid signature' }}"
+      }
+    },
+    {
+      "id": "b000da9b-c3d8-5d8b-b48b-dda5ac52b901",
+      "name": "Answer Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        3560
+      ],
+      "parameters": {
+        "options": {},
+        "respondWith": "noData"
+      },
+      "notes": "Slack wants an answer within 3 seconds; the work carries on after it."
+    },
+    {
+      "id": "e6a9ba49-da78-5bbe-abfe-11d5323994ea",
+      "name": "Get the clicked post",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        3560
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts where id::text = $1::text order by id limit 1",
+        "options": {
+          "queryReplacement": "={{ [ (($('Read the click').first().json.post_id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "c97d085e-408c-5554-9a22-da868da29184",
+      "name": "Route the click",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1320,
+        3560
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "approve",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3a64bdd2-43d6-59b9-a876-dce971cbffe7",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'approve' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "edit",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "187f89df-c09d-5af0-8761-a8f028d62e4b",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'edit' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "edit_submit",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "120a7e4f-07a5-5d62-b2ea-165daccd8d19",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'edit_submit' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "skip",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f76d0a5f-0b2c-5509-84d8-9915c489a2ff",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'skip' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "cancel",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4c5f9105-6561-59c4-b2f3-c2082684ac9e",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'cancel' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "97315240-4d3d-529f-8dcc-c60442527737",
+      "name": "Can be booked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        3260
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1f051af8-aef9-5544-bd9f-5d99997400f8",
+              "leftValue": "={{ ['draft', 'failed'].includes($json.status) && !!$json.image_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Only a draft or failed post with its image. Never one that is scheduled, posting, posted or skipped."
+    },
+    {
+      "id": "6993b3b0-3cb3-5fe1-8d2b-a68edddc7ebb",
+      "name": "Booking request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        3200
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d804e485-e7f0-59af-8c74-2491c3fa0465",
+              "name": "lane",
+              "value": "book",
+              "type": "string"
+            },
+            {
+              "id": "b5a15d6a-631c-5dea-a798-bfb054c09231",
+              "name": "post_id",
+              "value": "={{ String($('Get the clicked post').first().json.id) }}",
+              "type": "string"
+            },
+            {
+              "id": "c3ae839a-bfe3-50dd-a257-5cac9525afdc",
+              "name": "user",
+              "value": "={{ $('Read the click').first().json.user }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "67f5c043-4312-5adc-a302-98297b7cc798",
+      "name": "Book it",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1980,
+        3200
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "523ae96f-6a29-5b64-a6b2-471caa6edf6c",
+      "name": "Top-up request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2200,
+        3200
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d4c92549-3535-5e01-a5aa-9359f9981f7b",
+              "name": "lane",
+              "value": "top_up",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "51f8a1d5-1b95-54c6-9b77-e22093f1cecd",
+      "name": "Top up the queue",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        3200
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "Writes the next draft so the queue stays full."
+    },
+    {
+      "id": "b5a1ff0f-333b-5c06-bd1b-a50bf5ce3641",
+      "name": "Say why not",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        3380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read the click').first().json.response_url }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ response_type: 'ephemeral', replace_original: false, text: !$('Get the clicked post').first().json.image_url ? 'This post has no image yet. Edit and save to draw it again.' : 'This post is already ' + $('Get the clicked post').first().json.status + '.' }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "notes": "A private reply to the person who clicked."
+    },
+    {
+      "id": "527a5aef-d3c4-5f77-97ab-77958a7f31fd",
+      "name": "Build the edit modal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        3520
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The words of a draft in a modal. Saving a new headline or product line draws the image again.\nconst r = $('Get the clicked post').first().json;\nconst c = $('Read the click').first().json;\nconst input = (key, label, initial, max, multiline, optional) => ({ type: 'input', block_id: key, optional: !!optional, label: { type: 'plain_text', text: label },\n  element: Object.assign({ type: 'plain_text_input', action_id: key, max_length: max, multiline: !!multiline }, initial ? { initial_value: String(initial).slice(0, max) } : {}) });\nconst editable = ['draft', 'failed'].includes(r.status);\nconst blocks = [{ type: 'section', text: { type: 'mrkdwn', text: '*' + String(r.product_title || 'Post').replace(/[<>&]/g, '') + '*' } }];\nif (editable) blocks.push(input('headline', 'Headline on the image (30 fits)', r.headline, 60), input('product_line', 'Product line on the image (58 fits)', r.product_line, 90),\n  input('caption', 'Caption', r.caption, 2200, true), input('alt_text', 'Alt text', r.alt_text, 1000, true, true));\nelse blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'This post is ' + r.status + '. Cancel it on the card first, then edit the draft.' }] });\nconst view = { type: 'modal', callback_id: 'ig_edit', private_metadata: JSON.stringify({ post_id: r.id }), title: { type: 'plain_text', text: 'Edit post' }, close: { type: 'plain_text', text: 'Close' }, blocks };\nif (editable) view.submit = { type: 'plain_text', text: 'Save' };\nreturn [{ json: { trigger_id: c.trigger_id, view } }];"
+      }
+    },
+    {
+      "id": "b7375282-203e-5b80-83b5-98058e0c0012",
+      "name": "Open the edit modal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        3520
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/views.open",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "Slack's trigger_id lasts 3 seconds, so nothing slow goes before this."
+    },
+    {
+      "id": "02fcbb98-2e76-5cca-9e21-d5d19ebfe09d",
+      "name": "Check the edit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        3700
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The edited words, held to the same rules as a new draft. Problems show on the card; nothing is blocked.\nconst r = $('Get the clicked post').first().json;\nconst e = $('Read the click').first().json.edit || {};\nconst one = (k, d) => (e[k] == null ? d : String(e[k]).replace(/\\s+/g, ' ').trim());\nconst headline = one('headline', r.headline), product_line = one('product_line', r.product_line);\nconst caption = e.caption == null ? r.caption : String(e.caption).replace(/\\r/g, '').replace(/[ \\t]+\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\nlet alt_text = one('alt_text', r.alt_text);\nif (headline !== r.headline || product_line !== r.product_line) alt_text = alt_text.replace(/Text on the image: .*$/, 'Text on the image: ' + headline + ' ' + product_line);\nconst problems = [];\nif (headline.length > 30) problems.push(`Headline is ${headline.length} characters (30 fits the frame).`);\nif (product_line.length > 58) problems.push(`Product line is ${product_line.length} characters; it will be cut off on the frame.`);\nif (caption.length > 2200) problems.push(`Caption is ${caption.length} characters (2,200 max).`);\nif ((caption.match(/#\\w+/g) || []).length > 5) problems.push('More than 5 hashtags.');\nif (/https?:\\/\\/|www\\./i.test(caption)) problems.push('Has a web link (links in captions are not clickable).');\nif (/\\p{Extended_Pictographic}/u.test(headline + caption)) problems.push('Has an emoji.');\nconst redraw = headline !== r.headline || product_line !== r.product_line;\nreturn [{ json: { headline, product_line, caption, alt_text, problems: JSON.stringify(problems), redraw, editable: ['draft', 'failed'].includes(r.status) } }];"
+      }
+    },
+    {
+      "id": "9fa80407-3ee4-5c61-be97-ee9171605687",
+      "name": "Still a draft?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        3700
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2d5aa236-59e3-52cc-87d8-cf30bebbd6d7",
+              "leftValue": "={{ $json.editable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ea4306ad-dcfe-5d4a-a661-41a4a9ce7960",
+      "name": "Save the edit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1980,
+        3700
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_posts set headline = $1, product_line = $2, caption = $3, alt_text = $4, problems = $5, \"updatedAt\" = now() where id = $6::integer returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.headline)) ?? null, (($json.product_line)) ?? null, (($json.caption)) ?? null, (($json.alt_text)) ?? null, (($json.problems)) ?? null, (($('Get the clicked post').first().json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "ff453a34-3eec-59b0-87ad-dca83bf78543",
+      "name": "Redraw the image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        3700
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a6f00902-a3cc-5be6-b501-100725609d2a",
+              "leftValue": "={{ $('Check the edit').first().json.redraw }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1cb18dde-2aff-5be3-ae31-fad8b8952056",
+      "name": "Image after an edit",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2420,
+        3640
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "74cff947-ccc4-54da-83db-a60ca22a451c",
+              "name": "lane",
+              "value": "render",
+              "type": "string"
+            },
+            {
+              "id": "dd6fd0b6-c7a9-5bf2-bff9-ae8f09d5751d",
+              "name": "post_id",
+              "value": "={{ String($('Get the clicked post').first().json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "16b24dcb-ebb2-508d-84e9-ae3c99f2adb3",
+      "name": "Draw it again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2640,
+        3640
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "4275410b-8595-5013-803f-40d32ec4ff4a",
+      "name": "Can be skipped?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        3880
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c66a95a0-4bd2-544e-ba5d-7d684ff40e28",
+              "leftValue": "={{ ['draft', 'failed'].includes($json.status) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3ea491c9-2072-56b1-a31b-398b64782021",
+      "name": "Mark skipped",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        3880
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_posts set status = $1, decided_by = $2, decided_at = $3, \"updatedAt\" = now() where id = $4::integer returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"skipped\")) ?? null, (($('Read the click').first().json.user)) ?? null, (((x => x ? new Date(x).toISOString() : null)($now.toISO()))) ?? null, (($('Get the clicked post').first().json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "fd6b81e5-d11f-5a98-8f8a-a45007c203c9",
+      "name": "Is it scheduled?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        4060
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a3dc8e80-cc0f-5a86-ad27-3a227dfc5533",
+              "leftValue": "={{ $json.status === 'scheduled' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "A post that is already posting or posted cannot be cancelled here."
+    },
+    {
+      "id": "2f0d8055-7df5-5092-93f6-8a993f12f534",
+      "name": "Back to a draft",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        4060
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_posts set status = $1, scheduled_for = $2, decided_by = $3, decided_at = $4, \"updatedAt\" = now() where id = $5::integer and status = 'scheduled' returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"draft\")) ?? null, (((x => x ? new Date(x).toISOString() : null)(null))) ?? null, ((\"\")) ?? null, (((x => x ? new Date(x).toISOString() : null)(null))) ?? null, (($('Get the clicked post').first().json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "8d937423-b8c8-501f-bae6-efe6416e5ccd",
+      "name": "Card after a click",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2640,
+        3880
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "19122173-6097-56e2-9ef1-8eb94b42c11f",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "8b97518b-2fe8-5e3e-8988-9207c027913e",
+              "name": "post_id",
+              "value": "={{ String($('Get the clicked post').first().json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1522c1bf-bb4a-5c99-b340-9fe497eb4bcf",
+      "name": "Redraw the card",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2860,
+        3880
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "3d92aeac-7d2a-5199-ae87-30daf7ac49f0",
+      "name": "Was it a skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3080,
+        3880
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f830b1c1-e65b-55e0-8730-8191eb8581b3",
+              "leftValue": "={{ $('Read the click').first().json.action === 'skip' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dae2de15-25f6-53f8-ad20-19388e31e243",
+      "name": "Top-up after a skip",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3300,
+        3880
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6a4e795d-e1af-596d-acd9-c6db9e1d3a19",
+              "name": "lane",
+              "value": "top_up",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6bd1e13e-8ff2-5b4c-b9a9-84f054444e2b",
+      "name": "Top up after a skip",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        3880
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "3e3a7c9a-8110-5aa9-abd2-48f98d9b153d",
+      "name": "Book settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        4700
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c781da11-5c77-5cdd-944c-632d44e45f9a",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            },
+            {
+              "id": "8f5979b6-b7a8-58d7-8443-892957f96b7c",
+              "name": "posts_per_week",
+              "value": 4,
+              "type": "number"
+            },
+            {
+              "id": "0dec176c-1702-5f19-887f-517f98cc9e38",
+              "name": "post_from",
+              "value": "07:30",
+              "type": "string"
+            },
+            {
+              "id": "5c7df7f5-d95a-55be-aab6-b4981d199246",
+              "name": "post_until",
+              "value": "21:00",
+              "type": "string"
+            },
+            {
+              "id": "6ed5e087-ccf7-54f0-a4c7-0f7eed02c37d",
+              "name": "first_slot_after",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "posts_per_week: your pace. first_slot_after: nothing posts before this date and time (handy for a launch, or a test)."
+    },
+    {
+      "id": "bbdaeb4e-2e77-5ed9-adfb-ac4bf81a8e4a",
+      "name": "Get the post to book",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        4700
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts where id::text = $1::text order by id limit 1",
+        "options": {
+          "queryReplacement": "={{ [ (($('Called by this workflow').first().json.post_id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "87f02d06-848f-5b2e-8813-fc32d91d8207",
+      "name": "Still bookable?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        4700
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1c46f77-04c5-50cd-9024-762fd9056336",
+              "leftValue": "={{ ['draft', 'failed'].includes($json.status) && !!$json.image_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Checked again here, in case two clicks land together."
+    },
+    {
+      "id": "57f40f6c-43e2-581d-b842-fb1c93451200",
+      "name": "Get booked posts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        4700
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts where status::text = $1::text or status::text = $2::text or status::text = $3::text order by id",
+        "options": {
+          "queryReplacement": "={{ [ ((\"scheduled\")) ?? null, ((\"publishing\")) ?? null, ((\"posted\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "5e896b03-85f9-5465-b1e7-5a4ec419b061",
+      "name": "Pick a slot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        4700
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The next posting slot: one gap after the latest scheduled or posted post. The gap is a week divided by posts_per_week,\n// jittered by up to 15% so posts don't land on the same minute, never sooner than 15 minutes from now, and moved into posting hours in your time zone.\nconst s = $('Book settings').first().json;\nconst post = $('Get the post to book').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r.id && String(r.id) !== String(post.id));\nconst ms = t => (t ? new Date(t).getTime() : NaN);\nconst now = Date.now(), gap = 7 * 864e5 / Math.max(Number(s.posts_per_week) || 1, 1);\nconst taken = rows.map(r => ms(r.status === 'posted' ? r.posted_at : r.scheduled_for)).filter(x => !isNaN(x));\nconst last = taken.length ? Math.max(...taken) : null;\nlet t = last == null ? now + 15 * 6e4 : Math.max(now + 15 * 6e4, last + gap + (Math.random() - 0.5) * 0.3 * gap);\nif (s.first_slot_after) t = Math.max(t, ms(s.first_slot_after));\nconst [fh, fm] = s.post_from.split(':').map(Number), [uh, um] = s.post_until.split(':').map(Number);\nlet d = DateTime.fromMillis(t).setZone(s.timezone);\nconst mins = d.hour * 60 + d.minute;\nif (mins < fh * 60 + fm || mins > uh * 60 + um) {\n  if (mins > uh * 60 + um) d = d.plus({ days: 1 });\n  d = d.set({ hour: fh, minute: fm, second: 0, millisecond: 0 }).plus({ minutes: Math.floor(Math.random() * 90) });\n}\nreturn [{ json: { id: post.id, slot: d.toUTC().toISO({ suppressMilliseconds: true }) } }];"
+      },
+      "notes": "One gap after the last post, jittered, inside posting hours."
+    },
+    {
+      "id": "46f236a5-d30f-5026-b6e7-aee7f82eccb6",
+      "name": "Save the slot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        4700
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_posts set status = $1, scheduled_for = $2, error = $3, decided_by = $4, decided_at = $5, \"updatedAt\" = now() where id = $6::integer returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"scheduled\")) ?? null, (((x => x ? new Date(x).toISOString() : null)($json.slot))) ?? null, ((\"\")) ?? null, (($('Called by this workflow').first().json.user)) ?? null, (((x => x ? new Date(x).toISOString() : null)($now.toISO()))) ?? null, (($json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "62bb5048-2d11-5873-8530-f3e5208b286b",
+      "name": "Card after booking",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        4700
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d07672eb-69c2-5e80-b9fe-8b5670e77543",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "b6e5009e-34ae-525e-8c27-641bd50364f3",
+              "name": "post_id",
+              "value": "={{ String($('Get the post to book').first().json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ca81270d-d403-5565-afab-6c86062b20de",
+      "name": "Show the booking",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1980,
+        4700
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "fb4eaeba-29b7-569b-bcab-c1f4021f7063",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        5120
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3def8042-876b-5193-9cb0-612bf7d251dc",
+      "name": "Publish due posts now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        5300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "44320641-d27e-551e-af74-960133a900af",
+      "name": "Publish settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        5180
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "afd86744-e9dd-5ee2-9174-66c72820b8db",
+              "name": "api_base",
+              "value": "https://graph.instagram.com/v25.0",
+              "type": "string"
+            },
+            {
+              "id": "962359df-942e-5904-8a7a-4cfc5f94dcdb",
+              "name": "log_channel",
+              "value": "#instagram-log",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "api_base: the Instagram API with Instagram Login host and version."
+    },
+    {
+      "id": "216b2dc7-b40c-5c80-a40d-1f21c575f350",
+      "name": "Get the Instagram token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        5180
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_token where account::text = $1::text order by id limit 1",
+        "options": {
+          "queryReplacement": "={{ [ ((\"instagram\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "f3dd8f07-d451-5c92-933e-18ddd589ccbb",
+      "name": "Get scheduled posts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        5180
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts where status::text = $1::text order by id",
+        "options": {
+          "queryReplacement": "={{ [ ((\"scheduled\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "8d005338-54ed-5cc0-8aa4-9e810be2ee99",
+      "name": "Pick the due post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        5180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One post a run: the oldest scheduled post whose slot has passed. Nothing happens without a saved token.\nconst tok = $('Get the Instagram token').first().json;\nconst due = $input.all().map(i => i.json).filter(r => r.id && r.status === 'scheduled' && new Date(r.scheduled_for).getTime() <= Date.now())\n  .sort((a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for));\nif (!due.length || !tok.token || !tok.ig_user_id) return [];\nreturn [{ json: { ...due[0], token: tok.token, ig_user_id: tok.ig_user_id } }];"
+      }
+    },
+    {
+      "id": "2664926a-0c07-560c-9d30-f427ff2a8dda",
+      "name": "Mark publishing",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        5180
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_posts set status = $1, \"updatedAt\" = now() where id = $2::integer and status = 'scheduled' returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"publishing\")) ?? null, (($json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Only if it is still scheduled, so two runs never post the same row."
+    },
+    {
+      "id": "91c656b3-2562-5841-b8cd-9afca14c253b",
+      "name": "Ours to post?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        5180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bb57a6e3-f4a5-5d1d-a1a6-95d2f054a900",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "alwaysOutputData": false
+    },
+    {
+      "id": "ccc5c7a4-57ef-5a30-96eb-04b32ff04f29",
+      "name": "Check the daily limit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        5180
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Publish settings').first().json.api_base }}/{{ $('Pick the due post').first().json.ig_user_id }}/content_publishing_limit?fields=quota_usage,config",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Pick the due post').first().json.token }}"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Meta caps API posts in any 24 hours."
+    },
+    {
+      "id": "db316b40-6084-5c53-a166-c9852d44f383",
+      "name": "Under the limit?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        5180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d4519a2b-b072-53b8-8d8a-80247cbde729",
+              "leftValue": "={{ !($json.data?.[0]?.config?.quota_total) || $json.data[0].quota_usage < $json.data[0].config.quota_total }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ffd4b15f-a911-54e1-91d4-fb6ada391bda",
+      "name": "Create the container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        5100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Publish settings').first().json.api_base }}/{{ $('Pick the due post').first().json.ig_user_id }}/media",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Pick the due post').first().json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const r = $('Pick the due post').first().json; return JSON.stringify({ image_url: r.image_url, caption: r.caption, alt_text: String(r.alt_text || '').slice(0, 1000) }); })() }}"
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Instagram fetches the JPEG from Shopify Files now. Containers expire after 24 hours, so this happens at post time, not at approval."
+    },
+    {
+      "id": "154520f6-677d-538a-a1c1-0504abdfcc7b",
+      "name": "Container made?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        5100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3f4f6b47-5d86-593c-ad41-a53c87bb7a4c",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7836b46e-fea3-50e8-bb3a-834d6ee8632a",
+      "name": "Let Instagram process",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        5020
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "unit": "seconds",
+        "amount": 10
+      },
+      "webhookId": "5b3291ca-c645-5427-b062-bae7c2334dea"
+    },
+    {
+      "id": "15447671-271a-5f40-bcd6-54642b408a94",
+      "name": "Check the container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        5020
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Publish settings').first().json.api_base }}/{{ $('Create the container').first().json.id }}?fields=status_code,status",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Pick the due post').first().json.token }}"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ae009efb-838c-5314-8889-2a43fe2535c6",
+      "name": "Ready?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2860,
+        5020
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "finished",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7be0b91e-a476-5888-aad0-8b088fd98803",
+                    "leftValue": "={{ $json.status_code === 'FINISHED' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "wait",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "55a47544-616c-52aa-a8b9-75eb7a922005",
+                    "leftValue": "={{ $json.status_code === 'IN_PROGRESS' && $runIndex < 5 }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "failed"
+        }
+      },
+      "notes": "Checks up to 6 times, 10 seconds apart."
+    },
+    {
+      "id": "fdcce180-c53b-59ac-afb1-7b41c25aadbd",
+      "name": "Publish it",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        4940
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Publish settings').first().json.api_base }}/{{ $('Pick the due post').first().json.ig_user_id }}/media_publish",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Pick the due post').first().json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ creation_id: $('Create the container').first().json.id }) }}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8fdb8fae-3f95-5e93-b997-34de4cc40b12",
+      "name": "Published?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3300,
+        4940
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d65d6274-06b4-54d9-8fe5-27b6af473a0f",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ed2e7956-4fc8-5224-91b6-00aae15a65d0",
+      "name": "Get the permalink",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        4880
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Publish settings').first().json.api_base }}/{{ $('Publish it').first().json.id }}?fields=permalink,timestamp",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Pick the due post').first().json.token }}"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "133bdfe3-ddcb-50d3-b8c4-ae41a7bc45b0",
+      "name": "Read the outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        5180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// posted with the link, failed with Instagram's reason, or back to scheduled when the daily limit is used up.\n// Instagram's own words from an HTTP error ('400 - \"{\\\"error\\\":{\\\"message\\\": ...}}\"'), else the raw message.\nconst igError = e => { const m = String(e?.message || e || ''); let t = m.slice(m.indexOf(' - ') + 3);\n  for (let i = 0; i < 2; i++) { try { t = JSON.parse(t); } catch (x) { break; } if (typeof t !== 'string') break; }\n  return (t && t.error && (t.error.error_user_msg || t.error.message)) || m; };\nconst r = $('Pick the due post').first().json;\nconst err = n => { if (!$(n).isExecuted) return ''; const j = $(n).last().json || {}; return j.error ? igError(j.error) : ''; };\nconst ran = n => $(n).isExecuted;\nlet out;\nif (ran('Get the permalink')) {\n  const p = $('Get the permalink').first().json;\n  out = { status: 'posted', media_id: String($('Publish it').first().json.id), post_url: p.permalink || '', posted_at: p.timestamp ? new Date(p.timestamp).toISOString() : new Date().toISOString(), error: '' };\n} else if (ran('Under the limit?') && !ran('Create the container')) {\n  out = { status: 'scheduled', error: 'Instagram\\'s daily API limit is used up. It goes out on a later run.' };\n} else {\n  const c = ran('Check the container') ? $('Check the container').last().json : {};\n  const why = err('Publish it') || (c.status_code && c.status_code !== 'FINISHED' ? 'Instagram could not process the image (' + c.status_code + (c.status ? ': ' + c.status : '') + ').' : '')\n    || err('Check the container') || err('Create the container') || err('Check the daily limit') || 'Unknown error';\n  out = { status: 'failed', error: why.slice(0, 400) };\n}\nreturn [{ json: { id: r.id, container_id: ran('Create the container') ? String($('Create the container').first().json.id || '') : '', media_id: '', post_url: '', posted_at: null, ...out, product_title: r.product_title } }];"
+      },
+      "notes": "Every path through the lane ends here."
+    },
+    {
+      "id": "75255920-799c-5822-a3ce-041c6952dede",
+      "name": "Save the outcome",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3960,
+        5180
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_posts set status = $1, container_id = $2, media_id = $3, post_url = $4, posted_at = $5, error = $6, \"updatedAt\" = now() where id = $7::integer returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.status)) ?? null, (($json.container_id)) ?? null, (($json.media_id)) ?? null, (($json.post_url)) ?? null, (((x => x ? new Date(x).toISOString() : null)($json.posted_at))) ?? null, (($json.error)) ?? null, (($json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "03afc28c-45df-5d22-a01c-8747b5277c59",
+      "name": "Card after publishing",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4180,
+        5180
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8922760c-3993-574d-9ae3-2cb77d4a3cec",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "2202b2d0-be51-586c-8400-20592433107d",
+              "name": "post_id",
+              "value": "={{ String($('Read the outcome').first().json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d63ae48c-0886-5edd-9202-f90abc1c27d6",
+      "name": "Show the outcome",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4400,
+        5180
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "f61488d3-f8e1-5117-bb8c-e72148ddb47a",
+      "name": "Post to the log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        5360
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Publish settings').first().json.log_channel, text: (r => r.status === 'posted' ? ':white_check_mark: <' + r.post_url + '|' + r.product_title + '> is on Instagram.' : r.status === 'failed' ? ':x: ' + r.product_title + ' did not post: ' + r.error : ':hourglass: ' + r.product_title + ': ' + r.error)($('Read the outcome').first().json), unfurl_links: false, unfurl_media: false }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "01992179-8b7e-5c41-bcae-496498e30a71",
+      "name": "Every Monday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        5840
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "38701f4e-6070-55e7-a91c-1fcdc74f2fd1",
+      "name": "Refresh the token now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        6020
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "70a1f5f8-ea2d-5f3a-93d7-06510e0a8dba",
+      "name": "Token settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        5900
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "459ab326-906e-59e6-99f2-226d9250559e",
+              "name": "log_channel",
+              "value": "#instagram-log",
+              "type": "string"
+            },
+            {
+              "id": "6922d7bd-3b09-5d35-8415-6c4c37a8b1f0",
+              "name": "warn_days",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6ad278da-b226-5f4e-bd80-a3a46bea8718",
+      "name": "Get the token to refresh",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        5900
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_token where account::text = $1::text order by id limit 1",
+        "options": {
+          "queryReplacement": "={{ [ ((\"instagram\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "c4c47cf4-33e3-57ef-87a8-20dc1204c946",
+      "name": "Refresh with Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        5900
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token={{ $json.token }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Works once the token is a day old; each refresh lasts 60 days."
+    },
+    {
+      "id": "109af9ee-debc-5a4e-a3e7-6ffd41cd4631",
+      "name": "Read the refresh",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        5900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The new token and its expiry, or the old one kept with a warning.\n// Instagram's own words from an HTTP error ('400 - \"{\\\"error\\\":{\\\"message\\\": ...}}\"'), else the raw message.\nconst igError = e => { const m = String(e?.message || e || ''); let t = m.slice(m.indexOf(' - ') + 3);\n  for (let i = 0; i < 2; i++) { try { t = JSON.parse(t); } catch (x) { break; } if (typeof t !== 'string') break; }\n  return (t && t.error && (t.error.error_user_msg || t.error.message)) || m; };\nconst s = $('Token settings').first().json;\nconst row = $('Get the token to refresh').first().json || {};\nconst r = $input.first().json || {};\nif (!row.token) return [{ json: { id: null, warn: ':warning: Instagram is not connected. Open the Save your Instagram token form.' } }];\nconst ok = !!r.access_token;\nconst expires = ok ? new Date(Date.now() + Number(r.expires_in || 5184000) * 1000).toISOString() : row.expires_at;\nconst days = Math.floor((new Date(expires).getTime() - Date.now()) / 864e5);\nlet warn = '';\nif (!ok) warn = `:warning: Instagram token refresh failed (${String(igError(r.error) || 'no token came back').slice(0, 200)}). It runs out in ${days} days.`;\nif (days < s.warn_days) warn = `:warning: The Instagram token runs out in ${days} days. ` + (ok ? '' : 'Paste a new one in the Save your Instagram token form.');\nreturn [{ json: { id: row.id, token: ok ? r.access_token : row.token, expires_at: expires, refreshed_at: ok ? new Date().toISOString() : row.refreshed_at, warn } }];"
+      }
+    },
+    {
+      "id": "a1817f68-579c-5922-bbb2-4b70c4f7c2dd",
+      "name": "Have a token?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        5900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "38d4baf1-5355-5786-8cc3-597044ef26bf",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0d306aca-df8e-5f60-b789-bf722bb1aa2e",
+      "name": "Save the new token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1320,
+        5840
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update instagram_token set token = $1, expires_at = $2, refreshed_at = $3, \"updatedAt\" = now() where id = $4::integer returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.token)) ?? null, (((x => x ? new Date(x).toISOString() : null)($json.expires_at))) ?? null, (((x => x ? new Date(x).toISOString() : null)($json.refreshed_at))) ?? null, (($json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "fe892055-8bc1-5290-b427-4753fcad6817",
+      "name": "Warn someone?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        6060
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c9dcdec5-c26b-5d7a-bc5e-82d8094f08f5",
+              "leftValue": "={{ !!$('Read the refresh').first().json.warn }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "046c3a7a-2989-50ef-a056-c4fb1f746758",
+      "name": "Warn the log channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        6060
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Token settings').first().json.log_channel, text: $('Read the refresh').first().json.warn, unfurl_links: false, unfurl_media: false }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "4df2b0e3-2984-5742-bc39-5efe3616e242",
+      "name": "Monday morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        6280
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "189d699b-e24d-514d-9d13-1d1d04cf07d0",
+      "name": "Send the report now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        6460
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "decef350-f775-5bcb-a427-08ef5dc697ef",
+      "name": "Report settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        6340
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "eada238b-9878-5ece-9c5f-1c78046fff9b",
+              "name": "log_channel",
+              "value": "#instagram-log",
+              "type": "string"
+            },
+            {
+              "id": "209339b4-660f-5e05-ae7e-8b1af12f41b9",
+              "name": "review_channel",
+              "value": "#instagram",
+              "type": "string"
+            },
+            {
+              "id": "a922bd69-4c0b-54b7-b621-479290d4bca0",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            },
+            {
+              "id": "9193f1e0-9955-5364-87e4-ecc73d8f380b",
+              "name": "old_draft_days",
+              "value": 7,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "55fc7146-5d53-5d6e-a962-8de6e482aa30",
+      "name": "Get every post",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        6340
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from instagram_posts order by id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "b9387964-82d6-5c45-88ea-768ad54ce1c0",
+      "name": "Write the report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        6340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Last week's posts, the queue and when it runs out, and drafts that have waited too long.\nconst s = $('Report settings').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r.id);\nconst day = 864e5, now = Date.now();\nconst fmt = t => DateTime.fromISO(new Date(t).toISOString()).setZone(s.timezone).toFormat('ccc d LLL');\nconst posted = rows.filter(r => r.status === 'posted' && now - new Date(r.posted_at).getTime() < 7 * day);\nconst sched = rows.filter(r => r.status === 'scheduled').sort((a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for));\nconst drafts = rows.filter(r => r.status === 'draft');\nconst oldest = drafts.length ? Math.floor((now - Math.min(...drafts.map(r => new Date(r.createdAt).getTime()))) / day) : 0;\nconst failed = rows.filter(r => r.status === 'failed');\nconst lines = ['*Instagram this week*'];\nlines.push(posted.length ? `Posted ${posted.length}: ` + posted.map(r => `<${r.post_url}|${r.product_title}>`).join(', ') : 'Nothing posted in the last 7 days.');\nlines.push(sched.length ? `Scheduled: ${sched.length}. The queue runs out after ${fmt(sched[sched.length - 1].scheduled_for)}.` : ':warning: Nothing is scheduled, so nothing will post. Approve drafts in <#' + s.review_channel + '>.');\nif (drafts.length) lines.push(`Waiting for review: ${drafts.length}, the oldest for ${oldest} day${oldest === 1 ? '' : 's'}.` + (oldest >= s.old_draft_days ? ' :warning:' : ''));\nif (failed.length) lines.push(`Failed: ${failed.length} (Try again on each card).`);\nreturn [{ json: { text: lines.join('\\n') } }];"
+      }
+    },
+    {
+      "id": "a30d7705-6d6a-5534-949b-4cf80d1c8e19",
+      "name": "Post the report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        6340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Report settings').first().json.log_channel, text: $json.text, unfurl_links: false, unfurl_media: false }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Create instagram_posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save your Instagram token": {
+      "main": [
+        [
+          {
+            "node": "Connect settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Connect settings": {
+      "main": [
+        [
+          {
+            "node": "Check the token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the token": {
+      "main": [
+        [
+          {
+            "node": "Read the account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the account": {
+      "main": [
+        [
+          {
+            "node": "Token works?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token works?": {
+      "main": [
+        [
+          {
+            "node": "Save the token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not connected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the token": {
+      "main": [
+        [
+          {
+            "node": "Connected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Called by this workflow": {
+      "main": [
+        [
+          {
+            "node": "Which lane?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every morning": {
+      "main": [
+        [
+          {
+            "node": "Draft settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft posts now": {
+      "main": [
+        [
+          {
+            "node": "Draft settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which lane?": {
+      "main": [
+        [
+          {
+            "node": "Draft settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Card settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Render settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Book settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write the post",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Frame for the draft": {
+      "main": [
+        [
+          {
+            "node": "Draw the frame",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card for the draft": {
+      "main": [
+        [
+          {
+            "node": "Post the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto booking": {
+      "main": [
+        [
+          {
+            "node": "Book without approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft settings": {
+      "main": [
+        [
+          {
+            "node": "Get all posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all posts": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Get products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get products": {
+      "main": [
+        [
+          {
+            "node": "Pick the next products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick the next products": {
+      "main": [
+        [
+          {
+            "node": "Look at the photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Look at the photo": {
+      "main": [
+        [
+          {
+            "node": "Read the photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the photo": {
+      "main": [
+        [
+          {
+            "node": "Write the post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the post": {
+      "main": [
+        [
+          {
+            "node": "Check the post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the post": {
+      "main": [
+        [
+          {
+            "node": "Save the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the draft": {
+      "main": [
+        [
+          {
+            "node": "Frame for the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draw the frame": {
+      "main": [
+        [
+          {
+            "node": "Card for the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the card": {
+      "main": [
+        [
+          {
+            "node": "Approval needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval needed?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Auto booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card settings": {
+      "main": [
+        [
+          {
+            "node": "Get the post for the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the post for the card": {
+      "main": [
+        [
+          {
+            "node": "Build the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the card": {
+      "main": [
+        [
+          {
+            "node": "Post or update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post or update the card": {
+      "main": [
+        [
+          {
+            "node": "New card?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New card?": {
+      "main": [
+        [
+          {
+            "node": "Save where the card is",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Card done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save where the card is": {
+      "main": [
+        [
+          {
+            "node": "Card done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Frame page": {
+      "main": [
+        [
+          {
+            "node": "Frame settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Frame settings": {
+      "main": [
+        [
+          {
+            "node": "Get the post for the frame",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the post for the frame": {
+      "main": [
+        [
+          {
+            "node": "Build the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the page": {
+      "main": [
+        [
+          {
+            "node": "Send the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render settings": {
+      "main": [
+        [
+          {
+            "node": "Get the post to draw",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the post to draw": {
+      "main": [
+        [
+          {
+            "node": "Screenshot the frame",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screenshot the frame": {
+      "main": [
+        [
+          {
+            "node": "Name the file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Name the file": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Render": {
+      "main": [
+        [
+          {
+            "node": "Keep it in Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep it in Shopify": {
+      "main": [
+        [
+          {
+            "node": "Let Shopify process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Let Shopify process": {
+      "main": [
+        [
+          {
+            "node": "Read the file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the file": {
+      "main": [
+        [
+          {
+            "node": "Collect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect": {
+      "main": [
+        [
+          {
+            "node": "Save the image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the image": {
+      "main": [
+        [
+          {
+            "node": "Old image to delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Old image to delete?": {
+      "main": [
+        [
+          {
+            "node": "Delete the old image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Frame done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete the old image": {
+      "main": [
+        [
+          {
+            "node": "Frame done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Read the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the click": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Answer Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not from Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Slack": {
+      "main": [
+        [
+          {
+            "node": "Get the clicked post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the clicked post": {
+      "main": [
+        [
+          {
+            "node": "Route the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking request": {
+      "main": [
+        [
+          {
+            "node": "Book it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top-up request": {
+      "main": [
+        [
+          {
+            "node": "Top up the queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route the click": {
+      "main": [
+        [
+          {
+            "node": "Can be booked?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build the edit modal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check the edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can be skipped?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is it scheduled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can be booked?": {
+      "main": [
+        [
+          {
+            "node": "Booking request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Say why not",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book it": {
+      "main": [
+        [
+          {
+            "node": "Top-up request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the edit modal": {
+      "main": [
+        [
+          {
+            "node": "Open the edit modal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image after an edit": {
+      "main": [
+        [
+          {
+            "node": "Draw it again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the edit": {
+      "main": [
+        [
+          {
+            "node": "Still a draft?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still a draft?": {
+      "main": [
+        [
+          {
+            "node": "Save the edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the edit": {
+      "main": [
+        [
+          {
+            "node": "Redraw the image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redraw the image?": {
+      "main": [
+        [
+          {
+            "node": "Image after an edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Card after a click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can be skipped?": {
+      "main": [
+        [
+          {
+            "node": "Mark skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is it scheduled?": {
+      "main": [
+        [
+          {
+            "node": "Back to a draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card after a click": {
+      "main": [
+        [
+          {
+            "node": "Redraw the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draw it again": {
+      "main": [
+        [
+          {
+            "node": "Card after a click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark skipped": {
+      "main": [
+        [
+          {
+            "node": "Card after a click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back to a draft": {
+      "main": [
+        [
+          {
+            "node": "Card after a click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top-up after a skip": {
+      "main": [
+        [
+          {
+            "node": "Top up after a skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redraw the card": {
+      "main": [
+        [
+          {
+            "node": "Was it a skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Was it a skip?": {
+      "main": [
+        [
+          {
+            "node": "Top-up after a skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card after booking": {
+      "main": [
+        [
+          {
+            "node": "Show the booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book settings": {
+      "main": [
+        [
+          {
+            "node": "Get the post to book",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the post to book": {
+      "main": [
+        [
+          {
+            "node": "Still bookable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still bookable?": {
+      "main": [
+        [
+          {
+            "node": "Get booked posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get booked posts": {
+      "main": [
+        [
+          {
+            "node": "Pick a slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick a slot": {
+      "main": [
+        [
+          {
+            "node": "Save the slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the slot": {
+      "main": [
+        [
+          {
+            "node": "Card after booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Publish settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish due posts now": {
+      "main": [
+        [
+          {
+            "node": "Publish settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card after publishing": {
+      "main": [
+        [
+          {
+            "node": "Show the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish settings": {
+      "main": [
+        [
+          {
+            "node": "Get the Instagram token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the Instagram token": {
+      "main": [
+        [
+          {
+            "node": "Get scheduled posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get scheduled posts": {
+      "main": [
+        [
+          {
+            "node": "Pick the due post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick the due post": {
+      "main": [
+        [
+          {
+            "node": "Mark publishing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark publishing": {
+      "main": [
+        [
+          {
+            "node": "Ours to post?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ours to post?": {
+      "main": [
+        [
+          {
+            "node": "Check the daily limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the daily limit": {
+      "main": [
+        [
+          {
+            "node": "Under the limit?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Under the limit?": {
+      "main": [
+        [
+          {
+            "node": "Create the container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create the container": {
+      "main": [
+        [
+          {
+            "node": "Container made?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Container made?": {
+      "main": [
+        [
+          {
+            "node": "Let Instagram process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Let Instagram process": {
+      "main": [
+        [
+          {
+            "node": "Check the container",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the container": {
+      "main": [
+        [
+          {
+            "node": "Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready?": {
+      "main": [
+        [
+          {
+            "node": "Publish it",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Let Instagram process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish it": {
+      "main": [
+        [
+          {
+            "node": "Published?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Published?": {
+      "main": [
+        [
+          {
+            "node": "Get the permalink",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the permalink": {
+      "main": [
+        [
+          {
+            "node": "Read the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the outcome": {
+      "main": [
+        [
+          {
+            "node": "Save the outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the outcome": {
+      "main": [
+        [
+          {
+            "node": "Card after publishing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post to the log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Monday": {
+      "main": [
+        [
+          {
+            "node": "Token settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh the token now": {
+      "main": [
+        [
+          {
+            "node": "Token settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token settings": {
+      "main": [
+        [
+          {
+            "node": "Get the token to refresh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the token to refresh": {
+      "main": [
+        [
+          {
+            "node": "Refresh with Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh with Instagram": {
+      "main": [
+        [
+          {
+            "node": "Read the refresh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the refresh": {
+      "main": [
+        [
+          {
+            "node": "Have a token?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Warn someone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Have a token?": {
+      "main": [
+        [
+          {
+            "node": "Save the new token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warn someone?": {
+      "main": [
+        [
+          {
+            "node": "Warn the log channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday morning": {
+      "main": [
+        [
+          {
+            "node": "Report settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send the report now": {
+      "main": [
+        [
+          {
+            "node": "Report settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report settings": {
+      "main": [
+        [
+          {
+            "node": "Get every post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get every post": {
+      "main": [
+        [
+          {
+            "node": "Write the report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the report": {
+      "main": [
+        [
+          {
+            "node": "Post the report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

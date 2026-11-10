@@ -9,7 +9,7 @@ The templates call the Shopify Admin GraphQL API (version 2026-10) with an acces
 ### Create the app
 
 1. Open the [Shopify Dev Dashboard](https://dev.shopify.com/dashboard) with the account that owns your store, and create an app.
-2. Give it the Admin API scopes the template needs. Read-only templates need `read_products`. Templates that create or change products also need `write_products`, and the README lists any others (add products to Shopify also needs `read_inventory`, `write_inventory`, `read_publications`, `write_publications` and `read_locations`; Shopify collections SEO needs `read_publications` and `write_publications`; category page SEO needs `read_online_store_navigation`; ecommerce internal linking needs `read_online_store_navigation` and `read_content`, plus `read_themes` if you turn on its theme check; automated inventory management needs `read_inventory`, `write_inventory`, `read_locations` and `write_online_store_navigation` (`urlRedirectCreate` makes the 301 when a discontinued product is archived); Shopify product images needs `read_files` and `write_files` (`fileUpdate` writes alt text and detaches old images); product data enrichment needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` to write Shopify's standard product attributes; Pinterest product pins needs `write_files` to keep its framed pin images in Shopify Files; Shopify product groups needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` (it creates the Product group metaobject and writes one entry per series); AI product FAQs needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` (Setup creates the Product FAQ metaobject type and Publish writes the entries); product manuals and spec sheets needs `read_files`, `write_files`, `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` (it uploads PDFs to Shopify Files and writes one Product document entry per file); Google Shopping feed optimisation needs `read_publications` and `write_publications` (it publishes and unpublishes products on the Google & YouTube channel)).
+2. Give it the Admin API scopes the template needs. Read-only templates need `read_products`. Templates that create or change products also need `write_products`, and the README lists any others (add products to Shopify also needs `read_inventory`, `write_inventory`, `read_publications`, `write_publications` and `read_locations`; Shopify collections SEO needs `read_publications` and `write_publications`; category page SEO needs `read_online_store_navigation`; ecommerce internal linking needs `read_online_store_navigation` and `read_content`, plus `read_themes` if you turn on its theme check; automated inventory management needs `read_inventory`, `write_inventory`, `read_locations` and `write_online_store_navigation` (`urlRedirectCreate` makes the 301 when a discontinued product is archived); Shopify product images needs `read_files` and `write_files` (`fileUpdate` writes alt text and detaches old images); product data enrichment needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` to write Shopify's standard product attributes; Pinterest product pins needs `write_files` to keep its framed pin images in Shopify Files; Shopify product groups needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` (it creates the Product group metaobject and writes one entry per series); AI product FAQs needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` (Setup creates the Product FAQ metaobject type and Publish writes the entries); product manuals and spec sheets needs `read_files`, `write_files`, `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` (it uploads PDFs to Shopify Files and writes one Product document entry per file); Google Shopping feed optimisation needs `read_publications` and `write_publications` (it publishes and unpublishes products on the Google & YouTube channel); Instagram product posts needs `read_files` and `write_files` to keep each post's image in Shopify Files).
 3. Release a version and install the app on your store. The app and the store must belong to the same Shopify organisation, or the token request is refused.
 4. Copy the app's **Client ID** and **Client secret** from its settings.
 
@@ -110,7 +110,7 @@ Each response reports its own cost, and the templates save it so you can see wha
 
 ## Firecrawl
 
-Used for pages that block a plain request, and by Pinterest product pins to screenshot its frame page.
+Used for pages that block a plain request, and by Pinterest product pins and Instagram product posts to screenshot their frame pages.
 
 1. Sign up at [firecrawl.dev](https://www.firecrawl.dev) and copy your API key (it starts with `fc-`). The free plan includes 1,000 credits a month, and one page costs one credit.
 2. In n8n, create a **Header Auth** credential with Name `Authorization` and Value `Bearer <your API key>`.
@@ -126,6 +126,18 @@ Pinterest product pins posts through [Zernio](https://zernio.com), which already
 2. Copy your API key (Settings > API keys) and the Pinterest account's id (Accounts).
 3. In n8n, create a **Header Auth** credential with Name `Authorization` and Value `Bearer <your API key>`.
 4. Select it on **List Pinterest boards**, **Schedule on Pinterest**, **Delete from Zernio** and **Ask Zernio**, and put the account id in the template's settings.
+
+## Instagram
+
+Instagram product posts publishes through the official Instagram API with Instagram Login. You need an Instagram professional account; a Facebook Page isn't needed.
+
+1. In the Instagram app, switch your account to a professional account: Settings > Account type and tools > Switch to professional account (Business or Creator).
+2. At [developers.facebook.com](https://developers.facebook.com/apps), create an app and choose the use case **Manage messaging & content on Instagram**.
+3. In the app, open that use case > **API setup with Instagram business login**. Under **Generate access tokens**, add your Instagram account and log in. If it asks for a tester role first: App roles > Roles > Add People > Instagram Tester, then accept the invite on instagram.com (Settings > Apps and websites > Tester invites).
+4. Click **Generate token** and copy it. It lasts 60 days; the template refreshes it every week.
+5. Paste it into the template's **Save your Instagram token** form (its production URL), not into a credential. The form checks it with Instagram and saves it.
+
+Posting to your own account works with the app's standard access; you don't need App Review unless other people's accounts will use your app.
 
 ## n8n API (workflow monitoring)
 
