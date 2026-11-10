@@ -9,7 +9,7 @@ The templates call the Shopify Admin GraphQL API (version 2026-10) with an acces
 ### Create the app
 
 1. Open the [Shopify Dev Dashboard](https://dev.shopify.com/dashboard) with the account that owns your store, and create an app.
-2. Give it the Admin API scopes the template needs. Read-only templates need `read_products`. Templates that create or change products also need `write_products`, and the README lists any others (add products to Shopify also needs `read_inventory`, `write_inventory`, `read_publications`, `write_publications` and `read_locations`; Shopify collections SEO needs `read_publications` and `write_publications`; category page SEO needs `read_online_store_navigation`; ecommerce internal linking needs `read_online_store_navigation` and `read_content`, plus `read_themes` if you turn on its theme check; automated inventory management needs `read_inventory`, `write_inventory`, `read_locations` and `write_online_store_navigation` (`urlRedirectCreate` makes the 301 when a discontinued product is archived); Shopify product images needs `read_files` and `write_files` (`fileUpdate` writes alt text and detaches old images); product data enrichment needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` to write Shopify's standard product attributes).
+2. Give it the Admin API scopes the template needs. Read-only templates need `read_products`. Templates that create or change products also need `write_products`, and the README lists any others (add products to Shopify also needs `read_inventory`, `write_inventory`, `read_publications`, `write_publications` and `read_locations`; Shopify collections SEO needs `read_publications` and `write_publications`; category page SEO needs `read_online_store_navigation`; ecommerce internal linking needs `read_online_store_navigation` and `read_content`, plus `read_themes` if you turn on its theme check; automated inventory management needs `read_inventory`, `write_inventory`, `read_locations` and `write_online_store_navigation` (`urlRedirectCreate` makes the 301 when a discontinued product is archived); Shopify product images needs `read_files` and `write_files` (`fileUpdate` writes alt text and detaches old images); product data enrichment needs `read_metaobjects`, `write_metaobjects`, `read_metaobject_definitions` and `write_metaobject_definitions` to write Shopify's standard product attributes; Pinterest product pins needs `write_files` to keep its framed pin images in Shopify Files).
 3. Release a version and install the app on your store. The app and the store must belong to the same Shopify organisation, or the token request is refused.
 4. Copy the app's **Client ID** and **Client secret** from its settings.
 
@@ -93,13 +93,22 @@ Each response reports its own cost, and the templates save it so you can see wha
 
 ## Firecrawl
 
-Used only for pages that block a plain request.
+Used for pages that block a plain request, and by Pinterest product pins to screenshot its frame page.
 
 1. Sign up at [firecrawl.dev](https://www.firecrawl.dev) and copy your API key (it starts with `fc-`). The free plan includes 1,000 credits a month, and one page costs one credit.
 2. In n8n, create a **Header Auth** credential with Name `Authorization` and Value `Bearer <your API key>`.
 3. Select it on the template's `Firecrawl scrape` node.
 
 If you'd rather not use it, set `use_firecrawl` to false in the template's settings.
+
+## Zernio (Pinterest posting)
+
+Pinterest product pins posts through [Zernio](https://zernio.com), which already has Pinterest's posting access (a new Pinterest developer app can only create pins that you alone can see until Pinterest reviews it). Zernio is free for one or two connected accounts, API included.
+
+1. Sign up at zernio.com and connect your Pinterest business account (Accounts > Connect).
+2. Copy your API key (Settings > API keys) and the Pinterest account's id (Accounts).
+3. In n8n, create a **Header Auth** credential with Name `Authorization` and Value `Bearer <your API key>`.
+4. Select it on **List Pinterest boards**, **Schedule on Pinterest**, **Delete from Zernio** and **Ask Zernio**, and put the account id in the template's settings.
 
 ## n8n API (workflow monitoring)
 

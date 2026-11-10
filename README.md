@@ -19,6 +19,7 @@ Free n8n templates for running an online store: monitoring competitor prices, ad
 | [n8n workflow monitoring](n8n-workflow-monitoring/) | Watches every workflow on your n8n instance: one Slack alert per outage instead of one per failure, schedules that stopped firing, runs that finished with nothing in them, a line when each recovers, and a morning all-clear. Reads the n8n API with a read-only key. No AI model needed. |
 | [Compatible accessories](compatible-accessories/) | Matches each accessory to the products it fits from what its manufacturer's page says, checks every quote in code and with a second AI pass, and writes the ones you approve in Slack to Shopify's Complementary products, with a Compatible with list on the accessory. |
 | [Shopify repricing engine](shopify-repricing-engine/) | Sets every price from three rules you can read (1 cent under the cheapest trusted competitor, your RRP, or cost plus per product type), never under break-even, stops itself when a feed looks wrong, and posts Slack cards for held prices and a daily digest with Revert. No AI model needed. |
+| [Pinterest product pins](pinterest-automation/) | Writes a pin for each product from its own data and a vision check on its photo, frames later pins with a headline or a review, asks you in Slack, and posts them at a steady pace through Zernio so nothing goes out twice. |
 
 ## Getting started
 

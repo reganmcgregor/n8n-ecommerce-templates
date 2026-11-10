@@ -1,0 +1,5569 @@
+{
+  "name": "Pinterest product pins (template)",
+  "nodes": [
+    {
+      "id": "b1891041-00c0-542c-b0c8-5deb87358c57",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        -200
+      ],
+      "parameters": {
+        "content": "## Pinterest product pins\nWrites a Pinterest pin for each product from its own data, a person approves it in Slack, and a paced queue posts it through Zernio so nothing goes out twice or in a burst. The image is always the real product photo: padded to 2:3 for the first pin, then placed in a fixed HTML frame with a headline, then with a customer review quote. No AI touches the image.\n\n### How it works\n1. **Setup** creates the `pins` and `pin_reviews` tables, adds one sample review and lists your Pinterest boards with their ids.\n2. **Draft** (every morning, and after each Approve or Skip) keeps `max_waiting` pins waiting in Slack. It picks products that match a board, works out each product's next pin (`pin_sequence`), looks at the photo with a vision model for the alt text, writes the title and description for Pinterest search, checks them and posts a card.\n3. **Frame** is the web page for framed pins. **Render** screenshots it with Firecrawl and keeps the JPEG in Shopify Files.\n4. **Review** takes Slack's button clicks: Approve, Edit, Skip, Cancel.\n5. **Book** gives an approved pin the next slot in your pace and schedules it in Zernio.\n6. **Sync** (hourly) reads back what went live and updates the card.\n\n### Setup\nCredentials: Shopify (client ID and secret, `read_products`, `write_files`), Slack bot token and signing secret, Ollama, Firecrawl, Zernio (header `Authorization: Bearer ...`). Fill in each lane's settings, run Setup, put the board ids in **Draft settings**, publish, and set your Slack app's Request URL to **Slack button click**'s production URL. Full steps in the README.\n\n### Customisation\nBoards, search phrases and skip words are in **Draft settings**. Swap the sample review for your own reviews in `pin_reviews` (or your review app's API). To post with Pinterest's own API, replace **Schedule on Pinterest** and **Ask Zernio**.",
+        "width": 900,
+        "height": 1340,
+        "color": 1
+      }
+    },
+    {
+      "id": "0e84e497-f84b-5759-b2e8-2ccc1b45f32f",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -200
+      ],
+      "parameters": {
+        "content": "## 1. Setup (run once)\nCreates `pins` and `pin_reviews` (keeps existing ones), adds a sample review, and lists your Pinterest boards from Zernio so you can copy their ids into **Draft settings**.",
+        "width": 1580,
+        "height": 380,
+        "color": 7
+      }
+    },
+    {
+      "id": "e28a418c-d54b-5c6e-9da5-71a10dda23bf",
+      "name": "Lane Draft",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        240
+      ],
+      "parameters": {
+        "content": "## 2. Draft (every morning, and after each Approve or Skip)\nKeeps up to `max_waiting` drafts in Slack, one pin per product at a time. Next pin in `pin_sequence` once the last one has been up `next_pin_after_days`. Vision model for the photo, chat model for the words, then the checks.",
+        "width": 4100,
+        "height": 680,
+        "color": 7
+      }
+    },
+    {
+      "id": "c91b8ddd-9785-5826-876d-de3669a0563e",
+      "name": "Lane Card",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        980
+      ],
+      "parameters": {
+        "content": "## 3. Card\nOne renderer for every state of a pin (draft, scheduled, posted, skipped, failed). Posts a new card or updates the existing one. Called by the other lanes.",
+        "width": 1980,
+        "height": 380,
+        "color": 7
+      }
+    },
+    {
+      "id": "5f06d4f5-ad5f-5df8-b041-26920de7bbe6",
+      "name": "Lane Frame",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1400
+      ],
+      "parameters": {
+        "content": "## 4. Frame (web page)\nThe 1000 x 1500 page for headline and review pins, drawn from the saved row only. Open `?id=<pin id>` in a browser to design it.",
+        "width": 1100,
+        "height": 380,
+        "color": 7
+      }
+    },
+    {
+      "id": "51dcca09-0a1a-5f23-9467-b2031f218213",
+      "name": "Lane Render",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1840
+      ],
+      "parameters": {
+        "content": "## 5. Render\nFirecrawl screenshots the frame page, wsrv.nl turns it into a JPEG, Shopify Files keeps it at a lasting URL for Slack and Zernio. A redrawn frame replaces the old file.",
+        "width": 3300,
+        "height": 470,
+        "color": 7
+      }
+    },
+    {
+      "id": "71e6d836-4cfa-5bb7-8a0e-6ed87b6659bb",
+      "name": "Lane Review",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2320
+      ],
+      "parameters": {
+        "content": "## 6. Review (Slack's Request URL)\nChecks Slack's signature first. Approve books a slot (never a sample review), Edit opens a modal, Skip drops the pin (on a first pin, the whole product), Cancel takes a scheduled pin back to a draft.",
+        "width": 3800,
+        "height": 1000,
+        "color": 7
+      }
+    },
+    {
+      "id": "89ba4579-a661-5858-9724-469bd02ce913",
+      "name": "Lane Book",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        3460
+      ],
+      "parameters": {
+        "content": "## 7. Book\nOne slot after the last scheduled or posted pin: a week divided by `pace` for the account's age, jittered, inside posting hours. Only a draft or failed pin can be booked.",
+        "width": 2620,
+        "height": 480,
+        "color": 7
+      }
+    },
+    {
+      "id": "bc898f86-1ee8-57a6-8638-d8c796ab1ac3",
+      "name": "Lane Sync",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        3960
+      ],
+      "parameters": {
+        "content": "## 8. Sync (hourly)\nAsks Zernio about pins whose slot has passed: posted with the pin link, or failed with Try again. One line per pin to the log channel.",
+        "width": 2020,
+        "height": 520,
+        "color": 7
+      }
+    },
+    {
+      "id": "89028ee6-4c30-5bdb-bc5d-8ba0274f8fc2",
+      "name": "Risk Zernio",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        3810
+      ],
+      "parameters": {
+        "content": "### Posts to Pinterest\nCreates a real scheduled pin in Zernio. Test with `first_slot_after` set weeks ahead, then Cancel.",
+        "width": 440,
+        "height": 110,
+        "color": 3
+      }
+    },
+    {
+      "id": "fef1d03f-8983-5729-9795-c797b7adc800",
+      "name": "Risk Shopify Files",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        2190
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify Files\nAdds one image file per frame, and deletes the old one when a frame is redrawn.",
+        "width": 440,
+        "height": 110,
+        "color": 3
+      }
+    },
+    {
+      "id": "bd714b43-6c38-55ad-bbfa-5a3a2c2eb747",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a94eed2d-0223-51de-9313-16181f8b84de",
+      "name": "Setup settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2a546630-d465-553a-80d8-9595278e83e6",
+              "name": "zernio_api",
+              "value": "https://zernio.com/api/v1",
+              "type": "string"
+            },
+            {
+              "id": "971c2cf2-fda3-5309-9d9f-04fd0dacbb28",
+              "name": "zernio_account_id",
+              "value": "YOUR_ZERNIO_PINTEREST_ACCOUNT_ID",
+              "type": "string"
+            },
+            {
+              "id": "d7746b5c-1d7a-5480-b851-3841fcbadfaf",
+              "name": "sample_review_handle",
+              "value": "your-product-handle",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "zernio_account_id: Zernio > Accounts > your Pinterest account. sample_review_handle: the handle of one of your products, so the sample review shows up on a pin."
+    },
+    {
+      "id": "b2feee79-65f0-53cf-b121-af29be7c447e",
+      "name": "Create pins",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "pins",
+        "columns": {
+          "column": [
+            {
+              "name": "product_id",
+              "type": "string"
+            },
+            {
+              "name": "product_title",
+              "type": "string"
+            },
+            {
+              "name": "handle",
+              "type": "string"
+            },
+            {
+              "name": "pin_no",
+              "type": "number"
+            },
+            {
+              "name": "pin_kind",
+              "type": "string"
+            },
+            {
+              "name": "board_key",
+              "type": "string"
+            },
+            {
+              "name": "board_name",
+              "type": "string"
+            },
+            {
+              "name": "board_id",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "name": "description",
+              "type": "string"
+            },
+            {
+              "name": "alt_text",
+              "type": "string"
+            },
+            {
+              "name": "headline",
+              "type": "string"
+            },
+            {
+              "name": "product_line",
+              "type": "string"
+            },
+            {
+              "name": "review_quote",
+              "type": "string"
+            },
+            {
+              "name": "review_rating",
+              "type": "number"
+            },
+            {
+              "name": "review_author",
+              "type": "string"
+            },
+            {
+              "name": "review_source",
+              "type": "string"
+            },
+            {
+              "name": "image_url",
+              "type": "string"
+            },
+            {
+              "name": "source_image",
+              "type": "string"
+            },
+            {
+              "name": "photo_kind",
+              "type": "string"
+            },
+            {
+              "name": "shopify_file_id",
+              "type": "string"
+            },
+            {
+              "name": "link",
+              "type": "string"
+            },
+            {
+              "name": "problems",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "slack_channel",
+              "type": "string"
+            },
+            {
+              "name": "slack_ts",
+              "type": "string"
+            },
+            {
+              "name": "decided_by",
+              "type": "string"
+            },
+            {
+              "name": "decided_at",
+              "type": "date"
+            },
+            {
+              "name": "post_id",
+              "type": "string"
+            },
+            {
+              "name": "scheduled_for",
+              "type": "date"
+            },
+            {
+              "name": "posted_at",
+              "type": "date"
+            },
+            {
+              "name": "pin_url",
+              "type": "string"
+            },
+            {
+              "name": "error",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "executeOnce": true,
+      "notes": "Reuses the table if it already exists."
+    },
+    {
+      "id": "fd45c293-956b-5cc2-b29d-7e51ad784edc",
+      "name": "Create pin_reviews",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "pin_reviews",
+        "columns": {
+          "column": [
+            {
+              "name": "product_handle",
+              "type": "string"
+            },
+            {
+              "name": "rating",
+              "type": "number"
+            },
+            {
+              "name": "quote",
+              "type": "string"
+            },
+            {
+              "name": "author",
+              "type": "string"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "verified",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "0bbbc321-15f1-53ca-8ea5-dca524c4ba28",
+      "name": "Sample review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One made-up review so the review frame works straight after import. It is labelled as a sample on the frame,\n// and the Review lane refuses to book a pin that uses it. Add your own reviews to pin_reviews (source \"own\").\nreturn [{ json: {\n  product_handle: $('Setup settings').first().json.sample_review_handle,\n  rating: 5,\n  quote: 'Easy to set up and exactly as described. It still looks new after a month, and I would buy it again.',\n  author: 'Sample Customer',\n  source: 'sample',\n  verified: false\n} }];"
+      },
+      "notes": "A made-up review, labelled as a sample on the frame. Never booked."
+    },
+    {
+      "id": "83a13439-b012-5fa8-976c-20f79e9e8dcb",
+      "name": "Save the sample review",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pin_reviews"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "product_handle",
+              "condition": "eq",
+              "keyValue": "={{ $json.product_handle }}"
+            },
+            {
+              "keyName": "source",
+              "condition": "eq",
+              "keyValue": "={{ $json.source }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "product_handle": "={{ $json.product_handle }}",
+            "rating": "={{ $json.rating }}",
+            "quote": "={{ $json.quote }}",
+            "author": "={{ $json.author }}",
+            "source": "={{ $json.source }}",
+            "verified": "={{ $json.verified }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "product_handle",
+              "displayName": "product_handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rating",
+              "displayName": "rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "quote",
+              "displayName": "quote",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "author",
+              "displayName": "author",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "verified",
+              "displayName": "verified",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6fff0df8-4360-56f4-9598-2a714d3adfe1",
+      "name": "List Pinterest boards",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Setup settings').first().json.zernio_api }}/accounts/{{ $('Setup settings').first().json.zernio_account_id }}/pinterest-boards",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Zernio"
+        }
+      },
+      "notes": "Copy each board id into boards in Draft settings."
+    },
+    {
+      "id": "8b157718-c3f5-52ad-a62a-64ccbb44d2be",
+      "name": "Called by this workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        760
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "notes": "The other lanes call this workflow with lane: top_up, card, render or book."
+    },
+    {
+      "id": "6402cb4a-8ad9-532e-b2c4-a93471fa11fd",
+      "name": "Which lane?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        220,
+        760
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "top_up",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "28c91fec-6767-5747-969e-40bb8ff5de73",
+                    "leftValue": "={{ $json.lane === 'top_up' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "card",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c9a990c2-6f49-5f49-b7dd-0927b8dd73a3",
+                    "leftValue": "={{ $json.lane === 'card' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "render",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d0b27e48-8aa4-569a-b23c-6a549e655a2a",
+                    "leftValue": "={{ $json.lane === 'render' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "book",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "984d261e-95b1-52ad-b088-e7b386d47900",
+                    "leftValue": "={{ $json.lane === 'book' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "086830d5-6c70-5d9f-8f63-a70ef0c3d4a8",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        380
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "57baea15-7bdd-5463-ad57-b1c4747c4602",
+      "name": "Draft pins now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        560
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "1741b46b-6c6b-5771-9374-dd895de0a58d",
+      "name": "Draft settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        440
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7a3020cc-3b55-503f-a567-ca1b17ec2285",
+              "name": "store_domain",
+              "value": "your-store.myshopify.com",
+              "type": "string"
+            },
+            {
+              "id": "7921a46e-2511-5a8a-8025-bc595d5ee32f",
+              "name": "store_name",
+              "value": "Your Store",
+              "type": "string"
+            },
+            {
+              "id": "cdb34a82-24c0-5395-9c2d-ca1d649b3ef6",
+              "name": "store_url",
+              "value": "https://www.your-store.com",
+              "type": "string"
+            },
+            {
+              "id": "9f84cd69-d618-5e04-a8fa-96129b1db8de",
+              "name": "store_description",
+              "value": "an online store for (what you sell)",
+              "type": "string"
+            },
+            {
+              "id": "b89fc5e0-9775-517b-9195-6fd75b9fa2e1",
+              "name": "language",
+              "value": "English",
+              "type": "string"
+            },
+            {
+              "id": "90b898b7-84a6-508e-927c-16f1236f649e",
+              "name": "style_rules",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "69197999-dad9-564f-94b7-623795d01520",
+              "name": "slack_channel",
+              "value": "#pins",
+              "type": "string"
+            },
+            {
+              "id": "8675b91a-de31-59ce-b6f8-2b6236c0870c",
+              "name": "frame_page_url",
+              "value": "https://your-n8n.example.com/webhook/pinterest-pin-frame",
+              "type": "string"
+            },
+            {
+              "id": "ab80a5d0-0904-54ab-957b-900bcbfbf370",
+              "name": "product_query",
+              "value": "status:active published_status:published",
+              "type": "string"
+            },
+            {
+              "id": "da31a03e-3ad0-53df-9b8b-c88c62b6d42f",
+              "name": "max_products",
+              "value": 1000,
+              "type": "number"
+            },
+            {
+              "id": "17eb4d09-8cbb-5771-904b-d84a06c832d8",
+              "name": "boards",
+              "value": "={{ [{\"key\": \"board-1\", \"name\": \"Your first board\", \"board_id\": \"PASTE_BOARD_ID\", \"match\": {\"title_words\": [\"solar\"], \"product_types\": [], \"categories\": []}, \"phrases\": [\"first search phrase\", \"second search phrase\"]}, {\"key\": \"board-2\", \"name\": \"Your second board\", \"board_id\": \"PASTE_BOARD_ID\", \"match\": {\"title_words\": [], \"product_types\": [\"Your product type\"], \"categories\": [\"Your Shopify category\"]}, \"phrases\": [\"first search phrase\", \"second search phrase\"]}] }}",
+              "type": "array"
+            },
+            {
+              "id": "82e7f475-f134-50eb-a2c6-18f15630d25d",
+              "name": "skip_words",
+              "value": "\\b(mount|bracket|cable|adapter|power supply|battery pack|replacement|spare)\\b",
+              "type": "string"
+            },
+            {
+              "id": "0226a0c5-1696-5f3f-9511-9f1e891d9ccd",
+              "name": "pin_sequence",
+              "value": "={{ ['photo', 'headline', 'review', 'photo_2'] }}",
+              "type": "array"
+            },
+            {
+              "id": "c415dc08-c840-5256-bf4d-892cac4b15e6",
+              "name": "max_waiting",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "d90497ae-9d77-5bab-bee9-e39732d853d1",
+              "name": "next_pin_after_days",
+              "value": 7,
+              "type": "number"
+            },
+            {
+              "id": "c65885d8-3b65-5a1d-9d5d-33acb1b66bbe",
+              "name": "min_photo_px",
+              "value": 600,
+              "type": "number"
+            },
+            {
+              "id": "a1d07e9e-9570-5990-9b57-d111cab9b08d",
+              "name": "review_min_rating",
+              "value": 4,
+              "type": "number"
+            },
+            {
+              "id": "5a54b393-961a-52be-8005-7a230b7965a8",
+              "name": "review_max_chars",
+              "value": 140,
+              "type": "number"
+            },
+            {
+              "id": "04fa2f52-99b9-5853-a335-c042b78cd022",
+              "name": "review_sources",
+              "value": "={{ ['own', 'sample'] }}",
+              "type": "array"
+            },
+            {
+              "id": "02ce5248-f548-5af5-9d0a-8e5bc1e7d174",
+              "name": "image_template",
+              "value": "https://wsrv.nl/?url={url}&w=1000&h=1500&fit=contain&cbg=white&output=jpg&q=90",
+              "type": "string"
+            },
+            {
+              "id": "f4af5c33-9146-5324-a8a4-a716e1a38f04",
+              "name": "utm",
+              "value": "utm_source=pinterest&utm_medium=social&utm_campaign=pins",
+              "type": "string"
+            },
+            {
+              "id": "8c2807dc-1480-5ab9-8706-8a9f6e62109d",
+              "name": "closing_line",
+              "value": "See specs and price at Your Store.",
+              "type": "string"
+            },
+            {
+              "id": "2a545027-b7d7-593f-ad64-34d4a5a1f0fc",
+              "name": "banned_words",
+              "value": "\\b(best|cheapest|guaranteed|free shipping|sale|buy now)\\b",
+              "type": "string"
+            },
+            {
+              "id": "352e95fe-a0a3-5f3d-b2d5-6f1ea814a360",
+              "name": "keep_terms",
+              "value": "={{ ['IP', 'PoE', 'NVR', 'HD', 'AI', 'PTZ', '4K', '2K', '4G', '5G', 'LTE', 'QHD', 'Wi-Fi', 'CCTV', 'USB', 'microSD'] }}",
+              "type": "array"
+            },
+            {
+              "id": "c501e2bc-7c8e-585b-b4ef-68e3927111fb",
+              "name": "chat_model",
+              "value": "gemma4:31b",
+              "type": "string"
+            },
+            {
+              "id": "8d5f94a0-1697-5544-8c08-2d6b0b230e58",
+              "name": "vision_model",
+              "value": "gemma4:31b",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Every store-specific value for drafting lives here. boards: which products go on which board (first match wins) and the search phrases for each."
+    },
+    {
+      "id": "1def1440-dc58-5957-b4c7-e88a6070bdb3",
+      "name": "Get all pins",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        440
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "notes": "Every pin so far: what is waiting, what each product already has."
+    },
+    {
+      "id": "8c39ddec-9bdf-5643-91c0-ffe1d0f69223",
+      "name": "Get reviews",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        440
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pin_reviews"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "89d7d1ee-a0ae-585e-a759-1a642703fe6f",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Draft settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "3a8873dd-df35-595f-ac69-2dbac8c206e1",
+      "name": "Get products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Draft settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'query Products($q: String!, $after: String) { products(first: 100, after: $after, query: $q, sortKey: CREATED_AT) { pageInfo { hasNextPage endCursor } nodes { id legacyResourceId title handle vendor productType createdAt onlineStoreUrl descriptionHtml category { name fullName } priceRangeV2 { minVariantPrice { amount } } featuredMedia { ... on MediaImage { image { url width height } } } media(first: 10) { nodes { ... on MediaImage { image { url width height } } } } } } }', variables: { q: $('Draft settings').first().json.product_query, after: null } }) }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "variables",
+                    "value": "={{ { q: $('Draft settings').first().json.product_query, after: $response.body.data.products.pageInfo.endCursor } }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.products.pageInfo.hasNextPage }}",
+              "limitPagesFetched": true,
+              "maxRequests": "={{ Math.ceil($('Draft settings').first().json.max_products / 100) }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      },
+      "executeOnce": true,
+      "notes": "100 products a page, oldest first, until max_products."
+    },
+    {
+      "id": "61fc59cf-3e9e-57a5-aaa4-990a95f9d621",
+      "name": "Pick the next pins",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The query only returns products published to the Online Store; store_url builds the link if Shopify hasn't given one yet.\n// Which products get a pin now, and which pin. One pin per product at a time: a product with a draft, scheduled or failed pin waits.\n// Each product works through pin_sequence (photo, headline, review, photo_2), one step every next_pin_after_days, skipping a step it can't make\n// (no qualifying review, no second photo). First pins always go before anyone's later pins. Only the free slots in max_waiting are filled.\nconst s = $('Draft settings').first().json;\nconst pins = $('Get all pins').all().map(i => i.json).filter(r => r.product_id);\nconst reviews = $('Get reviews').all().map(i => i.json).filter(r => r.quote);\nconst pages = $('Get products').all().map(i => i.json);\nconst bad = pages.find(p => p.errors);\nif (bad) throw new Error('Shopify: ' + JSON.stringify(bad.errors).slice(0, 300));\nconst products = pages.flatMap(p => p.data?.products?.nodes || []);\nconst free = Math.max(0, s.max_waiting - pins.filter(r => r.status === 'draft').length);\nif (!free) return [];\n\nconst text = h => String(h || '').replace(/<li[^>]*>/gi, '; ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\\s+/g, ' ').replace(/^[;\\s]+/, '').trim();\nconst words = t => String(t || '').toLowerCase();\nconst has = (title, w) => new RegExp('(^|[^a-z0-9])' + w.toLowerCase().replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '($|[^a-z0-9])').test(words(title));\nconst boardFor = p => s.boards.find(b => (b.match.title_words || []).some(w => has(p.title, w))\n  || (b.match.product_types || []).includes(p.productType)\n  || (b.match.categories || []).some(c => p.category && (p.category.name === c || String(p.category.fullName).includes(c))));\nconst skip = s.skip_words ? new RegExp(s.skip_words, 'i') : null;\nconst day = 864e5, now = Date.now();\nconst big = im => im && Math.min(im.width || 0, im.height || 0) >= s.min_photo_px;\nconst base = u => String(u || '').split('?')[0];\n\nconst out = [];\nfor (const p of products) {\n  const board = boardFor(p);\n  if (!board || (skip && skip.test(p.title))) continue;\n  const main = p.featuredMedia?.image;\n  const url = p.onlineStoreUrl || (s.store_url.replace(/\\/$/, '') + '/products/' + p.handle);\n  if (!big(main) || !(Number(p.priceRangeV2?.minVariantPrice?.amount) > 0) || text(p.descriptionHtml).length < 30) continue;\n  const id = String(p.legacyResourceId);\n  const mine = pins.filter(r => String(r.product_id) === id);\n  if (mine.some(r => ['draft', 'scheduled', 'failed'].includes(r.status))) continue;\n  if (mine.some(r => Number(r.pin_no) === 1 && r.status === 'skipped')) continue;   // skipping a first pin stops the product\n  const last = Math.max(0, ...mine.map(r => new Date(r.posted_at || r.decided_at || r.createdAt || 0).getTime()));\n  if (mine.length && now - last < s.next_pin_after_days * day) continue;\n  const done = mine.map(r => r.pin_kind);\n  const others = (p.media?.nodes || []).map(m => m.image).filter(im => big(im) && base(im.url) !== base(main.url) && !mine.some(r => base(r.source_image) === base(im.url)));\n  const review = reviews.filter(r => r.product_handle === p.handle && Number(r.rating) >= s.review_min_rating && String(r.quote).length <= s.review_max_chars\n    && s.review_sources.includes(r.source) && !mine.some(m => m.review_quote === r.quote))\n    .sort((a, b) => (b.verified === true) - (a.verified === true) || b.rating - a.rating)[0];\n  let kind = null, photo = main;\n  for (const k of s.pin_sequence) {\n    if (done.includes(k)) continue;\n    if (k === 'review' && !review) continue;\n    if (k === 'photo_2') { if (!others.length) continue; photo = others[0]; }\n    kind = k; break;\n  }\n  if (!kind) continue;\n  const pinNo = mine.length + 1;\n  const desc = String(p.descriptionHtml || '');\n  const cut = desc.search(/<h[2-4]/i);\n  const intro = text(cut >= 0 ? desc.slice(0, cut) : desc).slice(0, 800);\n  const specs = text(cut >= 0 ? desc.slice(cut) : '').slice(0, 3000);\n  // search phrases that fit this product: every distinctive word in the phrase is in the title or intro\n  const hay = words(p.title + ' ' + intro).replace(/wi-fi/g, 'wifi');\n  const fits = x => x.toLowerCase().split(' ').filter(w => !['security', 'camera', 'cameras', 'for', 'the', 'a'].includes(w)).every(w => hay.includes(w.replace(/s$/, '')));\n  const good = [...new Set((board.phrases || []).filter(fits).map(x => x.replace(/\\bcameras\\b/gi, 'camera')))];\n  const lead = good.length ? good[(pinNo - 1) % good.length] : (board.phrases || [board.name])[0];\n  const earlier = mine.filter(r => r.title).map(r => r.title + ' / ' + r.description);\n  const src = base(photo.url);\n  out.push({ json: {\n    product_id: id, product_title: p.title, handle: p.handle, brand: p.vendor || '', category: p.category?.name || p.productType || '',\n    created: p.createdAt, pin_no: pinNo, pin_kind: kind, board_key: board.key, board_name: board.name, board_id: board.board_id,\n    search_phrase: lead, other_phrases: good.filter(x => x !== lead).join(', '), intro, specs,\n    source_image: photo.url, photo_url: src + '?width=1024',\n    image_url: ['photo', 'photo_2'].includes(kind) ? s.image_template.replace('{url}', encodeURIComponent(src)) : '',\n    link: url + (url.includes('?') ? '&' : '?') + s.utm,\n    review_quote: kind === 'review' ? review.quote : '', review_rating: kind === 'review' ? Number(review.rating) : null,\n    review_author: kind === 'review' ? review.author : '', review_source: kind === 'review' ? review.source : '',\n    earlier: earlier.join('\\n')\n  } });\n}\nout.sort((a, b) => a.json.pin_no - b.json.pin_no || String(a.json.created).localeCompare(String(b.json.created)));\nreturn out.slice(0, free);"
+      },
+      "notes": "Board, sequence step, photo, search phrase, 2:3 image and tracked link for each pin to write."
+    },
+    {
+      "id": "b5d2caf6-a631-50c0-98a0-55b16f06e47f",
+      "name": "Look at the photo",
+      "type": "@n8n/n8n-nodes-langchain.ollama",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        440
+      ],
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Draft settings').first().json.vision_model }}"
+        },
+        "inputType": "url",
+        "imageUrls": "={{ $json.photo_url }}",
+        "text": "Look at this product photo. Reply with JSON only: {\"kind\": one of \"product\" (the product on a plain background), \"in_use\" (installed or in a real setting), \"packaging\" (a retail box), \"diagram\" (dimensions, a spec sheet, mostly text), \"other\"; \"alt\": one plain sentence under 200 characters describing what is visible: the product type, its colour and shape, and the setting. No brand claims, no sales words.}",
+        "simplify": true,
+        "options": {
+          "temperature": 0.1,
+          "format": "json",
+          "num_predict": 200
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "name": "Ollama Cloud"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "notes": "Vision model: what kind of photo it is, and a description for the alt text."
+    },
+    {
+      "id": "c060dc31-7efb-5a1e-9f55-eb160c9f84ff",
+      "name": "Read the photo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The vision model's answer per photo, plus the input for the writer. A second photo that turns out to be a box,\n// a diagram or unreadable is dropped (the product moves on to its next pin next time).\nconst s = $('Draft settings').first().json;\nconst picked = $('Pick the next pins').all().map(i => i.json);\nconst out = [];\n$input.all().forEach((it, i) => {\n  const p = picked[i]; if (!p) return;\n  const r = it.json || {};\n  let txt = r.content ?? r.text ?? r.response ?? r.message?.content ?? r.output ?? '';\n  if (typeof txt !== 'string') txt = JSON.stringify(txt);\n  let v = {};\n  try { v = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)); } catch (e) {}\n  const kind = ['product', 'in_use', 'packaging', 'diagram', 'other'].includes(v.kind) ? v.kind : '';\n  const alt = String(v.alt || '').replace(/\\s+/g, ' ').trim().slice(0, 300);\n  if (p.pin_kind === 'photo_2' && !['product', 'in_use'].includes(kind)) return;\n  const lines = [\n    'Product: ' + p.product_title, 'Brand: ' + (p.brand || 'unknown'), 'Category: ' + (p.category || 'unknown'),\n    'Search phrase: ' + p.search_phrase, 'Other searches: ' + (p.other_phrases || 'none'),\n    'Intro: ' + (p.intro || 'none'), 'Specs: ' + (p.specs || 'none'), 'The photo shows: ' + (alt || 'the product on a white background')\n  ];\n  if (p.pin_kind === 'review') lines.push('This pin shows this customer review on the image (do not quote it or mention reviews): ' + p.review_quote);\n  if (p.earlier) lines.push('Earlier pins for this product. Your title and first sentence must differ from every one of them (keep the search phrase first, change what follows it):\\n' + p.earlier);\n  out.push({ json: { ...p, photo_kind: kind || null, photo_alt: alt, prompt_input: lines.join('\\n') } });\n});\nreturn out;"
+      },
+      "notes": "Keeps the photo kind and alt text; drops a second photo that is a box or a diagram."
+    },
+    {
+      "id": "7178c873-b468-5158-a29b-a3b2af5c0af9",
+      "name": "Write the pin",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2200,
+        440
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt_input }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You write Pinterest pins for {{ $('Draft settings').first().json.store_name }}, {{ $('Draft settings').first().json.store_description }}. You get one product. Reply with these lines and nothing else:\nPin title: the pin title\nDescription: the pin description\n{{ $json.pin_kind === 'headline' ? 'Headline: the headline for the image\\nProduct line: the product line for the image\\n' : '' }}\nPin title rules:\n- Start with the search phrase, or a close variant that fits this product. Then one key spec. Brand and model last.\n- 40 to 90 characters. Never more than 100.\n- Capitalise each word.\n- If earlier pins are given, never repeat an earlier title.\n\nDescription rules:\n- Five plain sentences including the closing line, about 450 characters in total, never over 500.\n- Sentence one: what it is, with the search phrase, worded differently from the title.\n- Sentence two: where it is used and who it suits. Use one of the other searches only if it reads naturally.\n- Sentence three: three specs people search for, only if the product data has them.\n- Sentence four: two more practical facts from the specs (setup, power, the app, what is in the box).\n- End with: {{ $('Draft settings').first().json.closing_line }}\n- Each search phrase at most once. No keyword lists, hashtags, emojis, links, phone numbers or prices.\n{{ $json.pin_kind === 'headline' ? '\\nHeadline rules:\\n- A short benefit in plain words, at most 40 characters, from the product data only.\\n- No price, no percentages, no claims the data does not support.\\nProduct line rules:\\n- Brand and model, then two key facts, separated by \\\" · \\\". At most 60 characters.\\n' : '' }}\nAll lines:\n- Write model numbers as given.\n- Only facts in the product data. Never add a spec, a number or a feature, and never call it something it is not.\n- Calm and factual. No fear and no hype.\n- Never mention the image, photo or picture itself.\n- Write in {{ $('Draft settings').first().json.language }}. {{ $('Draft settings').first().json.style_rules }}\n- Never use the long dash character."
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "notes": "One call per pin. Pin title, Description (and Headline, Product line for a headline pin)."
+    },
+    {
+      "id": "67f39304-3422-516d-80e8-f96b2abb6c55",
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        2220,
+        640
+      ],
+      "parameters": {
+        "model": "={{ $('Draft settings').first().json.chat_model }}",
+        "options": {
+          "temperature": 0.4,
+          "numPredict": 600
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "name": "Ollama Cloud"
+        }
+      }
+    },
+    {
+      "id": "d9416897-06d9-587e-b733-7d852f03d730",
+      "name": "Check the pin",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Parse the model's lines and hold them to the pin rules. Safe fixes are made (dashes, hashtags, casing, the closing line);\n// everything else becomes a warning on the card, so the reviewer sees it before approving. A model failure saves nothing.\nconst s = $('Draft settings').first().json;\nconst items = $('Read the photo').all().map(i => i.json);\nconst CLOSE = s.closing_line;\nconst out = [];\n$input.all().forEach((it, i) => {\n  const p = items[i]; if (!p) return;\n  const raw = String(it.json.text || it.json.output || '');\n  if (it.json.error || !raw.trim()) return;   // tried again next run\n  const grab = label => { const m = raw.match(new RegExp('^\\\\s*\\\\**' + label + '\\\\**\\\\s*:\\\\s*(.+)$', 'im')); return m ? m[1].trim().replace(/^[\"“]|[\"”]$/g, '') : ''; };\n  const fix = x => x.replace(/—|–/g, ', ').replace(/\\s+,/g, ',').replace(/#\\w+/g, '').replace(/\\s{2,}/g, ' ').trim();\n  const caps = x => s.keep_terms.reduce((t, k) => t.replace(new RegExp('\\\\b' + k.replace(/-/g, '-?') + '\\\\b', 'gi'), k), x);\n  const local = x => /australian|british|new zealand|canadian/i.test(s.language)\n    ? x.replace(/\\bcolor(s|ed|ful)?\\b/gi, (m, e) => (m[0] === 'C' ? 'Colour' : 'colour') + (e || '')).replace(/\\bcenter(s|d)?\\b/gi, (m, e) => (m[0] === 'C' ? 'Centre' : 'centre') + (e || '')).replace(/\\b(meter|meters)\\b/gi, m => m.replace(/er/i, 're'))\n    : x;\n  const clean = x => local(caps(fix(x)));\n  let title = clean(grab('Pin title')), description = clean(grab('Description'));\n  const headline = clean(grab('Headline')), productLine = clean(grab('Product line'));\n  const alt = clean(p.photo_alt || grab('Alt text'));\n  if (description && !description.endsWith(CLOSE)) description = description.replace(/[.\\s]+$/, '') + '. ' + CLOSE;\n  const problems = [];\n  if (title.length > 100) problems.push(`Title is ${title.length} characters (100 max).`);\n  if (title.length < 25) problems.push('Title is under 25 characters.');\n  if (description.length > 600) problems.push(`Description is ${description.length} characters (aim for 300 to 500).`);\n  if (description.length < 240) problems.push(`Description is short (${description.length} characters, aim for 300 to 500).`);\n  if (p.pin_kind === 'headline') {\n    if (!headline) problems.push('No headline for the frame.');\n    if (headline.length > 40) problems.push(`Headline is ${headline.length} characters (40 fits the frame).`);\n    if (/\\$|%|\\d+\\s*off\\b/i.test(headline + ' ' + productLine)) problems.push('Price or discount on the image.');\n  }\n  const all = [title, description, alt, headline, productLine].join(' ');\n  if (/https?:\\/\\/|www\\./i.test(all)) problems.push('Has a web link.');\n  if (/\\$\\s?\\d/.test(all)) problems.push('Mentions a price.');\n  if (/\\p{Extended_Pictographic}/u.test(all)) problems.push('Has an emoji.');\n  const banned = s.banned_words ? all.replace(new RegExp(s.store_name, 'g'), '').match(new RegExp(s.banned_words, 'i')) : null;\n  if (banned) problems.push(`Uses \"${banned[0]}\".`);\n  const key = p.search_phrase.toLowerCase().split(' ').filter(w => w.length > 2);\n  if (key.length && !key.some(w => title.toLowerCase().includes(w.replace(/s$/, '')))) problems.push(`Title doesn't use the search phrase \"${p.search_phrase}\".`);\n  if (p.photo_kind === 'packaging') problems.push('The photo shows the box, not the product. Consider Skip.');\n  if (p.earlier && p.earlier.toLowerCase().includes(title.toLowerCase())) problems.push('Same title as an earlier pin.');\n  if (/\\b(this|the) (image|photo|picture)\\b/i.test(description)) problems.push('Talks about the photo instead of the product.');\n  out.push({ json: { ...p, title, description, alt_text: alt, headline: p.pin_kind === 'headline' ? headline : '', product_line: p.pin_kind === 'headline' ? productLine : '',\n    problems: JSON.stringify(problems) } });\n});\nreturn out;"
+      },
+      "notes": "Safe fixes are made; everything else is a warning on the card."
+    },
+    {
+      "id": "a6a97821-89f6-5751-aa3f-0903fc3d241a",
+      "name": "Save the draft",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2760,
+        440
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "product_id": "={{ $json.product_id }}",
+            "product_title": "={{ $json.product_title }}",
+            "handle": "={{ $json.handle }}",
+            "pin_no": "={{ $json.pin_no }}",
+            "pin_kind": "={{ $json.pin_kind }}",
+            "board_key": "={{ $json.board_key }}",
+            "board_name": "={{ $json.board_name }}",
+            "board_id": "={{ $json.board_id }}",
+            "title": "={{ $json.title }}",
+            "description": "={{ $json.description }}",
+            "alt_text": "={{ $json.alt_text }}",
+            "headline": "={{ $json.headline }}",
+            "product_line": "={{ $json.product_line }}",
+            "review_quote": "={{ $json.review_quote }}",
+            "review_rating": "={{ $json.review_rating }}",
+            "review_author": "={{ $json.review_author }}",
+            "review_source": "={{ $json.review_source }}",
+            "image_url": "={{ $json.image_url }}",
+            "source_image": "={{ $json.source_image }}",
+            "photo_kind": "={{ $json.photo_kind }}",
+            "link": "={{ $json.link }}",
+            "problems": "={{ $json.problems }}",
+            "status": "draft",
+            "slack_channel": "={{ $('Draft settings').first().json.slack_channel }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_title",
+              "displayName": "product_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "handle",
+              "displayName": "handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "pin_no",
+              "displayName": "pin_no",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "pin_kind",
+              "displayName": "pin_kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "board_key",
+              "displayName": "board_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "board_name",
+              "displayName": "board_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "board_id",
+              "displayName": "board_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alt_text",
+              "displayName": "alt_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "headline",
+              "displayName": "headline",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_line",
+              "displayName": "product_line",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "review_quote",
+              "displayName": "review_quote",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "review_rating",
+              "displayName": "review_rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "review_author",
+              "displayName": "review_author",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "review_source",
+              "displayName": "review_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source_image",
+              "displayName": "source_image",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "photo_kind",
+              "displayName": "photo_kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problems",
+              "displayName": "problems",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "slack_channel",
+              "displayName": "slack_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e4e24d38-b0a5-574e-83c8-d8b1af6076fc",
+      "name": "Framed pin?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2980,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f636c99e-c8f6-5bf8-8eed-bbf55574320d",
+              "leftValue": "={{ ['headline', 'review'].includes($json.pin_kind) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "556bb5a3-f614-544d-812e-52a8f6357b8f",
+      "name": "Frame for the draft",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3200,
+        320
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "15e1ad37-911b-5e8f-a389-788b7855b94e",
+              "name": "lane",
+              "value": "render",
+              "type": "string"
+            },
+            {
+              "id": "83c71941-0b06-51c5-bba7-e1823ba232fe",
+              "name": "pin_id",
+              "value": "={{ String($json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "20878479-05bc-5ebf-9285-8ab6790e8840",
+      "name": "Draw the frame",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3420,
+        320
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "Render lane: screenshot the frame page and keep it in Shopify Files."
+    },
+    {
+      "id": "9b4c3cc4-559c-5c84-af96-78f538841360",
+      "name": "Card for a framed draft",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3640,
+        320
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ca49a33f-7e05-5eae-9642-3e61c2db1569",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "f5f00827-b5c5-5230-927b-092cae3325b2",
+              "name": "pin_id",
+              "value": "={{ String($json.pin_id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0d40860d-87e6-5049-9d21-afe9b0d8f201",
+      "name": "Post the framed card",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3860,
+        320
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "403a229d-47d6-5092-847c-9b06dbf29d3f",
+      "name": "Card for the draft",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3640,
+        520
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bc30b45a-ccab-5799-8954-5ea8d6d4445c",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "2b838988-e55d-5596-98e1-10a6fcf5b453",
+              "name": "pin_id",
+              "value": "={{ String($json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f21188fb-5a51-52be-832e-844dfa18bff9",
+      "name": "Post the draft card",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3860,
+        520
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a2268f33-7041-5397-b342-de5bb9444a9a",
+      "name": "Card settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        1180
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "81822bc4-44d0-56f0-a950-57bcc65e1e58",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            },
+            {
+              "id": "428b3707-afd4-5884-a9b3-0f1edcb043d9",
+              "name": "workflow_name",
+              "value": "={{ $workflow.name }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e4e6f85b-59aa-57ab-a075-77274a04c7a0",
+      "name": "Get the pin for the card",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        1180
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Called by this workflow').first().json.pin_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "8928c854-3868-5dda-ac64-ed81e610a91d",
+      "name": "Build the card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One Slack card for one pin, in whatever state it is in. Every lane redraws the card through here, so it always matches the row.\nconst s = $('Card settings').first().json;\nconst r = $input.first().json;\nconst esc = x => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst when = t => t ? DateTime.fromISO(new Date(t).toISOString()).setZone(s.timezone).toFormat('ccc d LLL, h:mm a').replace('AM', 'am').replace('PM', 'pm') : '';\nconst kinds = { photo: 'photo', headline: 'headline frame', review: 'review frame', photo_2: 'second photo' };\nconst head = { draft: 'Pin draft', scheduled: 'Scheduled', skipped: 'Skipped', posted: 'Pinned', failed: 'Pin failed' }[r.status] || 'Pin';\nconst v = String(r.id);\nconst blocks = [{ type: 'header', text: { type: 'plain_text', text: (head + ': ' + r.product_title).slice(0, 150) } },\n  { type: 'context', elements: [{ type: 'mrkdwn', text: `Pin ${r.pin_no} · ${kinds[r.pin_kind] || r.pin_kind}` }] }];\nif (r.status === 'skipped') {\n  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'Skipped by ' + esc(r.decided_by || 'someone') + (Number(r.pin_no) === 1 ? '. This product gets no pins.' : '. The next pin in the sequence comes later.') }, { type: 'mrkdwn', text: s.workflow_name }] });\n  return [{ json: { channel: r.slack_channel, ts: r.slack_ts || '', id: r.id, text: 'Skipped: ' + r.product_title, blocks } }];\n}\nif (r.image_url) blocks.push({ type: 'image', image_url: r.image_url, alt_text: String(r.alt_text || r.product_title).slice(0, 1900) });\nelse blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':hourglass: The frame image is not ready yet.' + (r.error ? ' ' + esc(r.error) : '') } });\nblocks.push({ type: 'section', text: { type: 'mrkdwn', text: ('*Pin title* (' + String(r.title || '').length + ')\\n' + esc(r.title)).slice(0, 2900) } });\nblocks.push({ type: 'section', text: { type: 'mrkdwn', text: ('*Description* (' + String(r.description || '').length + ')\\n' + esc(r.description)).slice(0, 2900) } });\nblocks.push({ type: 'section', text: { type: 'mrkdwn', text: ('*Alt text*\\n' + esc(r.alt_text)).slice(0, 2900) } });\nif (r.pin_kind === 'headline') blocks.push({ type: 'section', fields: [{ type: 'mrkdwn', text: '*Headline*\\n' + esc(r.headline) }, { type: 'mrkdwn', text: '*Product line*\\n' + esc(r.product_line) }] });\nif (r.pin_kind === 'review') blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*Review on the image* ' + '★'.repeat(Number(r.review_rating) || 0) + '\\n>' + esc(r.review_quote) + '\\n' + esc(r.review_author) + (r.review_source === 'sample' ? ' · :warning: *sample review*, swap in a real one before you approve' : r.review_source !== 'own' ? ' · from ' + esc(r.review_source) : '') } });\nblocks.push({ type: 'section', fields: [{ type: 'mrkdwn', text: '*Board*\\n' + esc(r.board_name) }, { type: 'mrkdwn', text: '*Link*\\n<' + r.link + '|' + esc(String(r.link).split('?')[0].replace('https://', '')) + '>' }] });\nlet problems = []; try { problems = JSON.parse(r.problems || '[]'); } catch (e) {}\nif (problems.length && r.status === 'draft') blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':warning: ' + problems.map(esc).join('\\n:warning: ') } });\nif (r.status === 'failed' && r.error) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':x: ' + esc(r.error).slice(0, 500) } });\nconst btn = (text, id, style) => Object.assign({ type: 'button', text: { type: 'plain_text', text }, action_id: id, value: v }, style ? { style } : {});\nif (r.status === 'draft') blocks.push({ type: 'actions', elements: [btn('Approve', 'pin_approve', 'primary'), btn('Edit', 'pin_edit'), btn('Skip', 'pin_skip', 'danger')] });\nif (r.status === 'scheduled') blocks.push({ type: 'actions', elements: [btn('Cancel', 'pin_cancel', 'danger')] });\nif (r.status === 'failed') blocks.push({ type: 'actions', elements: [btn('Try again', 'pin_approve', 'primary'), btn('Edit', 'pin_edit'), btn('Skip', 'pin_skip', 'danger')] });\nif (r.status === 'posted' && r.pin_url) blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open pin' }, url: r.pin_url, action_id: 'pin_open' }] });\nconst note = {\n  draft: 'Approve books the next free slot. Edit changes the words. Skip drops this pin' + (Number(r.pin_no) === 1 ? ' and the product.' : '.'),\n  scheduled: ':calendar: Approved by ' + esc(r.decided_by || 'someone') + '. Posts to *' + esc(r.board_name) + '* on ' + when(r.scheduled_for) + '. Cancel takes it back to a draft.',\n  posted: ':pushpin: On Pinterest since ' + when(r.posted_at) + '.',\n  failed: 'Not posted. Try again books a new slot.'\n}[r.status] || '';\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }, { type: 'mrkdwn', text: s.workflow_name }] });\nreturn [{ json: { channel: r.slack_channel, ts: r.slack_ts || '', id: r.id, text: head + ': ' + r.product_title, blocks } }];"
+      },
+      "notes": "Every state of a pin in one renderer."
+    },
+    {
+      "id": "0620f112-3b47-54f0-b03f-0bc7cfa48866",
+      "name": "Post or update the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        1180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ts ? 'https://slack.com/api/chat.update' : 'https://slack.com/api/chat.postMessage' }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ts ? { channel: $json.channel, ts: $json.ts, text: $json.text, blocks: $json.blocks } : { channel: $json.channel, text: $json.text, blocks: $json.blocks, unfurl_links: false, unfurl_media: false }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "A new pin posts a card; anything else updates its card."
+    },
+    {
+      "id": "3675d4b3-938c-5900-b6fd-664f9eae3299",
+      "name": "New card?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        1180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "64f56f34-8cad-501d-97a2-9b56053e0e0e",
+              "leftValue": "={{ $json.ok === true && !$('Build the card').first().json.ts }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ce6a92b7-066b-5032-93a8-9e25f5d20f97",
+      "name": "Save where the card is",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        1120
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Build the card').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "slack_channel": "={{ $json.channel }}",
+            "slack_ts": "={{ $json.ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "slack_channel",
+              "displayName": "slack_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "slack_ts",
+              "displayName": "slack_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "70f80e46-7056-54ba-9d10-329f43533580",
+      "name": "Card done",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        1180
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "263152a9-1d2a-543a-875b-dbb1affb1749",
+              "name": "pin_id",
+              "value": "={{ String($('Build the card').first().json.id) }}",
+              "type": "string"
+            },
+            {
+              "id": "9d05a78c-46ac-5925-9fcd-781883971e49",
+              "name": "ok",
+              "value": "={{ $('Post or update the card').first().json.ok === true }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "cffa4ab4-fb9e-5d01-8212-09b301edb2f2",
+      "name": "Frame page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1600
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "pinterest-pin-frame",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "fe27bab2-e3ed-53a9-8035-00fa97c8766e",
+      "notes": "Firecrawl opens this page; open it in a browser to design the frame."
+    },
+    {
+      "id": "63b8e112-1f62-525b-8feb-312449fcd858",
+      "name": "Frame settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1600
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cc86dd42-af9f-51fb-85a1-e44a7f7fd7e6",
+              "name": "store_name",
+              "value": "Your Store",
+              "type": "string"
+            },
+            {
+              "id": "0d8fe52d-a372-5780-a657-ccedc3f7fa6f",
+              "name": "store_url_text",
+              "value": "your-store.com",
+              "type": "string"
+            },
+            {
+              "id": "8340f11f-a71a-5c0d-8138-f1da93505b8d",
+              "name": "logo_url",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "88e1eaf1-a8d3-5838-83c6-259af004ce03",
+              "name": "font",
+              "value": "Inter",
+              "type": "string"
+            },
+            {
+              "id": "049fe1a6-6d13-56f6-97f7-0ed1bdc6b485",
+              "name": "text_colour",
+              "value": "#111827",
+              "type": "string"
+            },
+            {
+              "id": "9d5bedd8-d572-5611-8449-c64e7283333c",
+              "name": "muted_colour",
+              "value": "#4B5563",
+              "type": "string"
+            },
+            {
+              "id": "dca325c0-928c-5df7-ba4c-d787583b813b",
+              "name": "accent_colour",
+              "value": "#F59E0B",
+              "type": "string"
+            },
+            {
+              "id": "87a0f5fd-0e8b-5656-be34-731137690579",
+              "name": "panel_colour",
+              "value": "#F3F4F6",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Your fonts (any Google Font), colours and logo. No price ever goes on the image."
+    },
+    {
+      "id": "ff5086f5-7eb7-5890-9063-e4eaa5d2f1f3",
+      "name": "Get the pin for the frame",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        1600
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ String($('Frame page').first().json.query.id || '0').replace(/[^0-9]/g, '') }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a961e7fa-a04c-5f54-9ea8-d1ccdcaa0a6a",
+      "name": "Build the page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The frame as a 1000 x 1500 web page: the real product photo in a panel, then the headline and product line,\n// or the review with its stars and who wrote it. Drawn from the saved row only.\nconst f = $('Frame settings').first().json;\nconst r = $input.first().json;\nconst esc = x => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nif (!r.id) return [{ json: { html: '<!doctype html><title>Not found</title><p>No pin with that id.</p>', status: 404 } }];\nconst photo = String(r.source_image || '').split('?')[0] + '?width=1400';\nlet words;\nif (r.pin_kind === 'review') {\n  const label = r.review_source === 'sample' ? '<span class=\"tag\">Sample review</span>' : (r.review_source && r.review_source !== 'own' ? '<span class=\"tag\">Review from ' + esc(r.review_source) + '</span>' : '');\n  words = `<div class=\"stars\">${'★'.repeat(Number(r.review_rating) || 5)}</div><p class=\"quote\">“${esc(r.review_quote)}”</p><p class=\"who\">${esc(r.review_author)}${label}</p>`;\n} else {\n  const size = String(r.headline || '').length > 28 ? 72 : 88;\n  words = `<h1 style=\"font-size:${size}px\">${esc(r.headline)}</h1><p class=\"line\">${esc(r.product_line)}</p>`;\n}\nconst brand = f.logo_url ? `<img src=\"${esc(f.logo_url)}\" alt=\"${esc(f.store_name)}\">` : `<span>${esc(f.store_name)}</span>`;\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=1000\">\n<link href=\"https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.font)}:wght@400;600;800&display=swap\" rel=\"stylesheet\">\n<style>*{box-sizing:border-box;margin:0}html,body{width:1000px;height:1500px;background:#fff}\nbody{font-family:'${f.font}',sans-serif;color:${f.text_colour};display:flex;flex-direction:column;padding:56px}\n.photo{flex:0 0 860px;background:${f.panel_colour};border-radius:32px;display:flex;align-items:center;justify-content:center;overflow:hidden}\n.photo img{max-width:90%;max-height:90%;object-fit:contain;mix-blend-mode:multiply}\n.words{flex:1;display:flex;flex-direction:column;justify-content:center;padding:36px 12px 12px}\nh1{line-height:1.02;font-weight:800;letter-spacing:-0.02em}.line{margin-top:22px;font-size:32px;color:${f.muted_colour}}\n.stars{color:${f.accent_colour};font-size:54px;letter-spacing:6px}.quote{margin-top:16px;font-size:48px;line-height:1.2;font-weight:600}\n.who{margin-top:22px;font-size:28px;color:${f.muted_colour};display:flex;align-items:center;gap:14px}\n.tag{padding:4px 16px;border-radius:999px;background:${f.panel_colour};font-size:22px}\n.foot{display:flex;justify-content:space-between;align-items:center;font-size:30px;font-weight:600}.foot img{height:56px}.foot .url{color:${f.muted_colour};font-weight:400}\n</style></head><body><div class=\"photo\"><img src=\"${esc(photo)}\" alt=\"${esc(r.alt_text)}\"></div>\n<div class=\"words\">${words}</div><div class=\"foot\">${brand}<span class=\"url\">${esc(f.store_url_text)}</span></div></body></html>`;\nreturn [{ json: { html, status: 200 } }];"
+      },
+      "notes": "Plain HTML and CSS. The photo is placed as it is; nothing is edited."
+    },
+    {
+      "id": "9adb521c-55c0-5468-8413-42d8425d96a9",
+      "name": "Send the page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        1600
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "b56c407f-3a1c-5f0d-8237-b901c85f210b",
+      "name": "Render settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        2040
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5f53c2d1-ae9d-5162-b4c7-5b8fd77fa1ef",
+              "name": "store_domain",
+              "value": "your-store.myshopify.com",
+              "type": "string"
+            },
+            {
+              "id": "093f778c-b54f-523d-be33-2019b6b90196",
+              "name": "frame_page_url",
+              "value": "https://your-n8n.example.com/webhook/pinterest-pin-frame",
+              "type": "string"
+            },
+            {
+              "id": "53909ea8-2ce5-5c21-b05e-34ddca8ef23b",
+              "name": "jpeg_template",
+              "value": "https://wsrv.nl/{name}.jpg?url={url}&output=jpg&q=90",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "frame_page_url: the production URL of Frame page (publish the workflow first)."
+    },
+    {
+      "id": "5326d77f-452c-57fe-99a8-692a5dc1d3c9",
+      "name": "Get the pin to draw",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        2040
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Called by this workflow').first().json.pin_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "7b4fb0ab-2b0d-50ba-a895-db6a11eb5151",
+      "name": "Screenshot the frame",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        2040
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/scrape",
+        "options": {
+          "timeout": 90000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $('Render settings').first().json.frame_page_url + '?id=' + $json.id + '&v=' + Date.now(), waitFor: 2500, formats: [ { type: 'screenshot', fullPage: false, quality: 95, viewport: { width: 1000, height: 1500 } } ] }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Firecrawl"
+        }
+      },
+      "notes": "One Firecrawl credit per frame. The screenshot URL lasts 24 hours, so it is kept in Shopify next."
+    },
+    {
+      "id": "5c12cc83-2fdc-5274-884b-f07dfaf8c089",
+      "name": "Name the file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        2040
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The screenshot as a JPEG named after the pin, by way of wsrv.nl. A failed screenshot is passed on with its error.\nconst s = $('Render settings').first().json;\nconst r = $('Get the pin to draw').first().json;\nconst shot = $input.first().json?.data?.screenshot || '';\nconst name = ('pin-' + String(r.product_title || 'pin').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60) + '-' + r.id + '-' + Date.now()).replace(/-+/g, '-');\nreturn [{ json: { id: r.id, old_file_id: r.shopify_file_id || '', alt: r.alt_text || '',\n  source: shot ? s.jpeg_template.replace('{name}', name).replace('{url}', encodeURIComponent(shot)) : '',\n  error: shot ? '' : 'Firecrawl: ' + String($input.first().json?.error?.message || $input.first().json?.error || 'no screenshot').slice(0, 200) } }];"
+      }
+    },
+    {
+      "id": "b6ed54ec-c69a-5c28-a618-7c2c67c22af5",
+      "name": "Get Shopify token for Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        2040
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Render settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "cc12d83e-fd34-5b27-8bc7-4fe3f70c4211",
+      "name": "Keep it in Shopify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        2040
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Render settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Render').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation Keep($files: [FileCreateInput!]!) { fileCreate(files: $files) { files { id fileStatus } userErrors { field message } } }', variables: { files: $('Name the file').first().json.source ? [ { originalSource: $('Name the file').first().json.source, contentType: 'IMAGE', alt: String($('Name the file').first().json.alt).slice(0, 500) } ] : [] } }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Shopify Files keeps the JPEG at a lasting public URL."
+    },
+    {
+      "id": "8c6cdbaa-cfe2-5d8b-83f1-fa55c45cd124",
+      "name": "Let Shopify process",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        2040
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "unit": "seconds",
+        "amount": 15
+      },
+      "webhookId": "13cdf068-9ad0-5f9e-866d-ef7d8207e541",
+      "notes": "Shopify fetches and processes the image in the background."
+    },
+    {
+      "id": "5d70d356-dbd5-5efa-9d52-5cc7391216c7",
+      "name": "Read the file",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        2040
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Render settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Render').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'query File($id: ID!) { node(id: $id) { ... on MediaImage { id fileStatus image { url } } } }', variables: { id: $('Keep it in Shopify').first().json.data?.fileCreate?.files?.[0]?.id || 'gid://shopify/MediaImage/0' } }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c9794c2c-79d2-569c-9868-6ba51f783867",
+      "name": "Collect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        2040
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The frame's lasting URL, or why there isn't one.\nconst n = $('Name the file').first().json;\nconst made = $('Keep it in Shopify').first().json;\nconst f = $input.first().json?.data?.node || {};\nconst id = made?.data?.fileCreate?.files?.[0]?.id || '';\nconst url = f.fileStatus === 'READY' ? (f.image?.url || '') : '';\nconst error = n.error || (!id ? 'Shopify: ' + JSON.stringify(made?.data?.fileCreate?.userErrors || made?.errors || 'no file').slice(0, 200) : (!url ? 'Shopify is still processing the image (' + (f.fileStatus || 'unknown') + '). Edit and save to draw it again.' : ''));\nreturn [{ json: { id: n.id, file_id: id || n.old_file_id, image_url: url, error, old_file_id: url && n.old_file_id && n.old_file_id !== id ? n.old_file_id : '' } }];"
+      }
+    },
+    {
+      "id": "f066e127-6824-5b36-a2b8-84c0fa24a06c",
+      "name": "Save the frame",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        2040
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "image_url": "={{ $json.image_url }}",
+            "shopify_file_id": "={{ $json.file_id }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "shopify_file_id",
+              "displayName": "shopify_file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "57dfd6b6-4b20-5cf9-a95c-4a20cb35ab0b",
+      "name": "Old frame to delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        2040
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "55985389-7feb-597a-99a2-d85d580f9c60",
+              "leftValue": "={{ !!$('Collect').first().json.old_file_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c6ec5c7c-a146-5317-b8ef-7fa888b44df7",
+      "name": "Delete the old frame",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        1980
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Render settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Render').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation Drop($ids: [ID!]!) { fileDelete(fileIds: $ids) { deletedFileIds userErrors { field message } } }', variables: { ids: [ $('Collect').first().json.old_file_id ] } }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d8b16975-fd25-5cb0-b1be-7a3c562d85d3",
+      "name": "Frame done",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3080,
+        2040
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5f2dea95-9d96-5cb0-ab70-ff00b6d99ab0",
+              "name": "pin_id",
+              "value": "={{ String($('Collect').first().json.id) }}",
+              "type": "string"
+            },
+            {
+              "id": "344cf91e-4e45-5130-bc47-23b3e3c7489c",
+              "name": "image_url",
+              "value": "={{ $('Collect').first().json.image_url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "notes": "What the caller gets back."
+    },
+    {
+      "id": "2ee305c3-766a-5637-ba21-5a64f35f7812",
+      "name": "Slack button click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        2760
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pinterest-pin-review",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "webhookId": "38bcc9d2-9297-5bf8-80c2-904eb2e15ccf",
+      "notes": "Your Slack app's Interactivity Request URL."
+    },
+    {
+      "id": "8a2ac481-f7b2-55d4-a810-0209777ea8ba",
+      "name": "Read the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        2760
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Slack sends the click as a form field called payload. Keep the raw body for the signature check.\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nif (Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) > 300) throw new Error('Stale request');\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || '';   // no URLSearchParams in the Code node\nconst b = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' ')));\nconst sig = { base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'] };\nconst user = b.user?.username || b.user?.name || b.user?.id || 'someone';\nif (b.type === 'view_submission') {\n  const m = JSON.parse(b.view.private_metadata || '{}');\n  const v = b.view.state.values;\n  const val = k => v[k]?.[k]?.value ?? null;\n  return [{ json: { ...sig, action: 'edit_submit', pin_id: String(m.pin_id), user,\n    edit: { title: val('title'), description: val('description'), alt_text: val('alt_text'), headline: val('headline'), product_line: val('product_line') } } }];\n}\nconst a = (b.actions || [])[0] || {};\nreturn [{ json: { ...sig, action: String(a.action_id || '').replace('pin_', ''), pin_id: String(a.value || ''), user,\n  trigger_id: b.trigger_id, response_url: b.response_url || '' } }];"
+      },
+      "notes": "Raw body, timestamp check, then the payload."
+    },
+    {
+      "id": "bb43434e-7cb3-551c-8ae6-5a1c03606090",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        440,
+        2760
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      },
+      "notes": "HMAC-SHA256 with your Slack app's signing secret."
+    },
+    {
+      "id": "b19827d4-d00c-51b3-939d-07338d59a0f8",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        2760
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6c608ce5-fa91-5455-8b7d-e97175e0f9c7",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "024b86de-d8a2-53ec-8f5f-607e895e2133",
+      "name": "Not from Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        2920
+      ],
+      "parameters": {
+        "options": {
+          "responseCode": 401
+        },
+        "respondWith": "text",
+        "responseBody": "={{ 'Invalid signature' }}"
+      }
+    },
+    {
+      "id": "82568e79-c5ff-57a7-98ae-756b7cc7f49e",
+      "name": "Answer Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        2760
+      ],
+      "parameters": {
+        "options": {},
+        "respondWith": "noData"
+      },
+      "notes": "Slack wants an answer within 3 seconds; the work carries on after it."
+    },
+    {
+      "id": "ff41c5ba-88b5-5904-9010-4ef6f74dbf09",
+      "name": "Review settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        2760
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7702bdc1-9e16-5be0-97da-31a2f3cde5a7",
+              "name": "zernio_api",
+              "value": "https://zernio.com/api/v1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d1dacbe3-85d2-504f-add8-0a98479fb471",
+      "name": "Get the clicked pin",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        2760
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Read the click').first().json.pin_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "5ff730a6-7a2b-548f-bfd3-66b954c9ab7e",
+      "name": "Route the click",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1540,
+        2760
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "approve",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a905d15b-0395-563a-86a6-56359793187b",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'approve' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "edit",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d19b5f88-4d85-5794-a9a7-bdaf29664dd3",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'edit' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "edit_submit",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6b806b5d-9c96-55ad-851a-5b439bab6e72",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'edit_submit' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "skip",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "14ca7994-2049-5c48-9b27-6a3d496d23be",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'skip' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "cancel",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "09b4ec2e-35b9-5b77-9702-fb46df5bae2e",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'cancel' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c4e5bb6f-32c8-5448-b21f-abf0f1d0a7a0",
+      "name": "Can be booked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        2460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b951d8d7-77df-5ad6-84bb-afee5006dfc8",
+              "leftValue": "={{ ['draft', 'failed'].includes($json.status) && $json.review_source !== 'sample' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Never a scheduled, posted or skipped pin, and never a sample review."
+    },
+    {
+      "id": "07989ad7-0f33-5c44-92ff-c8817d453836",
+      "name": "Booking request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1980,
+        2400
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "135a896f-9310-5668-baa9-2fbc30a9fe73",
+              "name": "lane",
+              "value": "book",
+              "type": "string"
+            },
+            {
+              "id": "b50e2a2a-c3ea-57c4-b6f5-d581f70e813c",
+              "name": "pin_id",
+              "value": "={{ String($('Get the clicked pin').first().json.id) }}",
+              "type": "string"
+            },
+            {
+              "id": "a8d29429-471f-550a-865b-366ff4773bdc",
+              "name": "user",
+              "value": "={{ $('Read the click').first().json.user }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6544ab1d-8fec-5fb9-94fc-87cd07981c3b",
+      "name": "Book it",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2200,
+        2400
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "f6aed5f2-5db7-5f10-83ad-70d763f61121",
+      "name": "Top-up request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2420,
+        2400
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d8f770f1-f5dc-5977-b271-a0340347dc35",
+              "name": "lane",
+              "value": "top_up",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d0f27af5-8925-51c0-a4f7-31f1be8912a6",
+      "name": "Top up the queue",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2640,
+        2400
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "Writes the next draft so the queue stays full."
+    },
+    {
+      "id": "4095d4b2-6b4b-5f48-90c1-ab98960624c5",
+      "name": "Say why not",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        2580
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read the click').first().json.response_url }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ response_type: 'ephemeral', replace_original: false, text: $('Get the clicked pin').first().json.review_source === 'sample' ? 'This pin uses the sample review. Add a real review to pin_reviews (or Skip this pin) before you book it.' : 'This pin is already ' + $('Get the clicked pin').first().json.status + '.' }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "notes": "A private reply to the person who clicked."
+    },
+    {
+      "id": "c8dddd29-e061-5c02-8771-138fef419a17",
+      "name": "Build the edit modal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        2720
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The words of a draft in a modal. A headline pin also gets its headline and product line (saving redraws the frame).\nconst r = $('Get the clicked pin').first().json;\nconst c = $('Read the click').first().json;\nconst input = (key, label, initial, max, multiline) => ({ type: 'input', block_id: key, optional: key === 'alt_text', label: { type: 'plain_text', text: label },\n  element: Object.assign({ type: 'plain_text_input', action_id: key, max_length: max, multiline: !!multiline }, initial ? { initial_value: String(initial).slice(0, max) } : {}) });\nconst editable = ['draft', 'failed'].includes(r.status);\nconst blocks = [{ type: 'section', text: { type: 'mrkdwn', text: '*' + String(r.product_title || 'Pin').replace(/[<>&]/g, '') + '*' } }];\nif (editable) {\n  blocks.push(input('title', 'Pin title (search phrase first, 100 max)', r.title, 100), input('description', 'Description', r.description, 800, true), input('alt_text', 'Alt text (what the photo shows)', r.alt_text, 500));\n  if (r.pin_kind === 'headline') blocks.push(input('headline', 'Headline on the image (40 fits)', r.headline, 60), input('product_line', 'Product line on the image', r.product_line, 80));\n  if (r.pin_kind === 'review') blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'The review on the image is quoted word for word and can\\'t be edited. Skip this pin to drop it.' }] });\n} else blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'This pin is ' + r.status + '. Cancel it on the card first, then edit the draft.' }] });\nconst view = { type: 'modal', callback_id: 'pin_edit', private_metadata: JSON.stringify({ pin_id: r.id }), title: { type: 'plain_text', text: 'Edit pin' }, close: { type: 'plain_text', text: 'Close' }, blocks };\nif (editable) view.submit = { type: 'plain_text', text: 'Save' };\nreturn [{ json: { trigger_id: c.trigger_id, view } }];"
+      }
+    },
+    {
+      "id": "763d8f67-1086-5d09-9774-2df8f371b9b4",
+      "name": "Open the edit modal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        2720
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/views.open",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "Slack's trigger_id lasts 3 seconds, so nothing slow goes before this."
+    },
+    {
+      "id": "766af59f-8a74-56d5-a1e4-099c5de11780",
+      "name": "Check the edit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        2900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The edited words, held to the same rules as a new draft. Problems show on the card; nothing is blocked.\nconst r = $('Get the clicked pin').first().json;\nconst e = $('Read the click').first().json.edit || {};\nconst pick = (k, d) => (e[k] == null ? d : String(e[k]).replace(/\\s+/g, ' ').trim());\nconst out = { title: pick('title', r.title), description: pick('description', r.description), alt_text: pick('alt_text', r.alt_text),\n  headline: pick('headline', r.headline), product_line: pick('product_line', r.product_line) };\nconst problems = [];\nif (out.title.length > 100) problems.push(`Title is ${out.title.length} characters (100 max).`);\nif (out.description.length > 800) problems.push(`Description is ${out.description.length} characters (800 max).`);\nif (r.pin_kind === 'headline' && out.headline.length > 40) problems.push(`Headline is ${out.headline.length} characters (40 fits the frame).`);\nconst all = Object.values(out).join(' ');\nif (/https?:\\/\\/|www\\./i.test(all)) problems.push('Has a web link.');\nif (/#\\w/.test(all)) problems.push('Has a hashtag.');\nif (/\\$\\s?\\d/.test(all)) problems.push('Mentions a price.');\nconst redraw = r.pin_kind === 'headline' && (out.headline !== r.headline || out.product_line !== r.product_line);\nreturn [{ json: { ...out, problems: JSON.stringify(problems), redraw, editable: ['draft', 'failed'].includes(r.status) } }];"
+      }
+    },
+    {
+      "id": "e7348b1e-7081-5924-98ad-963f244305d0",
+      "name": "Still a draft?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        2900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1e36d938-a9de-59a2-b9e1-67ba57b0ff9b",
+              "leftValue": "={{ $json.editable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6c5e6649-5747-58d7-b579-054e2becbdc0",
+      "name": "Save the edit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        2900
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get the clicked pin').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "description": "={{ $json.description }}",
+            "alt_text": "={{ $json.alt_text }}",
+            "headline": "={{ $json.headline }}",
+            "product_line": "={{ $json.product_line }}",
+            "problems": "={{ $json.problems }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alt_text",
+              "displayName": "alt_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "headline",
+              "displayName": "headline",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_line",
+              "displayName": "product_line",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problems",
+              "displayName": "problems",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8caeb216-d417-5ce1-ab11-a58de37a34ce",
+      "name": "Redraw the frame?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        2900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1439028b-4210-5b0b-9780-26781be53d52",
+              "leftValue": "={{ $('Check the edit').first().json.redraw }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5a2c50f6-f33b-515e-9134-af8a8e72ddd4",
+      "name": "Frame after an edit",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2640,
+        2840
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e2ec6767-98fa-5a48-8f61-c9c87560b1ab",
+              "name": "lane",
+              "value": "render",
+              "type": "string"
+            },
+            {
+              "id": "bdc78854-ff2e-5ea6-b762-726f2dc9a4ef",
+              "name": "pin_id",
+              "value": "={{ String($('Get the clicked pin').first().json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9cfa335d-47c5-51e1-b032-ece221d3c91f",
+      "name": "Draw it again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2860,
+        2840
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "5be5ba7a-03fb-598f-a23f-887e71387a88",
+      "name": "Can be skipped?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        3080
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "43792de6-edcd-5bcd-b65b-2481564b528b",
+              "leftValue": "={{ ['draft', 'failed'].includes($json.status) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "cdb6b149-7982-54c7-8940-4a41bda9046d",
+      "name": "Mark skipped",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        3080
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get the clicked pin').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "skipped",
+            "decided_by": "={{ $('Read the click').first().json.user }}",
+            "decided_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "20007527-9d8d-528c-a66c-1780972c9bf1",
+      "name": "Is it scheduled?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        3260
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "902929ae-12bc-55de-a756-e423700491c7",
+              "leftValue": "={{ $json.status === 'scheduled' && !!$json.post_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f69267f6-9b26-575d-accc-a410b99fa9c2",
+      "name": "Delete from Zernio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        3260
+      ],
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $('Review settings').first().json.zernio_api }}/posts/{{ $json.post_id }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Zernio"
+        }
+      },
+      "notes": "Only a scheduled post can be deleted; a published pin stays."
+    },
+    {
+      "id": "b6a33988-227d-525f-9d60-3fe38cdb2292",
+      "name": "Back to a draft",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        3260
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get the clicked pin').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "draft",
+            "post_id": "",
+            "scheduled_for": "={{ null }}",
+            "decided_by": "",
+            "decided_at": "={{ null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "scheduled_for",
+              "displayName": "scheduled_for",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9ee6abfd-b170-5492-a4cf-23b7eb54c6d4",
+      "name": "Card after a click",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2860,
+        3080
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9e2d348a-9dc6-5960-a0f7-5468f4990c99",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "2bf86709-df8b-5953-9c48-a2eb2e05922c",
+              "name": "pin_id",
+              "value": "={{ String($('Get the clicked pin').first().json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ac8b49b7-5789-5f7c-93cc-756fe1535ddc",
+      "name": "Redraw the card",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3080,
+        3080
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a3c1db65-ff92-537b-857c-8fffc227d272",
+      "name": "Top-up after a skip",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3300,
+        2900
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a768be75-e4f5-5c88-ba09-ed7145e3e94b",
+              "name": "lane",
+              "value": "top_up",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "22aadae0-b1c1-5e7b-b26e-cbdb6d844865",
+      "name": "Top up after a skip",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        2900
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "0b899266-2b25-5be8-b45c-e7e75aa2ba40",
+      "name": "Was it a skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3080,
+        2900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "58de085a-8be2-588a-8d21-4550a24c5c71",
+              "leftValue": "={{ $('Read the click').first().json.action === 'skip' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "52b4c5b7-3e31-539c-868f-4ad120d87d3a",
+      "name": "Book settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        3660
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e39a43c9-f346-5c03-93f3-d921b96344d5",
+              "name": "zernio_api",
+              "value": "https://zernio.com/api/v1",
+              "type": "string"
+            },
+            {
+              "id": "a96e1670-0595-53ef-a528-b229e999283d",
+              "name": "zernio_account_id",
+              "value": "YOUR_ZERNIO_PINTEREST_ACCOUNT_ID",
+              "type": "string"
+            },
+            {
+              "id": "222ae3a5-6e9b-5e87-a6e2-aeb4e990106e",
+              "name": "timezone",
+              "value": "UTC",
+              "type": "string"
+            },
+            {
+              "id": "c3525fc8-746c-5baa-a71e-966c89a3090a",
+              "name": "pace",
+              "value": "={{ [ { \"from_week\": 0, \"per_week\": 7 }, { \"from_week\": 4, \"per_week\": 14 } ] }}",
+              "type": "array"
+            },
+            {
+              "id": "0118fa74-a821-5193-b5a2-4a8651afbfdb",
+              "name": "max_per_week",
+              "value": 21,
+              "type": "number"
+            },
+            {
+              "id": "ec68cd9d-7b3a-59ff-9438-9db2d11ba999",
+              "name": "post_from",
+              "value": "07:30",
+              "type": "string"
+            },
+            {
+              "id": "217c81d7-91dc-59e4-a8df-4017033d9873",
+              "name": "post_until",
+              "value": "21:00",
+              "type": "string"
+            },
+            {
+              "id": "259f3381-b026-52bb-8e4c-7a642d7284b3",
+              "name": "first_slot_after",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "pace: pins a week by weeks since your first pin. first_slot_after: nothing posts before this date (handy for a test or a launch)."
+    },
+    {
+      "id": "a7e12753-4498-5384-a155-8edf0e3d34eb",
+      "name": "Get the pin to book",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        3660
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Called by this workflow').first().json.pin_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "4085a302-54a4-56e4-8f14-8eeae64a7db2",
+      "name": "Still bookable?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        3660
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d9fda38a-0f4a-5f87-833a-cfd246457869",
+              "leftValue": "={{ ['draft', 'failed'].includes($json.status) && $json.review_source !== 'sample' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Checked again here, in case two clicks land together."
+    },
+    {
+      "id": "dbae366e-dca7-5b7f-99fd-953e28dc1ce2",
+      "name": "Get booked pins",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        3660
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "scheduled"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "posted"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "8367ad67-6b49-508c-944f-b761e5fc95f8",
+      "name": "Pick a slot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        3660
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The next posting slot: one gap after the latest scheduled or posted pin. The gap is a week divided by the pins a week for\n// the account's age at that point (never more than max_per_week), jittered by up to 15%, never sooner than 15 minutes from now,\n// and moved into posting hours in your time zone.\nconst s = $('Book settings').first().json;\nconst pin = $('Get the pin to book').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r.id && String(r.id) !== String(pin.id));\nconst ms = t => (t ? new Date(t).getTime() : NaN);\nconst now = Date.now(), WEEK = 7 * 864e5;\nconst posted = rows.filter(r => r.status === 'posted').map(r => ms(r.posted_at)).filter(x => !isNaN(x));\nconst taken = rows.filter(r => r.status === 'scheduled').map(r => ms(r.scheduled_for)).filter(x => !isNaN(x)).concat(posted);\nconst first = posted.length ? Math.min(...posted) : now;\nconst last = taken.length ? Math.max(...taken) : null;\nconst week = Math.floor((Math.max(last ?? now, now) - first) / WEEK);\nconst step = [...s.pace].sort((a, b) => b.from_week - a.from_week).find(p => p.from_week <= week) || { per_week: 3 };\nconst perWeek = Math.min(Math.max(Number(step.per_week) || 1, 1), s.max_per_week);\nconst gap = WEEK / perWeek;\nlet t = last == null ? now + 15 * 6e4 : Math.max(now + 15 * 6e4, last + gap + (Math.random() - 0.5) * 0.3 * gap);\nif (s.first_slot_after) t = Math.max(t, ms(s.first_slot_after));\nconst [fh, fm] = s.post_from.split(':').map(Number), [uh, um] = s.post_until.split(':').map(Number);\nlet d = DateTime.fromMillis(t).setZone(s.timezone);\nconst mins = d.hour * 60 + d.minute;\nif (mins < fh * 60 + fm || mins > uh * 60 + um) {\n  if (mins > uh * 60 + um) d = d.plus({ days: 1 });\n  d = d.set({ hour: fh, minute: fm, second: 0, millisecond: 0 }).plus({ minutes: Math.floor(Math.random() * 90) });\n}\nreturn [{ json: { slot: d.toUTC().toISO({ suppressMilliseconds: true }), per_week: perWeek, account_week: week } }];"
+      },
+      "notes": "One gap after the last pin, jittered, inside posting hours."
+    },
+    {
+      "id": "b1d8a857-7980-59fd-829b-6ca01249ff49",
+      "name": "Schedule on Pinterest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        3660
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Book settings').first().json.zernio_api }}/posts",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const s = $('Book settings').first().json, r = $('Get the pin to book').first().json; return JSON.stringify({ content: r.description, mediaItems: [ { type: 'image', url: r.image_url, altText: String(r.alt_text || '').slice(0, 500), mimeType: 'image/jpeg' } ], platforms: [ { platform: 'pinterest', accountId: s.zernio_account_id, platformSpecificData: { title: String(r.title || '').slice(0, 100), boardId: r.board_id, link: r.link } } ], scheduledFor: $json.slot, timezone: s.timezone }); })() }}"
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Zernio"
+        }
+      },
+      "notes": "Zernio publishes the pin to Pinterest at the slot time."
+    },
+    {
+      "id": "81ddc7be-4506-5625-b038-344d9d6d736b",
+      "name": "Read the booking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        3660
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Zernio's post id, or why it said no.\nconst z = $input.first().json || {};\nconst id = z.post?._id || z._id || '';\nreturn [{ json: { id: $('Get the pin to book').first().json.id, post_id: id, status: id ? 'scheduled' : 'failed',\n  scheduled_for: id ? $('Pick a slot').first().json.slot : null,\n  error: id ? '' : String(z.error?.message || z.error || z.message || JSON.stringify(z)).slice(0, 400) } }];"
+      }
+    },
+    {
+      "id": "de2900f5-d387-555e-a7f4-cdb64a082d0d",
+      "name": "Save the schedule",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        3660
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.status }}",
+            "post_id": "={{ $json.post_id }}",
+            "scheduled_for": "={{ $json.scheduled_for }}",
+            "decided_by": "={{ $('Called by this workflow').first().json.user }}",
+            "decided_at": "={{ $now.toISO() }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "scheduled_for",
+              "displayName": "scheduled_for",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2911bf4b-f238-5cd1-8353-3bd2daca5270",
+      "name": "Card after booking",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2200,
+        3660
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6b598495-7f9b-5845-a56c-bc527b5925b6",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "29901045-9483-5bc6-8a95-1cfbfb41567c",
+              "name": "pin_id",
+              "value": "={{ String($('Get the pin to book').first().json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "54f37d2b-8f0c-51e1-80da-c599705923d6",
+      "name": "Show the booking",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        3660
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "c3e54676-3152-5e41-b93a-c51ce4ed6a55",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        4100
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "87dc665f-3767-56c1-ab0b-5ec6506d62fd",
+      "name": "Check now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        4260
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e78711f3-53a7-5b8d-9092-b459daf0b46e",
+      "name": "Sync settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        4160
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "be6513b9-253d-5040-a61d-fe898e2564d2",
+              "name": "zernio_api",
+              "value": "https://zernio.com/api/v1",
+              "type": "string"
+            },
+            {
+              "id": "7df3e4ce-ae4c-570c-896c-26a59ea5d71d",
+              "name": "log_channel",
+              "value": "#pins-log",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2b62dd40-d345-5e16-bb9e-5206e3cb9135",
+      "name": "Get scheduled pins",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        4160
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "scheduled"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "e84b80fc-0fb2-529a-9447-70c46575d9fb",
+      "name": "Slot passed?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        4160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "40af4e60-1fd6-58b3-878e-15cbf1dab6b0",
+              "leftValue": "={{ !!$json.post_id && new Date($json.scheduled_for).getTime() < Date.now() - 120000 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ae49654d-41a9-5bfe-8658-85f45acd6e10",
+      "name": "Ask Zernio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        4160
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Sync settings').first().json.zernio_api }}/posts/{{ $json.post_id }}",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Zernio"
+        }
+      }
+    },
+    {
+      "id": "ef737e76-3d19-5588-926b-f6310fc694d1",
+      "name": "Read the result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        4160
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// published -> posted with the pin link; failed or cancelled -> failed with the reason; anything else waits for the next run.\nconst rows = $('Slot passed?').all().map(i => i.json);\nconst out = [];\n$input.all().forEach((it, i) => {\n  const r = rows[i]; if (!r) return;\n  if (it.json.error && /\\b404\\b/.test(String(it.json.error.message || it.json.error))) {   // deleted in Zernio\n    out.push({ json: { id: r.id, status: 'failed', pin_url: '', posted_at: null, error: 'Zernio has no post with this id (deleted there?). Try again books a new slot.' } }); return;\n  }\n  const post = it.json.post || it.json;\n  const t = (post.platforms || []).find(p => p.platform === 'pinterest') || {};\n  const status = t.status || post.status || '';\n  if (status === 'published' || post.status === 'published')\n    out.push({ json: { id: r.id, status: 'posted', pin_url: t.platformPostUrl || (t.platformPostId ? 'https://www.pinterest.com/pin/' + t.platformPostId + '/' : ''), posted_at: r.scheduled_for, error: '' } });\n  else if (['failed', 'cancelled'].includes(status) || ['failed', 'cancelled'].includes(post.status))\n    out.push({ json: { id: r.id, status: 'failed', pin_url: '', posted_at: null, error: String(t.errorMessage || t.error || post.error || status).slice(0, 400) } });\n});\nreturn out;"
+      }
+    },
+    {
+      "id": "89326c2b-6b55-5069-9b92-73236e6a3de7",
+      "name": "Save the result",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        4160
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "pins"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.status }}",
+            "pin_url": "={{ $json.pin_url }}",
+            "posted_at": "={{ $json.posted_at }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "pin_url",
+              "displayName": "pin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "posted_at",
+              "displayName": "posted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0cac846c-d19e-5e9d-a272-e994eee640ac",
+      "name": "Card after sync",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1540,
+        4160
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d2be7579-5206-5ca1-9376-08a8d9ce02b4",
+              "name": "lane",
+              "value": "card",
+              "type": "string"
+            },
+            {
+              "id": "83753aab-a3ea-5781-a7bf-6ef0ec40334f",
+              "name": "pin_id",
+              "value": "={{ String($json.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9763ac07-5f27-504f-b532-3a6f3f78bf54",
+      "name": "Show the result",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        4160
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "5967f28e-09ee-5e21-be5b-3d8706aa8ded",
+      "name": "Log lines",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        4340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One line per pin that changed, for the log channel.\nconst rows = $('Read the result').all().map(i => i.json);\nconst pins = Object.fromEntries($('Slot passed?').all().map(i => [String(i.json.id), i.json]));\nif (!rows.length) return [];\nconst text = rows.map(r => r.status === 'posted' ? `:pushpin: <${r.pin_url}|${pins[r.id]?.product_title}> on ${pins[r.id]?.board_name}` : `:x: ${pins[r.id]?.product_title}: ${r.error}`).join('\\n');\nreturn [{ json: { channel: $('Sync settings').first().json.log_channel, text: 'Pins published\\n' + text } }];"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "2a7c55f2-aaec-5af6-a5e1-66128b9419d2",
+      "name": "Post to the log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        4340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: $json.text, unfurl_links: false }) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Setup settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup settings": {
+      "main": [
+        [
+          {
+            "node": "Create pins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create pins": {
+      "main": [
+        [
+          {
+            "node": "Create pin_reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create pin_reviews": {
+      "main": [
+        [
+          {
+            "node": "Sample review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample review": {
+      "main": [
+        [
+          {
+            "node": "Save the sample review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the sample review": {
+      "main": [
+        [
+          {
+            "node": "List Pinterest boards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Called by this workflow": {
+      "main": [
+        [
+          {
+            "node": "Which lane?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every morning": {
+      "main": [
+        [
+          {
+            "node": "Draft settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft pins now": {
+      "main": [
+        [
+          {
+            "node": "Draft settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which lane?": {
+      "main": [
+        [
+          {
+            "node": "Draft settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Card settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Render settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Book settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write the pin",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Frame for the draft": {
+      "main": [
+        [
+          {
+            "node": "Draw the frame",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card for a framed draft": {
+      "main": [
+        [
+          {
+            "node": "Post the framed card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card for the draft": {
+      "main": [
+        [
+          {
+            "node": "Post the draft card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft settings": {
+      "main": [
+        [
+          {
+            "node": "Get all pins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all pins": {
+      "main": [
+        [
+          {
+            "node": "Get reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get reviews": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Get products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get products": {
+      "main": [
+        [
+          {
+            "node": "Pick the next pins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick the next pins": {
+      "main": [
+        [
+          {
+            "node": "Look at the photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Look at the photo": {
+      "main": [
+        [
+          {
+            "node": "Read the photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the photo": {
+      "main": [
+        [
+          {
+            "node": "Write the pin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the pin": {
+      "main": [
+        [
+          {
+            "node": "Check the pin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the pin": {
+      "main": [
+        [
+          {
+            "node": "Save the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the draft": {
+      "main": [
+        [
+          {
+            "node": "Framed pin?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Framed pin?": {
+      "main": [
+        [
+          {
+            "node": "Frame for the draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Card for the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draw the frame": {
+      "main": [
+        [
+          {
+            "node": "Card for a framed draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card settings": {
+      "main": [
+        [
+          {
+            "node": "Get the pin for the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the pin for the card": {
+      "main": [
+        [
+          {
+            "node": "Build the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the card": {
+      "main": [
+        [
+          {
+            "node": "Post or update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post or update the card": {
+      "main": [
+        [
+          {
+            "node": "New card?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New card?": {
+      "main": [
+        [
+          {
+            "node": "Save where the card is",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Card done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save where the card is": {
+      "main": [
+        [
+          {
+            "node": "Card done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Frame page": {
+      "main": [
+        [
+          {
+            "node": "Frame settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Frame settings": {
+      "main": [
+        [
+          {
+            "node": "Get the pin for the frame",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the pin for the frame": {
+      "main": [
+        [
+          {
+            "node": "Build the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the page": {
+      "main": [
+        [
+          {
+            "node": "Send the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render settings": {
+      "main": [
+        [
+          {
+            "node": "Get the pin to draw",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the pin to draw": {
+      "main": [
+        [
+          {
+            "node": "Screenshot the frame",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screenshot the frame": {
+      "main": [
+        [
+          {
+            "node": "Name the file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Name the file": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Render": {
+      "main": [
+        [
+          {
+            "node": "Keep it in Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep it in Shopify": {
+      "main": [
+        [
+          {
+            "node": "Let Shopify process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Let Shopify process": {
+      "main": [
+        [
+          {
+            "node": "Read the file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the file": {
+      "main": [
+        [
+          {
+            "node": "Collect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect": {
+      "main": [
+        [
+          {
+            "node": "Save the frame",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the frame": {
+      "main": [
+        [
+          {
+            "node": "Old frame to delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Old frame to delete?": {
+      "main": [
+        [
+          {
+            "node": "Delete the old frame",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Frame done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete the old frame": {
+      "main": [
+        [
+          {
+            "node": "Frame done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Read the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the click": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Answer Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not from Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Slack": {
+      "main": [
+        [
+          {
+            "node": "Review settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review settings": {
+      "main": [
+        [
+          {
+            "node": "Get the clicked pin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the clicked pin": {
+      "main": [
+        [
+          {
+            "node": "Route the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking request": {
+      "main": [
+        [
+          {
+            "node": "Book it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top-up request": {
+      "main": [
+        [
+          {
+            "node": "Top up the queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route the click": {
+      "main": [
+        [
+          {
+            "node": "Can be booked?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build the edit modal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check the edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can be skipped?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is it scheduled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can be booked?": {
+      "main": [
+        [
+          {
+            "node": "Booking request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Say why not",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book it": {
+      "main": [
+        [
+          {
+            "node": "Top-up request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the edit modal": {
+      "main": [
+        [
+          {
+            "node": "Open the edit modal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Frame after an edit": {
+      "main": [
+        [
+          {
+            "node": "Draw it again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the edit": {
+      "main": [
+        [
+          {
+            "node": "Still a draft?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still a draft?": {
+      "main": [
+        [
+          {
+            "node": "Save the edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the edit": {
+      "main": [
+        [
+          {
+            "node": "Redraw the frame?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redraw the frame?": {
+      "main": [
+        [
+          {
+            "node": "Frame after an edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Card after a click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can be skipped?": {
+      "main": [
+        [
+          {
+            "node": "Mark skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is it scheduled?": {
+      "main": [
+        [
+          {
+            "node": "Delete from Zernio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete from Zernio": {
+      "main": [
+        [
+          {
+            "node": "Back to a draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card after a click": {
+      "main": [
+        [
+          {
+            "node": "Redraw the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draw it again": {
+      "main": [
+        [
+          {
+            "node": "Card after a click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark skipped": {
+      "main": [
+        [
+          {
+            "node": "Card after a click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back to a draft": {
+      "main": [
+        [
+          {
+            "node": "Card after a click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top-up after a skip": {
+      "main": [
+        [
+          {
+            "node": "Top up after a skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redraw the card": {
+      "main": [
+        [
+          {
+            "node": "Was it a skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Was it a skip?": {
+      "main": [
+        [
+          {
+            "node": "Top-up after a skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card after booking": {
+      "main": [
+        [
+          {
+            "node": "Show the booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book settings": {
+      "main": [
+        [
+          {
+            "node": "Get the pin to book",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the pin to book": {
+      "main": [
+        [
+          {
+            "node": "Still bookable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still bookable?": {
+      "main": [
+        [
+          {
+            "node": "Get booked pins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get booked pins": {
+      "main": [
+        [
+          {
+            "node": "Pick a slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick a slot": {
+      "main": [
+        [
+          {
+            "node": "Schedule on Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule on Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Read the booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the booking": {
+      "main": [
+        [
+          {
+            "node": "Save the schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the schedule": {
+      "main": [
+        [
+          {
+            "node": "Card after booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Sync settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check now": {
+      "main": [
+        [
+          {
+            "node": "Sync settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card after sync": {
+      "main": [
+        [
+          {
+            "node": "Show the result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync settings": {
+      "main": [
+        [
+          {
+            "node": "Get scheduled pins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get scheduled pins": {
+      "main": [
+        [
+          {
+            "node": "Slot passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot passed?": {
+      "main": [
+        [
+          {
+            "node": "Ask Zernio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Zernio": {
+      "main": [
+        [
+          {
+            "node": "Read the result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the result": {
+      "main": [
+        [
+          {
+            "node": "Save the result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the result": {
+      "main": [
+        [
+          {
+            "node": "Card after sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log lines": {
+      "main": [
+        [
+          {
+            "node": "Post to the log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
