@@ -1,0 +1,44 @@
+{%- comment -%} Product FAQs: the answers, with their source, and FAQPage schema from the same fields {%- endcomment -%}
+{%- assign faqs = product.metafields.custom.faqs.value -%}
+{%- if faqs != blank -%}
+  <div class="product-faqs">
+    <h2 class="product-faqs__title">Questions and answers</h2>
+    {%- for faq in faqs -%}
+      <details class="product-faqs__item">
+        <summary class="product-faqs__question">{{ faq.question.value | escape }}</summary>
+        <div class="product-faqs__answer">
+          <p>{{ faq.answer.value | escape | newline_to_br }}</p>
+          {%- if faq.source_url.value != blank -%}
+            <p class="product-faqs__source">
+              Source: <a href="{{ faq.source_url.value }}" target="_blank" rel="noopener">{{ faq.source_label.value | default: 'the manufacturer' | escape }}</a>
+            </p>
+          {%- endif -%}
+        </div>
+      </details>
+    {%- endfor -%}
+  </div>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {%- for faq in faqs -%}
+          {
+            "@type": "Question",
+            "name": {{ faq.question.value | json }},
+            "acceptedAnswer": { "@type": "Answer", "text": {{ faq.answer.value | json }} }
+          }{%- unless forloop.last -%},{%- endunless -%}
+        {%- endfor -%}
+      ]
+    }
+  </script>
+  <style>
+    .product-faqs { margin-top: 1.5rem; }
+    .product-faqs__title { font-size: 1.25rem; margin: 0 0 0.5rem; }
+    .product-faqs__item { border-top: 1px solid rgb(var(--color-foreground-rgb, 0 0 0) / 0.15); padding: 0.75rem 0; }
+    .product-faqs__item:last-child { border-bottom: 1px solid rgb(var(--color-foreground-rgb, 0 0 0) / 0.15); }
+    .product-faqs__question { cursor: pointer; font-weight: 600; }
+    .product-faqs__answer p { margin: 0.5rem 0 0; }
+    .product-faqs__source { font-size: 0.875em; opacity: 0.75; }
+  </style>
+{%- endif -%}

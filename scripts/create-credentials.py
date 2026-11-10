@@ -145,6 +145,10 @@ def main():
 
     made = []
     for cred in creds:
+        if cred.get("optional") and not only:
+            want = input(f"\n{cred['name']} is optional. Create it? [y/N]: ")
+            if want.strip().lower() != "y":
+                continue
         if (cred["name"], cred["type"]) in existing:
             again = input(f"\n{cred['name']} already exists (id {existing[(cred['name'], cred['type'])]}). Create another? [y/N]: ")
             if again.strip().lower() != "y":

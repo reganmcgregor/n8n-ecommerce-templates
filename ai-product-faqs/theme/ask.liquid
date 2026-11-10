@@ -1,0 +1,41 @@
+{%- comment -%} Ask a question: posts to the template's Ask lane. Replace the URL with your Question from the store webhook. {%- endcomment -%}
+<form class="product-ask" data-endpoint="https://your-n8n.example.com/webhook/faq-ask">
+  <h3 class="product-ask__title">Ask a question about this product</h3>
+  <input type="hidden" name="product_id" value="{{ product.id }}">
+  <label class="product-ask__label">Your question
+    <textarea name="question" required minlength="10" maxlength="300" rows="3"></textarea>
+  </label>
+  <label class="product-ask__label">Email (optional, so we can reply)
+    <input type="email" name="email" autocomplete="email">
+  </label>
+  <div aria-hidden="true" style="position:absolute;left:-9999px">
+    <label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+  </div>
+  <button type="submit" class="button">Send question</button>
+  <p class="product-ask__status" role="status"></p>
+</form>
+<script>
+  document.querySelectorAll('form.product-ask').forEach(function (form) {
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      var status = form.querySelector('.product-ask__status');
+      status.textContent = 'Sending...';
+      try {
+        var reply = await fetch(form.dataset.endpoint, { method: 'POST', body: new URLSearchParams(new FormData(form)) });
+        var body = await reply.json().catch(function () { return {}; });
+        if (reply.ok) { status.textContent = "Thanks! We'll answer it here on the page."; form.reset(); }
+        else if (body.reason === 'too many') { status.textContent = "Thanks, we've got your questions."; }
+        else { status.textContent = 'Please check your question (10 to 300 characters) and try again.'; }
+      } catch (error) {
+        status.textContent = "Sorry, that didn't send. Please try again later.";
+      }
+    });
+  });
+</script>
+<style>
+  .product-ask { position: relative; margin-top: 1.5rem; display: grid; gap: 0.75rem; }
+  .product-ask__title { font-size: 1rem; margin: 0; }
+  .product-ask__label { display: grid; gap: 0.25rem; font-size: 0.875rem; }
+  .product-ask textarea, .product-ask input[type=email] { width: 100%; padding: 0.5rem; font: inherit; }
+  .product-ask__status { margin: 0; font-size: 0.875rem; }
+</style>
