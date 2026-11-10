@@ -22,6 +22,7 @@ Free n8n templates for running an online store: monitoring competitor prices, ad
 | [Pinterest product pins](pinterest-automation/) | Writes a pin for each product from its own data and a vision check on its photo, frames later pins with a headline or a review, asks you in Slack, and posts them at a steady pace through Zernio so nothing goes out twice. |
 | [Shopify product groups](shopify-product-groups/) | Shows separate products as one family, like Shopify combined listings without Plus: finds each series by vendor, type and title, writes a Product group metaobject per series every hour, and ships Liquid snippets for a series picker and card colour dots on a stock theme. No AI model needed. |
 | [AI product FAQs](ai-product-faqs/) | Writes FAQs for each product from its manufacturer page and documents, checks every quote and number in code and with a second AI pass, and publishes the set you approve in Slack as Product FAQ metaobjects with FAQPage schema. Shoppers and your team can ask new questions from the product page or Slack. |
+| [Product manuals and spec sheets](product-manuals-spec-sheets/) | Finds each product's user manuals, setup guides, datasheets and compliance documents on the manufacturer's own site, checks the model number and the document type in code, asks in Slack only when it isn't sure, and uploads PDFs to Shopify Files to fill a Documents table on the product page. No AI model needed. |
 
 ## Getting started
 

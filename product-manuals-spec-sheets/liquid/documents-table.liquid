@@ -1,0 +1,38 @@
+{%- assign documents = product.metafields.custom.documents.value -%}
+{%- if documents != blank -%}
+  <div class="product-documents">
+    <h2 class="h5">Manuals and documents</h2>
+    <table>
+      <thead>
+        <tr><th scope="col">Document</th><th scope="col">Type</th></tr>
+      </thead>
+      <tbody>
+        {%- for doc in documents -%}
+          {%- liquid
+            assign doc_url = doc.url.value
+            assign doc_format = ''
+            if doc.file.value != blank
+              assign doc_url = doc.file.value.url
+              assign doc_format = doc.file.value.url | split: '?' | first | split: '.' | last | upcase
+            endif
+          -%}
+          {%- if doc_url != blank -%}
+            <tr>
+              <td>
+                <a href="{{ doc_url }}" target="_blank" rel="noopener">{{ doc.title.value | escape }}</a>
+                {%- if doc_format != blank %} ({{ doc_format }}){% endif -%}
+              </td>
+              <td>{{ doc.document_type.value | escape }}</td>
+            </tr>
+          {%- endif -%}
+        {%- endfor -%}
+      </tbody>
+    </table>
+  </div>
+  <style>
+    .product-documents { margin-top: 1.5rem; }
+    .product-documents table { width: 100%; border-collapse: collapse; }
+    .product-documents th, .product-documents td { text-align: left; padding: 0.6rem 0.5rem 0.6rem 0; border-bottom: 1px solid rgb(var(--color-foreground-rgb, 0 0 0) / 0.12); }
+    .product-documents th { font-weight: 600; }
+  </style>
+{%- endif -%}
