@@ -1,0 +1,107 @@
+{%- comment -%}
+  Series picker: one row per option of the product's group (Length, then Colour), every value a link
+  to the product that has it. Keeps your other choices where it can; a value that doesn't exist with
+  them links to the first product that has it and shows struck through, as do sold-out products.
+  Reads the group's Members field (written by n8n), or its Products list when Members is empty.
+  Paste into a Custom Liquid block in the product template's Product information, above the buy buttons.
+{%- endcomment -%}
+{%- liquid
+  assign colour_option = 'Colour'
+  assign colour_map = 'black:#111111,white:#ffffff,grey:#8c9196,silver:#c0c0c0,blue:#1f5fbf,navy:#1b2a4a,red:#c62828,green:#2e7d32,yellow:#f9d71c,orange:#ef6c00,purple:#6a1b9a,pink:#e91e63,beige:#d8c3a5,brown:#6d4c41,gold:#c9a227' | split: ','
+  assign p = closest.product | default: product
+  assign group = p.metafields.custom.product_group.value
+  assign current = p.metafields.custom.option_values.value
+  if group
+    assign options = group.group_options.value
+    assign rows = group.members_json.value
+    assign list = group.products.value
+    if rows != blank
+      assign count = rows.size
+    else
+      assign count = list.size
+    endif
+  endif
+  assign root = routes.root_url | remove_last: '/'
+-%}
+{%- if group and count > 1 and current != blank -%}
+<div class="series-picker">
+  {%- for opt in options -%}
+    {%- assign is_colour = false -%}
+    {%- if opt == colour_option -%}{%- assign is_colour = true -%}{%- endif -%}
+    <div class="series-picker__row" role="group" aria-label="{{ opt | escape }}">
+      <p class="series-picker__label">{{ opt }}: <strong>{{ current[opt] }}</strong></p>
+      <div class="series-picker__values">
+      {%- assign done = '|' -%}
+      {%- for i in (1..count) -%}
+        {%- assign k = forloop.index0 -%}
+        {%- if rows != blank -%}{%- assign value = rows[k].values[opt] -%}{%- else -%}{%- assign value = list[k].metafields.custom.option_values.value[opt] -%}{%- endif -%}
+        {%- assign tag = '|' | append: value | append: '|' -%}
+        {%- if value == blank or done contains tag -%}{%- continue -%}{%- endif -%}
+        {%- assign done = done | append: value | append: '|' -%}
+        {%- comment -%} The best product for this value: one that keeps the other choices, else the first with it. {%- endcomment -%}
+        {%- assign target = '' -%}{%- assign exact = false -%}{%- assign available = false -%}{%- assign swatch = '' -%}
+        {%- for j in (1..count) -%}
+          {%- assign n = forloop.index0 -%}
+          {%- if rows != blank -%}
+            {%- assign vals = rows[n].values -%}{%- assign h = rows[n].handle -%}{%- assign a = rows[n].available -%}{%- assign s = rows[n].swatch -%}
+          {%- else -%}
+            {%- assign vals = list[n].metafields.custom.option_values.value -%}{%- assign h = list[n].handle -%}{%- assign a = list[n].available -%}
+            {%- assign s = list[n].metafields.shopify['color-pattern'].value.first.color -%}
+          {%- endif -%}
+          {%- if vals[opt] != value -%}{%- continue -%}{%- endif -%}
+          {%- if target == '' -%}{%- assign target = h -%}{%- assign available = a -%}{%- assign swatch = s -%}{%- endif -%}
+          {%- assign keeps = true -%}
+          {%- for other in options -%}
+            {%- if other != opt and vals[other] != current[other] -%}{%- assign keeps = false -%}{%- endif -%}
+          {%- endfor -%}
+          {%- if keeps -%}{%- assign target = h -%}{%- assign available = a -%}{%- assign swatch = s -%}{%- assign exact = true -%}{%- break -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if is_colour and swatch == blank -%}
+          {%- assign key = value | downcase | append: ':' -%}
+          {%- for pair in colour_map -%}{%- if pair contains key -%}{%- assign swatch = pair | remove: key -%}{%- endif -%}{%- endfor -%}
+        {%- endif -%}
+        {%- liquid
+          assign classes = 'series-picker__value'
+          if is_colour and swatch != blank
+            assign classes = classes | append: ' series-picker__value--swatch'
+          endif
+          unless exact and available
+            assign classes = classes | append: ' series-picker__value--struck'
+          endunless
+          assign note = ''
+          unless exact
+            assign note = 'not with your other choices'
+          endunless
+          if exact and available == false
+            assign note = 'sold out'
+          endif
+        -%}
+        <a href="{{ root }}/products/{{ target }}" class="{{ classes }}"
+          {%- if value == current[opt] %} aria-current="true"{% endif %}
+          {%- if is_colour and swatch != blank %} style="--swatch: {{ swatch }};" title="{{ value | escape }}{% if note != '' %} ({{ note }}){% endif %}"{% endif %}>
+          {%- if is_colour and swatch != blank -%}<span class="visually-hidden">{{ value }}</span>{%- else -%}{{ value }}{%- endif -%}
+          {%- if note != '' -%}<span class="visually-hidden"> ({{ note }})</span>{%- endif -%}
+        </a>
+      {%- endfor -%}
+      </div>
+    </div>
+  {%- endfor -%}
+</div>
+<style>
+  .series-picker { display: grid; gap: 1rem; margin: 0.5rem 0 1rem; }
+  .series-picker__label { margin: 0 0 0.5rem; font-size: 0.875rem; }
+  .series-picker__values { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .series-picker__value { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px;
+    padding: 0 0.875rem; border: 1px solid rgb(var(--color-foreground-rgb, 0 0 0) / 0.2); border-radius: 999px;
+    color: inherit; text-decoration: none; font-size: 0.875rem; }
+  .series-picker__value:hover { border-color: currentColor; }
+  .series-picker__value[aria-current] { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
+  .series-picker__value--swatch { width: 44px; padding: 0; background: var(--swatch);
+    box-shadow: inset 0 0 0 3px rgb(var(--color-background-rgb, 255 255 255) / 1); }
+  .series-picker__value--swatch[aria-current] { box-shadow: inset 0 0 0 3px rgb(var(--color-background-rgb, 255 255 255) / 1), 0 0 0 2px currentColor; }
+  .series-picker__value--struck { opacity: 0.55; text-decoration: line-through; }
+  .series-picker__value--swatch.series-picker__value--struck { opacity: 1;
+    background: linear-gradient(to top right, transparent calc(50% - 2px), rgb(var(--color-background-rgb, 255 255 255) / 1) calc(50% - 2px),
+      rgb(var(--color-background-rgb, 255 255 255) / 1) calc(50% + 2px), transparent calc(50% + 2px)), var(--swatch); }
+</style>
+{%- endif -%}

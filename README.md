@@ -20,6 +20,7 @@ Free n8n templates for running an online store: monitoring competitor prices, ad
 | [Compatible accessories](compatible-accessories/) | Matches each accessory to the products it fits from what its manufacturer's page says, checks every quote in code and with a second AI pass, and writes the ones you approve in Slack to Shopify's Complementary products, with a Compatible with list on the accessory. |
 | [Shopify repricing engine](shopify-repricing-engine/) | Sets every price from three rules you can read (1 cent under the cheapest trusted competitor, your RRP, or cost plus per product type), never under break-even, stops itself when a feed looks wrong, and posts Slack cards for held prices and a daily digest with Revert. No AI model needed. |
 | [Pinterest product pins](pinterest-automation/) | Writes a pin for each product from its own data and a vision check on its photo, frames later pins with a headline or a review, asks you in Slack, and posts them at a steady pace through Zernio so nothing goes out twice. |
+| [Shopify product groups](shopify-product-groups/) | Shows separate products as one family, like Shopify combined listings without Plus: finds each series by vendor, type and title, writes a Product group metaobject per series every hour, and ships Liquid snippets for a series picker and card colour dots on a stock theme. No AI model needed. |
 
 ## Getting started
 

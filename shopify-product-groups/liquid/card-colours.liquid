@@ -1,0 +1,49 @@
+{%- comment -%}
+  Colour dots on a product card: the other colours of the card's product that share its other
+  options (a 2m card shows 2m colours), each a link. Up to 6, then "+n". Nothing with fewer than two.
+  Paste into a Custom Liquid block at the end of the product card in the collection and search templates.
+{%- endcomment -%}
+{%- liquid
+  assign colour_option = 'Colour'
+  assign colour_map = 'black:#111111,white:#ffffff,grey:#8c9196,silver:#c0c0c0,blue:#1f5fbf,navy:#1b2a4a,red:#c62828,green:#2e7d32,yellow:#f9d71c,orange:#ef6c00,purple:#6a1b9a,pink:#e91e63,beige:#d8c3a5,brown:#6d4c41,gold:#c9a227' | split: ','
+  assign p = closest.product
+  assign group = p.metafields.custom.product_group.value
+  assign current = p.metafields.custom.option_values.value
+  assign rows = group.members_json.value
+  assign root = routes.root_url | remove_last: '/'
+-%}
+{%- if rows != blank and current[colour_option] != blank -%}
+  {%- capture dots -%}
+    {%- assign shown = 0 -%}{%- assign more = 0 -%}
+    {%- for m in rows -%}
+      {%- assign keeps = true -%}
+      {%- for other in group.group_options.value -%}
+        {%- if other != colour_option and m.values[other] != current[other] -%}{%- assign keeps = false -%}{%- endif -%}
+      {%- endfor -%}
+      {%- unless keeps -%}{%- continue -%}{%- endunless -%}
+      {%- if shown == 6 -%}{%- assign more = more | plus: 1 -%}{%- continue -%}{%- endif -%}
+      {%- assign value = m.values[colour_option] -%}
+      {%- assign swatch = m.swatch -%}
+      {%- if swatch == blank -%}
+        {%- assign key = value | downcase | append: ':' -%}
+        {%- for pair in colour_map -%}{%- if pair contains key -%}{%- assign swatch = pair | remove: key -%}{%- endif -%}{%- endfor -%}
+      {%- endif -%}
+      <a href="{{ root }}/products/{{ m.handle }}" class="card-colours__dot{% unless m.available %} card-colours__dot--sold-out{% endunless %}"
+        style="--swatch: {{ swatch | default: '#ffffff' }};" title="{{ value | escape }}"{% if m.handle == p.handle %} aria-current="true"{% endif %}>
+        <span class="visually-hidden">{{ value }}{% unless m.available %} (sold out){% endunless %}</span></a>
+      {%- assign shown = shown | plus: 1 -%}
+    {%- endfor -%}
+    {%- if more > 0 -%}<a href="{{ p.url }}" class="card-colours__more">+{{ more }}</a>{%- endif -%}
+  {%- endcapture -%}
+  {%- if shown > 1 -%}
+    <div class="card-colours" aria-label="Colours">{{ dots }}</div>
+    <style>
+      .card-colours { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+      .card-colours__dot { display: inline-block; width: 28px; height: 28px; border-radius: 50%; background: var(--swatch);
+        background-clip: content-box; padding: 4px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15); }
+      .card-colours__dot[aria-current] { box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15), 0 0 0 1px currentColor; }
+      .card-colours__dot--sold-out { opacity: 0.4; }
+      .card-colours__more { font-size: 0.8125rem; color: inherit; }
+    </style>
+  {%- endif -%}
+{%- endif -%}

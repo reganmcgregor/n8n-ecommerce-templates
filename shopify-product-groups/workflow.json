@@ -1,0 +1,943 @@
+{
+ "name": "Shopify product groups (template)",
+ "nodes": [
+  {
+   "id": "808cd470-5ffb-5e33-8173-c8bf831d9e6b",
+   "name": "Overview",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    -1000,
+    -140
+   ],
+   "parameters": {
+    "content": "## Shopify product groups\n\nShows separate products as one family on the storefront, like Shopify Plus combined listings, on any plan. A cable sold as one product per length and colour gets a Length row and a Colour row on every member's page, each option a link to the right product.\n\n### How it works\n1. **Setup** (run once) creates the `group_overrides` and `group_changes` tables, the **Product group** metaobject and two product fields: `product_group` and `option_values`.\n2. **Group** (hourly) reads your active products and finds each series: same vendor, same product type and the same title once the option values (a length, a colour, a capacity) and the SKU are taken out. It writes one Product group per series, links each product to it, and keeps every member's stock in the group's `members_json`. Only the differences are written. It starts as a dry run.\n\n### Setup\n1. Credentials: Custom Auth with your Shopify client ID and secret on both **Get Shopify token** nodes, Slack API on **Post summary**.\n2. Fill in **Setup settings** and **Group settings**, then run **Run once to set up**.\n3. Add the two theme blocks from the guide (or the README's `liquid` folder), so the groups show.\n4. Run **Run Group now** with `dry_run` on, read the Slack summary, then set `dry_run` to false.\n\n### Customisation\nOptions are a list in **Group settings**: each has a `name` and a `pattern` (a regular expression) or a list of `words`. Put a product in a group by hand, or keep it out, with a row in `group_overrides`. Groups you make yourself in the admin (with **Kept by n8n** off) are never changed.",
+    "width": 880,
+    "height": 600,
+    "color": 1
+   }
+  },
+  {
+   "id": "d1619524-a35d-5da2-a60e-a49ad7b1cb6c",
+   "name": "Lane Setup",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    -60,
+    -140
+   ],
+   "parameters": {
+    "content": "## Setup (run once)\nCreates the two data tables, the Product group metaobject and the two product fields. Running it again changes nothing and reports them as already there.",
+    "width": 1880,
+    "height": 340,
+    "color": 7
+   }
+  },
+  {
+   "id": "629d9566-18d8-555d-8023-02ebfea1bf77",
+   "name": "Run once to set up",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    0,
+    40
+   ],
+   "parameters": {}
+  },
+  {
+   "id": "d2c2b0ed-c136-51fe-aeac-49f8dae92e7c",
+   "name": "Setup settings",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    220,
+    40
+   ],
+   "parameters": {
+    "mode": "raw",
+    "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"namespace\": \"custom\",\n  \"group_type\": \"product_group\"\n}",
+    "options": {}
+   },
+   "notes": "store_domain: your permanent *.myshopify.com domain. namespace and group_type: where the fields and groups live."
+  },
+  {
+   "id": "eeeedad2-2502-573f-a221-ce2ed6ed3608",
+   "name": "Create group_overrides",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    440,
+    40
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "create",
+    "tableName": "group_overrides",
+    "columns": {
+     "column": [
+      {
+       "name": "handle",
+       "type": "string"
+      },
+      {
+       "name": "group_name",
+       "type": "string"
+      },
+      {
+       "name": "option_values",
+       "type": "string"
+      },
+      {
+       "name": "note",
+       "type": "string"
+      }
+     ]
+    },
+    "options": {
+     "createIfNotExists": true
+    }
+   }
+  },
+  {
+   "id": "9180f28e-04ac-5300-b207-e59e16a5550d",
+   "name": "Create group_changes",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    660,
+    40
+   ],
+   "parameters": {
+    "resource": "table",
+    "operation": "create",
+    "tableName": "group_changes",
+    "columns": {
+     "column": [
+      {
+       "name": "run_date",
+       "type": "date"
+      },
+      {
+       "name": "action",
+       "type": "string"
+      },
+      {
+       "name": "group_name",
+       "type": "string"
+      },
+      {
+       "name": "product",
+       "type": "string"
+      },
+      {
+       "name": "detail",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string"
+      }
+     ]
+    },
+    "options": {
+     "createIfNotExists": true
+    }
+   }
+  },
+  {
+   "id": "8f22319d-80d7-5b30-90f2-3a2607725bd6",
+   "name": "Get Shopify token for Setup",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    40
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/oauth/access_token",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpCustomAuth",
+    "sendBody": true,
+    "contentType": "form-urlencoded",
+    "specifyBody": "keypair",
+    "bodyParameters": {
+     "parameters": [
+      {
+       "name": "grant_type",
+       "value": "client_credentials"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "executeOnce": true,
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 2000,
+   "credentials": {
+    "httpCustomAuth": {
+     "name": "Shopify client credentials"
+    }
+   },
+   "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md."
+  },
+  {
+   "id": "f71b86e2-9353-55f4-b0bd-b71ed3e4fd03",
+   "name": "Create the group type",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    40
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-Shopify-Access-Token",
+       "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ query: \"mutation GroupType($type: String!) {\\n  metaobjectDefinitionCreate(definition: {\\n    type: $type, name: \\\"Product group\\\", displayNameKey: \\\"name\\\",\\n    description: \\\"Separate products shown as one family, such as a cable in several lengths and colours.\\\",\\n    access: { storefront: PUBLIC_READ },\\n    fieldDefinitions: [\\n      { key: \\\"name\\\", name: \\\"Name\\\", type: \\\"single_line_text_field\\\", required: true }\\n      { key: \\\"group_options\\\", name: \\\"Options\\\", type: \\\"list.single_line_text_field\\\",\\n        description: \\\"The options in row order, such as Length then Colour.\\\" }\\n      { key: \\\"products\\\", name: \\\"Products\\\", type: \\\"list.product_reference\\\",\\n        description: \\\"The members in value order. Liquid reads at most 50.\\\" }\\n      { key: \\\"members_json\\\", name: \\\"Members\\\", type: \\\"json\\\",\\n        description: \\\"Every member with its option values and stock. Written by n8n; the theme reads this first.\\\" }\\n      { key: \\\"managed\\\", name: \\\"Kept by n8n\\\", type: \\\"boolean\\\",\\n        description: \\\"On for groups the template made. It never changes or deletes a group with this off.\\\" }\\n    ]\\n  }) { metaobjectDefinition { id } userErrors { field message code } }\\n}\", variables: { type: $('Setup settings').first().json.group_type } }) }}",
+    "options": {}
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "c112fc2b-709d-5c6a-a16c-bc758e349d34",
+   "name": "Find the group type",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1320,
+    40
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-Shopify-Access-Token",
+       "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ query: \"query GroupType($type: String!) { metaobjectDefinitionByType(type: $type) { id } }\", variables: { type: $('Setup settings').first().json.group_type } }) }}",
+    "options": {}
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "db83264f-048d-5c6b-9b93-0c55dd3336c9",
+   "name": "Create the product fields",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1540,
+    40
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-Shopify-Access-Token",
+       "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ query: \"mutation Fields($ns: String!, $def: String!) {\\n  group: metafieldDefinitionCreate(definition: {\\n    name: \\\"Product group\\\", namespace: $ns, key: \\\"product_group\\\", ownerType: PRODUCT,\\n    type: \\\"metaobject_reference\\\", pin: true,\\n    validations: [{ name: \\\"metaobject_definition_id\\\", value: $def }],\\n    description: \\\"The family this product belongs to.\\\"\\n  }) { createdDefinition { id } userErrors { field message code } }\\n  values: metafieldDefinitionCreate(definition: {\\n    name: \\\"Option values\\\", namespace: $ns, key: \\\"option_values\\\", ownerType: PRODUCT,\\n    type: \\\"json\\\", pin: true,\\n    description: \\\"This product's value for each of its group's options, such as {\\\\\\\"Length\\\\\\\": \\\\\\\"2m\\\\\\\", \\\\\\\"Colour\\\\\\\": \\\\\\\"Blue\\\\\\\"}.\\\"\\n  }) { createdDefinition { id } userErrors { field message code } }\\n}\", variables: { ns: $('Setup settings').first().json.namespace, def: $json.data.metaobjectDefinitionByType.id } }) }}",
+    "options": {}
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "57d59a9e-3b6f-5f2c-9c36-f895c094362c",
+   "name": "Setup result",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1760,
+    40
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// One line per thing Setup makes: created, or already there.\nconst said = (errs, made) => made ? 'created' : (errs || []).some(e => e.code === 'TAKEN' || /taken|already/i.test(e.message))\n  ? 'already there' : 'failed: ' + (errs || []).map(e => e.message).join('; ');\nconst t = $('Create the group type').first().json.data.metaobjectDefinitionCreate;\nconst f = $json.data;\nreturn [{ json: {\n  product_group_type: said(t.userErrors, t.metaobjectDefinition),\n  product_group_field: said(f.group.userErrors, f.group.createdDefinition),\n  option_values_field: said(f.values.userErrors, f.values.createdDefinition),\n} }];"
+   }
+  },
+  {
+   "id": "1aa536ce-4abd-5d9b-bf27-9da8120dbc83",
+   "name": "Lane Group",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    -60,
+    380
+   ],
+   "parameters": {
+    "content": "## Group (hourly)\nFinds every series in your catalogue, writes one Product group per series and links its products. Compares with what Shopify already holds, so a run with nothing new writes nothing. Posts to Slack only when something changed.",
+    "width": 2260,
+    "height": 480,
+    "color": 7
+   }
+  },
+  {
+   "id": "bf46bce3-f049-50c5-8afd-f83007db385a",
+   "name": "Every hour",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    580
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "hours",
+       "hoursInterval": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ae043d47-4f1b-5f94-a5d5-6160292a08d1",
+   "name": "Run Group now",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    0,
+    760
+   ],
+   "parameters": {}
+  },
+  {
+   "id": "c3f1fef1-7462-50a8-963d-8ae754b13be0",
+   "name": "Group settings",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    220,
+    670
+   ],
+   "parameters": {
+    "mode": "raw",
+    "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"namespace\": \"custom\",\n  \"group_type\": \"product_group\",\n  \"slack_channel\": \"#log-catalogue\",\n  \"dry_run\": true,\n  \"match_on\": [\n    \"vendor\",\n    \"product_type\"\n  ],\n  \"strip_sku\": true,\n  \"min_members\": 2,\n  \"report_hour\": 9,\n  \"options\": [\n    {\n      \"name\": \"Length\",\n      \"pattern\": \"\\\\b\\\\d+(?:\\\\.\\\\d+)?\\\\s?(?:mm|cm|m|ft|in)\\\\b\"\n    },\n    {\n      \"name\": \"Colour\",\n      \"colour_attribute\": true,\n      \"words\": [\n        \"black\",\n        \"white\",\n        \"grey\",\n        \"gray\",\n        \"silver\",\n        \"blue\",\n        \"navy\",\n        \"red\",\n        \"green\",\n        \"yellow\",\n        \"orange\",\n        \"purple\",\n        \"pink\",\n        \"beige\",\n        \"brown\",\n        \"gold\",\n        \"graphite\",\n        \"charcoal\",\n        \"ivory\",\n        \"cream\"\n      ],\n      \"aliases\": {\n        \"Gray\": \"Grey\"\n      }\n    },\n    {\n      \"name\": \"Capacity\",\n      \"pattern\": \"\\\\b\\\\d+(?:\\\\.\\\\d+)?\\\\s?(?:GB|TB)\\\\b\"\n    }\n  ]\n}",
+    "options": {}
+   },
+   "notes": "options: the order is the row order on the product page. dry_run: list the changes in Slack, write nothing. report_hour: the run in this hour also posts near misses and duplicates."
+  },
+  {
+   "id": "987a1421-4ae3-5e55-aed2-f5fd05997c01",
+   "name": "Get Shopify token for Group",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    440,
+    670
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "=https://{{ $('Group settings').first().json.store_domain }}/admin/oauth/access_token",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpCustomAuth",
+    "sendBody": true,
+    "contentType": "form-urlencoded",
+    "specifyBody": "keypair",
+    "bodyParameters": {
+     "parameters": [
+      {
+       "name": "grant_type",
+       "value": "client_credentials"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "executeOnce": true,
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 2000,
+   "credentials": {
+    "httpCustomAuth": {
+     "name": "Shopify client credentials"
+    }
+   },
+   "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md."
+  },
+  {
+   "id": "778f3423-525e-56fd-87a5-27e63d254287",
+   "name": "Read products",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    670
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "=https://{{ $('Group settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-Shopify-Access-Token",
+       "value": "={{ $('Get Shopify token for Group').first().json.access_token }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ query: \"query Products($after: String, $ns: String!) {\\n  products(first: 100, after: $after, query: \\\"status:active AND published_status:published\\\") {\\n    pageInfo { hasNextPage endCursor }\\n    nodes {\\n      id handle title vendor productType\\n      variants(first: 20) { nodes { sku availableForSale } }\\n      colour: metafield(namespace: \\\"shopify\\\", key: \\\"color-pattern\\\") {\\n        references(first: 1) { nodes { ... on Metaobject {\\n          label: field(key: \\\"label\\\") { value } color: field(key: \\\"color\\\") { value } } } }\\n      }\\n      group: metafield(namespace: $ns, key: \\\"product_group\\\") { value }\\n      values: metafield(namespace: $ns, key: \\\"option_values\\\") { value }\\n    }\\n  }\\n}\", variables: { ns: $('Group settings').first().json.namespace } }) }}",
+    "options": {
+     "pagination": {
+      "pagination": {
+       "paginationMode": "updateAParameterInEachRequest",
+       "parameters": {
+        "parameters": [
+         {
+          "type": "body",
+          "name": "variables",
+          "value": "={{ { after: $response.body.data.products.pageInfo.endCursor, ns: $('Group settings').first().json.namespace } }}"
+         }
+        ]
+       },
+       "paginationCompleteWhen": "other",
+       "completeExpression": "={{ !$response.body.data.products.pageInfo.hasNextPage }}",
+       "requestInterval": 250
+      }
+     }
+    }
+   },
+   "executeOnce": true,
+   "notes": "Active products on the online store only: draft and archived products have no page to link to."
+  },
+  {
+   "id": "cf165fc0-3576-5df5-8984-6e927bbcface",
+   "name": "Read groups",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    670
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "=https://{{ $('Group settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-Shopify-Access-Token",
+       "value": "={{ $('Get Shopify token for Group').first().json.access_token }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ query: \"query Groups($after: String, $type: String!) {\\n  metaobjects(type: $type, first: 100, after: $after) {\\n    pageInfo { hasNextPage endCursor }\\n    nodes {\\n      id handle\\n      name: field(key: \\\"name\\\") { value }\\n      options: field(key: \\\"group_options\\\") { value }\\n      products: field(key: \\\"products\\\") { value }\\n      members: field(key: \\\"members_json\\\") { value }\\n      managed: field(key: \\\"managed\\\") { value }\\n    }\\n  }\\n}\", variables: { type: $('Group settings').first().json.group_type } }) }}",
+    "options": {
+     "pagination": {
+      "pagination": {
+       "paginationMode": "updateAParameterInEachRequest",
+       "parameters": {
+        "parameters": [
+         {
+          "type": "body",
+          "name": "variables",
+          "value": "={{ { after: $response.body.data.metaobjects.pageInfo.endCursor, type: $('Group settings').first().json.group_type } }}"
+         }
+        ]
+       },
+       "paginationCompleteWhen": "other",
+       "completeExpression": "={{ !$response.body.data.metaobjects.pageInfo.hasNextPage }}",
+       "requestInterval": 250
+      }
+     }
+    }
+   },
+   "executeOnce": true
+  },
+  {
+   "id": "f9f09ad2-049a-5e67-b394-f042f9e90949",
+   "name": "Read overrides",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1100,
+    670
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "group_overrides"
+    },
+    "returnAll": true
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "id": "6842745b-7f0e-5072-bc35-151745c93a6d",
+   "name": "Find series",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    670
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Find each series: same vendor and type, same title once the option values and the SKU are taken out.\n// Then compare with what Shopify holds and output one item per change.\nconst s = $('Group settings').first().json;\nconst products = $('Read products').all().flatMap(i => i.json.data.products.nodes);\nconst groups = $('Read groups').all().flatMap(i => i.json.data.metaobjects.nodes);\nconst overrides = Object.fromEntries($('Read overrides').all().map(i => i.json).filter(o => o.handle).map(o => [o.handle.trim(), o]));\n\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst cap = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();\nconst tidy = t => t.replace(/\\s+/g, ' ').replace(/\\s+([,)\\]])/g, '$1').replace(/^[\\s,\\-|/]+|[\\s,\\-|/]+$/g, '').trim();\nconst num = v => v.replace(/\\s+/g, '').replace(/^\\d+(?:\\.\\d+)?/, n => String(parseFloat(n)));\nconst slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 120);\nconst canon = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x)\n  ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x);\nconst parse = v => { try { return v == null ? null : JSON.parse(v); } catch (e) { return v; } };\n\n// Read one product: its option values, its swatch colour and the title with both taken out.\nfunction read(p) {\n  let title = ' ' + p.title + ' ';\n  if (s.strip_sku) {\n    const skus = p.variants.nodes.map(v => (v.sku || '').trim()).filter(Boolean).sort((a, b) => b.length - a.length);\n    for (const sku of skus) title = title.replace(new RegExp('(^|[\\\\s(\\\\[,])' + esc(sku) + '(?=$|[\\\\s)\\\\],])', 'gi'), '$1 ');\n  }\n  const values = {};\n  let swatch = null;\n  for (const o of s.options) {\n    let v = null;\n    const ref = o.colour_attribute && p.colour && p.colour.references.nodes[0];\n    if (ref && ref.label) { v = ref.label.value; swatch = ref.color ? ref.color.value : null; }\n    if (o.words) {\n      const re = new RegExp('\\\\b(' + o.words.map(esc).join('|') + ')\\\\b', 'gi');\n      const found = title.match(re);\n      if (found && !v) v = cap(found[0]);\n      title = title.replace(re, ' ');\n    }\n    if (o.pattern) {\n      const found = title.match(new RegExp(o.pattern, 'gi')) || [];\n      if (found.length === 1) { if (!v) v = num(found[0]); title = title.replace(new RegExp(o.pattern, 'gi'), ' '); }\n    }\n    if (v) values[o.name] = (o.aliases || {})[v] || v;\n  }\n  return { core: tidy(title), values, swatch };\n}\n\n// Groups you made by hand (Kept by n8n off) are left alone, and so are their products.\nconst byId = Object.fromEntries(groups.map(g => [g.id, g]));\nconst isManaged = g => g && g.managed && g.managed.value === 'true';\nconst field = (p, k) => p[k] && p[k].value;\n\nconst series = {}, forced = [];\nfor (const p of products) {\n  const current = byId[field(p, 'group')];\n  if (current && !isManaged(current)) continue;\n  const o = overrides[p.handle];\n  if (o && String(o.group_name).trim().toLowerCase() === 'exclude') continue;\n  const r = read(p);\n  if (o && o.group_name) {\n    if (o.option_values) Object.assign(r.values, parse(o.option_values) || {});\n    forced.push({ name: o.group_name.trim(), m: { p, ...r } });\n    continue;\n  }\n  const parts = { vendor: p.vendor, product_type: p.productType };\n  const key = s.match_on.map(m => (parts[m] || '').toLowerCase()).concat(r.core.toLowerCase()).join('|');\n  (series[key] = series[key] || { key, name: r.core, members: [] }).members.push({ p, ...r });\n}\n// An override joins the series with that name, or starts one.\nfor (const f of forced) {\n  const g = Object.values(series).find(x => x.name.toLowerCase() === f.name.toLowerCase());\n  const key = g ? g.key : 'override|' + f.name.toLowerCase();\n  (series[key] = series[key] || { key, name: f.name, members: [] }).members.push(f.m);\n}\n\nconst order = (a, b) => {\n  const x = parseFloat(a), y = parseFloat(b);\n  return !isNaN(x) && !isNaN(y) && x !== y ? x - y : String(a).localeCompare(String(b));\n};\nconst want = {}, wantMember = {}, report = [];\n// Handle: the series name, plus the product type when two series share a name.\nconst nameCount = {};\nfor (const g of Object.values(series)) nameCount[slug(g.name)] = (nameCount[slug(g.name)] || 0) + 1;\nfor (const g of Object.values(series)) {\n  if (g.members.length < s.min_members) continue;\n  // An option counts when the group has two or more values for it.\n  const options = s.options.map(o => o.name).filter(n => new Set(g.members.map(m => m.values[n]).filter(Boolean)).size > 1);\n  if (!options.length) continue;\n  const complete = [], seen = {};\n  for (const m of g.members.sort((a, b) => a.p.handle.localeCompare(b.p.handle))) {\n    const missing = options.filter(n => !m.values[n]);\n    if (missing.length) { report.push({ action: 'near_miss', group_name: g.name, product: m.p.handle, detail: 'no ' + missing.join(' or ') }); continue; }\n    const combo = options.map(n => m.values[n]).join(' / ');\n    if (seen[combo]) { report.push({ action: 'duplicate', group_name: g.name, product: m.p.handle, detail: combo + ' is already ' + seen[combo] }); continue; }\n    seen[combo] = m.p.handle; complete.push(m);\n  }\n  if (complete.length < s.min_members) continue;\n  complete.sort((a, b) => { for (const n of options) { const c = order(a.values[n], b.values[n]); if (c) return c; } return 0; });\n  const handle = nameCount[slug(g.name)] > 1 ? slug(g.key) : slug(g.name);\n  const members_json = complete.map(m => {\n    const values = Object.fromEntries(options.map(n => [n, m.values[n]]));\n    const row = { handle: m.p.handle, values, available: m.p.variants.nodes.some(v => v.availableForSale) };\n    if (m.swatch && options.some(n => s.options.find(o => o.name === n).colour_attribute)) row.swatch = m.swatch;\n    return row;\n  });\n  want[handle] = { handle, name: g.name, options, products: complete.slice(0, 50).map(m => m.p.id), members_json };\n  for (const m of complete) wantMember[m.p.id] = { handle, values: Object.fromEntries(options.map(n => [n, m.values[n]])), product: m.p.handle };\n}\n\n// Compare with Shopify.\nconst managed = groups.filter(isManaged);\nconst byHandle = Object.fromEntries(managed.map(g => [g.handle, g]));\nconst out = [];\nfor (const w of Object.values(want)) {\n  const g = byHandle[w.handle];\n  const same = g && field(g, 'name') === w.name && canon(parse(field(g, 'options'))) === canon(w.options)\n    && canon(parse(field(g, 'products'))) === canon(w.products) && canon(parse(field(g, 'members'))) === canon(w.members_json);\n  if (!same) out.push({ action: 'group_set', group_name: w.name, handle: w.handle, metaobject_id: g ? g.id : null,\n    options: w.options, products: w.products, members_json: w.members_json,\n    detail: (g ? 'update: ' : 'new: ') + w.options.join(' \u00d7 ') + ', ' + w.members_json.length + ' products' });\n}\nfor (const g of managed) if (!want[g.handle]) out.push({ action: 'group_delete', group_name: field(g, 'name'), handle: g.handle, metaobject_id: g.id, detail: 'no series left' });\nfor (const p of products) {\n  const w = wantMember[p.id], cur = byId[field(p, 'group')];\n  if (cur && !isManaged(cur)) continue;\n  if (w) {\n    const same = cur && cur.handle === w.handle && canon(parse(field(p, 'values'))) === canon(w.values);\n    if (!same) out.push({ action: 'member_set', group_name: want[w.handle].name, handle: w.handle, product_id: p.id, product: p.handle,\n      option_values: w.values, detail: Object.values(w.values).join(' / ') });\n  } else if (field(p, 'group') || field(p, 'values')) {\n    out.push({ action: 'member_clear', group_name: cur ? field(cur, 'name') : '', product_id: p.id, product: p.handle, detail: 'left its series' });\n  }\n}\nreturn out.concat(report).map(json => ({ json }));"
+   },
+   "notes": "Why Code: series are found by stripping option values and SKUs from titles, then compared with Shopify field by field."
+  },
+  {
+   "id": "4567b072-d01a-5cfc-a69c-9c8382ffcaad",
+   "name": "Write groups and links",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    670
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// Write the changes in order: groups first (products point at them), then product links, then deletes.\n// Why Code: products need the new group IDs, metafieldsSet takes 25 fields a call, and Shopify throttles.\nconst s = $('Group settings').first().json;\nconst token = $('Get Shopify token for Group').first().json.access_token;\nconst url = 'https://' + s.store_domain + '/admin/api/2026-10/graphql.json';\nconst items = $input.all().map(i => i.json);\nconst sleep = ms => new Promise(r => setTimeout(r, ms));\nconst gql = async (query, variables) => {\n  for (let a = 0; a < 5; a++) {\n    const r = await this.helpers.httpRequest({ method: 'POST', url, json: true, body: { query, variables },\n      headers: { 'X-Shopify-Access-Token': token } });\n    if ((r.errors || []).some(e => (e.extensions || {}).code === 'THROTTLED')) { await sleep(2000 * (a + 1)); continue; }\n    return r;\n  }\n  throw new Error('Shopify throttled five times in a row');\n};\nconst problem = (r, k) => (r.errors || []).map(e => e.message)\n  .concat(((r.data || {})[k] || {}).userErrors ? r.data[k].userErrors.map(e => e.message) : []).join('; ');\nconst mark = (x, err) => { x.status = err ? 'failed: ' + err.slice(0, 200) : (s.dry_run ? 'dry run' : 'written'); };\nconst by = a => items.filter(x => x.action === a);\nif (s.dry_run) { items.forEach(x => { if (!['near_miss', 'duplicate'].includes(x.action)) mark(x); }); return items.map(json => ({ json })); }\n\nconst ids = {};\nfor (const g of by('group_set')) {\n  const r = await gql(`mutation($h: MetaobjectHandleInput!, $m: MetaobjectUpsertInput!) {\n    metaobjectUpsert(handle: $h, metaobject: $m) { metaobject { id } userErrors { field message } } }`, {\n    h: { type: s.group_type, handle: g.handle },\n    m: { fields: [\n      { key: 'name', value: g.group_name },\n      { key: 'group_options', value: JSON.stringify(g.options) },\n      { key: 'products', value: JSON.stringify(g.products) },\n      { key: 'members_json', value: JSON.stringify(g.members_json) },\n      { key: 'managed', value: 'true' },\n    ] } });\n  const id = r.data && r.data.metaobjectUpsert && r.data.metaobjectUpsert.metaobject && r.data.metaobjectUpsert.metaobject.id;\n  if (id) ids[g.handle] = id;\n  mark(g, id ? '' : problem(r, 'metaobjectUpsert') || 'no id returned');\n}\nconst known = Object.fromEntries($('Read groups').all().flatMap(i => i.json.data.metaobjects.nodes).map(g => [g.handle, g.id]));\nconst links = by('member_set');\nlinks.forEach(m => { m.group_id = ids[m.handle] || known[m.handle]; if (!m.group_id) mark(m, 'its group was not written'); });\nconst ready = links.filter(m => m.group_id);\nfor (let i = 0; i < ready.length; i += 12) {\n  const batch = ready.slice(i, i + 12);\n  const metafields = batch.flatMap(m => [\n    { ownerId: m.product_id, namespace: s.namespace, key: 'product_group', type: 'metaobject_reference', value: m.group_id },\n    { ownerId: m.product_id, namespace: s.namespace, key: 'option_values', type: 'json', value: JSON.stringify(m.option_values) },\n  ]);\n  const r = await gql(`mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { field message } } }`, { m: metafields });\n  batch.forEach(m => mark(m, problem(r, 'metafieldsSet')));\n}\nconst leavers = by('member_clear');\nfor (let i = 0; i < leavers.length; i += 12) {\n  const batch = leavers.slice(i, i + 12);\n  const metafields = batch.flatMap(m => ['product_group', 'option_values'].map(key => ({ ownerId: m.product_id, namespace: s.namespace, key })));\n  const r = await gql(`mutation($m: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $m) { userErrors { field message } } }`, { m: metafields });\n  batch.forEach(m => mark(m, problem(r, 'metafieldsDelete')));\n}\nfor (const g of by('group_delete')) {\n  const r = await gql(`mutation($id: ID!) { metaobjectDelete(id: $id) { deletedId userErrors { field message } } }`, { id: g.metaobject_id });\n  mark(g, problem(r, 'metaobjectDelete'));\n}\nreturn items.map(json => ({ json }));"
+   }
+  },
+  {
+   "id": "f0dd5940-e760-5717-8b3c-8211c71dd467",
+   "name": "Writes to Shopify",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    1480,
+    850
+   ],
+   "parameters": {
+    "content": "### Writes to your store\nCreates, updates and deletes Product groups and the two product fields. Leave `dry_run` on until the Slack summary looks right.",
+    "width": 320,
+    "height": 150,
+    "color": 3
+   }
+  },
+  {
+   "id": "1d4fcd4c-13b0-5d49-a5d0-7a99a5d123b1",
+   "name": "Is a change?",
+   "type": "n8n-nodes-base.filter",
+   "typeVersion": 2.2,
+   "position": [
+    1760,
+    580
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "ischange",
+       "leftValue": "={{ ['group_set', 'group_delete', 'member_set', 'member_clear'].includes($json.action) }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "b3be1c11-4349-5adf-9985-eb624797b508",
+   "name": "Save changes",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1.1,
+   "position": [
+    1980,
+    580
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "insert",
+    "dataTableId": {
+     "__rl": true,
+     "mode": "name",
+     "value": "group_changes"
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "run_date": "={{ $now.toISO() }}",
+      "action": "={{ $json.action }}",
+      "group_name": "={{ $json.group_name }}",
+      "product": "={{ $json.product || '' }}",
+      "detail": "={{ $json.detail }}",
+      "status": "={{ $json.status }}"
+     },
+     "matchingColumns": [],
+     "schema": [
+      {
+       "id": "run_date",
+       "displayName": "run_date",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "dateTime",
+       "canBeUsedToMatch": true,
+       "readOnly": false,
+       "removed": false
+      },
+      {
+       "id": "action",
+       "displayName": "action",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "readOnly": false,
+       "removed": false
+      },
+      {
+       "id": "group_name",
+       "displayName": "group_name",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "readOnly": false,
+       "removed": false
+      },
+      {
+       "id": "product",
+       "displayName": "product",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "readOnly": false,
+       "removed": false
+      },
+      {
+       "id": "detail",
+       "displayName": "detail",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "readOnly": false,
+       "removed": false
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "readOnly": false,
+       "removed": false
+      }
+     ],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "bc49070e-af5f-5a49-be79-50574afaeab1",
+   "name": "Build summary",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1760,
+    780
+   ],
+   "parameters": {
+    "mode": "runOnceForAllItems",
+    "language": "javaScript",
+    "jsCode": "// A Slack message when something changed, plus once a day (report_hour) for near misses and duplicates.\nconst s = $('Group settings').first().json;\nconst all = $input.all().map(i => i.json);\nconst changes = all.filter(x => ['group_set', 'group_delete', 'member_set', 'member_clear'].includes(x.action));\nconst failed = changes.filter(x => String(x.status).startsWith('failed'));\nconst daily = $now.hour === s.report_hour && all.some(x => ['near_miss', 'duplicate'].includes(x.action));\nif (!changes.length && !daily) return [];\nconst n = a => changes.filter(x => x.action === a).length;\nconst w = s.dry_run ? ['Would write', 'delete', 'link', 'unlink'] : ['Wrote', 'deleted', 'linked', 'unlinked'];\nconst groupsSet = changes.filter(x => x.action === 'group_set');\nconst list = (label, xs, fmt) => xs.length ? '\\n*' + label + '* (' + xs.length + '): ' + xs.slice(0, 10).map(fmt).join(', ') + (xs.length > 10 ? ', ...' : '') : '';\nconst text = ':link: Product groups' + (s.dry_run ? ' (dry run, nothing written)' : '') + '\\n'\n  + (!changes.length ? 'No changes this run.' : w[0] + ' ' + n('group_set') + (n('group_set') === 1 ? ' group, ' : ' groups, ') + w[1] + ' ' + n('group_delete') + ', ' + w[2] + ' ' + n('member_set') + ' products and ' + w[3] + ' ' + n('member_clear') + '.')\n  + groupsSet.slice(0, 8).map(g => '\\n\u2022 ' + g.group_name + ' (' + g.detail + ')').join('')\n  + (groupsSet.length > 8 ? '\\nand ' + (groupsSet.length - 8) + ' more.' : '')\n  + list('Near misses, not grouped', all.filter(x => x.action === 'near_miss'), x => x.product + ' (' + x.detail + ')')\n  + list('Duplicates, left out', all.filter(x => x.action === 'duplicate'), x => x.product + ' (' + x.detail + ')')\n  + list('Failed', failed, x => (x.product || x.group_name) + ': ' + x.status.replace('failed: ', ''));\nreturn [{ json: { channel: s.slack_channel, text, unfurl_links: false } }];"
+   }
+  },
+  {
+   "id": "da3cf663-d5b8-5000-b8cf-5e78f8ff825e",
+   "name": "Post summary",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1980,
+    780
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://slack.com/api/chat.postMessage",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "slackApi",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json) }}",
+    "options": {}
+   },
+   "credentials": {
+    "slackApi": {
+     "name": "Slack bot"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Run once to set up": {
+   "main": [
+    [
+     {
+      "node": "Setup settings",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Setup settings": {
+   "main": [
+    [
+     {
+      "node": "Create group_overrides",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create group_overrides": {
+   "main": [
+    [
+     {
+      "node": "Create group_changes",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create group_changes": {
+   "main": [
+    [
+     {
+      "node": "Get Shopify token for Setup",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get Shopify token for Setup": {
+   "main": [
+    [
+     {
+      "node": "Create the group type",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create the group type": {
+   "main": [
+    [
+     {
+      "node": "Find the group type",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Find the group type": {
+   "main": [
+    [
+     {
+      "node": "Create the product fields",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Create the product fields": {
+   "main": [
+    [
+     {
+      "node": "Setup result",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Every hour": {
+   "main": [
+    [
+     {
+      "node": "Group settings",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Run Group now": {
+   "main": [
+    [
+     {
+      "node": "Group settings",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Group settings": {
+   "main": [
+    [
+     {
+      "node": "Get Shopify token for Group",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get Shopify token for Group": {
+   "main": [
+    [
+     {
+      "node": "Read products",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read products": {
+   "main": [
+    [
+     {
+      "node": "Read groups",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read groups": {
+   "main": [
+    [
+     {
+      "node": "Read overrides",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read overrides": {
+   "main": [
+    [
+     {
+      "node": "Find series",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Find series": {
+   "main": [
+    [
+     {
+      "node": "Write groups and links",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Write groups and links": {
+   "main": [
+    [
+     {
+      "node": "Is a change?",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Build summary",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Is a change?": {
+   "main": [
+    [
+     {
+      "node": "Save changes",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build summary": {
+   "main": [
+    [
+     {
+      "node": "Post summary",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
