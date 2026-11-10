@@ -39,7 +39,9 @@ def api(base, key, method, path, body=None):
         base + "/api/v1" + path,
         data=json.dumps(body).encode() if body is not None else None,
         method=method,
-        headers={"X-N8N-API-KEY": key, "Content-Type": "application/json", "Accept": "application/json"},
+        headers={"X-N8N-API-KEY": key, "Content-Type": "application/json", "Accept": "application/json",
+                 # Cloudflare's bot check (error 1010) blocks Python's default User-Agent.
+                 "User-Agent": "n8n-ecommerce-templates/create-credentials"},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -106,6 +108,9 @@ def build(cred, base=None, key=None):
                 "user": ask("  User"), "password": ask("  Password", secret=True)}
     if t == "postgres":
         return postgres_from_url(ask("  Connection string (Supabase: Connect > Session pooler)", secret=True))
+    if t == "googleOAuth2Api":  # OAuth: n8n stores the client; you sign in from the credential afterwards
+        return {"clientId": ask("  OAuth client ID"), "clientSecret": ask("  OAuth client secret", secret=True),
+                "scope": cred.get("scope", "")}
     raise SystemExit(f"credentials.json lists a type this script doesn't know: {t}")
 
 
@@ -163,6 +168,8 @@ def main():
     print("\nDone. Select each credential on these nodes (or ask your agent to):")
     for cred, cid, how in made:
         print(f"- {cred['name']} [{how}, id {cid}]: {', '.join(cred['nodes'])}")
+        if cred["type"].endswith("OAuth2Api"):
+            print(f"  then open {cred['name']} in n8n and click Sign in with Google")
 
 
 if __name__ == "__main__":
