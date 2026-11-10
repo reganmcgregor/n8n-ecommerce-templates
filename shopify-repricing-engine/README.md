@@ -11,7 +11,7 @@ An n8n template that sets every Shopify price from three rules you can read: 1 c
 
 There's no AI model in it. Every price comes from plain code you can read in **Decide prices**.
 
-The full walkthrough is in the guide: [How to Build a Shopify Repricing Engine With n8n](GUIDE_URL).
+The full walkthrough is in the guide: [How to Build a Shopify Repricing Engine With n8n](https://www.reganmcgregor.com.au/shopify-repricing/).
 
 ## What you need
 
