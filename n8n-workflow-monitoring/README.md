@@ -9,11 +9,13 @@ An n8n template that catches the four ways an automation goes quiet: it **errors
 - **Digest** runs every morning at 08:00. It posts the all-clear, or what's wrong and the day's failures, plus the published workflows with no error workflow set. It can ping an outside heartbeat check, and it deletes old rows.
 - **Demo** fails on purpose, so you can see an alert without breaking a real workflow.
 
+The full walkthrough is in the guide: [n8n Error Handling: Catch Failed, Stalled and Empty Workflows Before Anyone Else Does](https://www.reganmcgregor.com.au/n8n-error-handling/).
+
 
 ## What you need
 
 - n8n with Data Tables, self-hosted or a paid n8n Cloud plan (the API isn't available on the Cloud free trial). Tested on n8n 2.46.6.
-- An n8n API key for the Watch and Digest lanes, which read your workflows and executions through the API. In **Settings > n8n API > Create an API key**, choose the **Read only** scopes: they include `workflow:list`, `workflow:read`, `execution:list` and `execution:read`, which is all this template uses. Keys expire after 30 days unless you pick another expiry; when the key expires, Watch and Digest fail, and Catch tells you so.
+- An n8n API key for the Watch and Digest lanes, which read your workflows and executions through the API. In **Settings > n8n API > Create an API key**, choose the **Read only** scopes if the dialog offers them (without scopes the key has full access, which works too, because this template only reads): they include `workflow:list`, `workflow:read`, `execution:list` and `execution:read`, which is all this template uses. Keys expire after 30 days unless you pick another expiry; when the key expires, Watch and Digest fail, and Catch tells you so.
 - A Slack app with the bot scope `chat:write` (add `chat:write.public` to post in channels the bot hasn't joined), and its bot token. Or swap the Slack nodes for email, Telegram or Microsoft Teams.
 - Optional: an SMTP account for the email fallback (off by default), and a free heartbeat check such as [Healthchecks.io](https://healthchecks.io/) for when n8n itself is down.
 
