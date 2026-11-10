@@ -1,0 +1,2474 @@
+{
+  "name": "Manufacturer reviews (Supabase template)",
+  "nodes": [
+    {
+      "id": "ac35297c-7e97-571d-90fb-86903f39571b",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        -200
+      ],
+      "parameters": {
+        "content": "## Scrape manufacturer reviews into Shopify\nFinds each product's page on the manufacturer's own store, reads every review of that exact product, checks the set is complete and the same product, asks you in Slack, then gives your review app a CSV with the source on every review. Every star rating is kept and the text is never changed.\n\n### How it works\n1. **Setup** creates the `review_sites`, `review_sources`, `reviews` and `review_batches` tables, the **Model number (MPN)** and **Manufacturer review page** product fields, and saves your manufacturer sites.\n2. **Find** (hourly) takes products tagged `find-reviews`, uses the review page you pasted or searches the manufacturer's store for the model, and saves the page.\n3. **Collect** (hourly) reads the page's reviews (Judge.me widgets and pages that list every review in their structured data), checks them and posts one Slack card per new page.\n4. **Review** is your Slack app's Request URL: Approve or Reject a page, and Mark imported once you've uploaded a CSV.\n5. **Export** (daily) builds a Judge.me CSV from approved pages and posts it in Slack. You import it in Judge.me.\n\n### Setup\nCredentials: Shopify Custom Auth (client ID and secret), Slack API (bot token with `chat:write` and `files:write`), Crypto (Slack signing secret). Fill in each lane's settings, run Setup, publish the workflow and set your Slack app's Request URL to **Slack button click**'s production URL.\n\n### Customisation\n`pack_words` decides what counts as a kit or pack. `same_product` is `page` (only reviews of the exact product page) or `title` (also its colours, when the manufacturer pools them). `skip_imported` leaves out reviews the manufacturer imported from somewhere else. No AI model: every check is code.",
+        "width": 900,
+        "height": 1260,
+        "color": 1
+      }
+    },
+    {
+      "id": "7515b0be-83aa-51f9-b7db-ab71179fc241",
+      "name": "Risk: CSV",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        860,
+        2800
+      ],
+      "parameters": {
+        "content": "### Check before you import\nEvery review in this file will show on your product page. Only approved pages are included, but open the CSV and spot-check a product before you import it, and import each batch once: Judge.me doesn't skip duplicates.",
+        "width": 1140,
+        "height": 180,
+        "color": 3
+      }
+    },
+    {
+      "id": "a4ad58ed-8196-58d7-8a30-21f3690dca47",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -200
+      ],
+      "parameters": {
+        "content": "## 1. Setup (run once)\nCreates the four tables and the two product fields, then saves the manufacturer sites from its settings. Running it again is safe.",
+        "width": 2480,
+        "height": 330,
+        "color": 7
+      }
+    },
+    {
+      "id": "7cd26b68-6ec2-5221-aa3c-ad96210c020b",
+      "name": "Lane Find",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        190
+      ],
+      "parameters": {
+        "content": "## 2. Find (hourly)\nTagged products. A page you pasted into the product's **Manufacturer review page** field wins; otherwise it searches each manufacturer site for the model (or the exact title) and skips kits and packs.",
+        "width": 2480,
+        "height": 630,
+        "color": 7
+      }
+    },
+    {
+      "id": "2ae413d1-7d35-597c-b17a-b26de4ef7121",
+      "name": "Lane Collect",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        880
+      ],
+      "parameters": {
+        "content": "## 3. Collect (hourly)\nReads each new page (and approved ones again every week): every review, every page of them. Holds anything incomplete or for another product. New pages become Slack cards.",
+        "width": 2480,
+        "height": 630,
+        "color": 7
+      }
+    },
+    {
+      "id": "1c5d7430-8446-5f98-979e-6cd1957b0ffb",
+      "name": "Lane Review",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1570
+      ],
+      "parameters": {
+        "content": "## 4. Review (Slack's Request URL)\nAnswers Slack at once, checks the signature, age and approvers. Approve or Reject a page; Mark imported closes a CSV batch.",
+        "width": 2920,
+        "height": 750,
+        "color": 7
+      }
+    },
+    {
+      "id": "a181fd0b-8238-5b59-a565-b73151e9c59a",
+      "name": "Lane Export",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2380
+      ],
+      "parameters": {
+        "content": "## 5. Export (daily)\nNew reviews from approved pages, whole products only, as a Judge.me CSV in a Slack thread. Import it, then click Mark imported.",
+        "width": 2700,
+        "height": 630,
+        "color": 7
+      }
+    },
+    {
+      "id": "39ed70ed-a310-546f-aec4-fa313f83c124",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -40
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "af9eab4b-d725-504a-b71e-9d0a35d3da41",
+      "name": "Setup settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        -40
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"model_namespace\": \"custom\",\n  \"model_key\": \"mpn\",\n  \"page_namespace\": \"custom\",\n  \"page_key\": \"review_source_url\",\n  \"manufacturer_sites\": [\n    {\n      \"brand\": \"Your Brand\",\n      \"domain\": \"www.yourbrand.com\",\n      \"source_name\": \"Your Brand\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "notes": "manufacturer_sites: one row per site. brand is your products' Vendor (case doesn't matter), domain is the manufacturer's own store, source_name is what shoppers see next to each review."
+    },
+    {
+      "id": "a9d73c55-7ffd-54b6-a4d8-f8c24c1e506a",
+      "name": "Create review_sites",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "create table if not exists review_sites (\n  id integer generated by default as identity primary key,\n  brand text,\n  domain text,\n  source_name text,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);\ncreate table if not exists review_sources (\n  id integer generated by default as identity primary key,\n  product_id text,\n  product_title text,\n  product_handle text,\n  brand text,\n  model text,\n  url text,\n  source_name text,\n  found_by text,\n  status text,\n  reader text,\n  page_title text,\n  stated_count double precision,\n  review_count double precision,\n  average double precision,\n  stars text,\n  left_out text,\n  error text,\n  attempts double precision,\n  checked_at timestamptz,\n  card_channel text,\n  card_ts text,\n  card text,\n  decided_by text,\n  decided_at timestamptz,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);\ncreate table if not exists reviews (\n  id integer generated by default as identity primary key,\n  key text,\n  source_id double precision,\n  product_id text,\n  product_handle text,\n  review_id text,\n  rating double precision,\n  review_date text,\n  reviewer_name text,\n  row text,\n  status text,\n  batch_id text,\n  found_at timestamptz,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);\ncreate table if not exists review_batches (\n  id integer generated by default as identity primary key,\n  batch_id text,\n  status text,\n  review_count double precision,\n  product_count double precision,\n  card_channel text,\n  card_ts text,\n  card text,\n  delivered_at timestamptz,\n  imported_by text,\n  imported_at timestamptz,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now()\n);\ncreate unique index if not exists review_sites_brand_domain on review_sites (lower(brand), domain);\ncreate index if not exists review_sources_product on review_sources (product_id);\ncreate unique index if not exists reviews_key on reviews (key);\ncreate index if not exists reviews_status on reviews (status, source_id);\ncreate index if not exists reviews_batch on reviews (batch_id);",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Keeps an existing table."
+    },
+    {
+      "id": "4cd9b636-51fc-54c3-866a-5aca53adf939",
+      "name": "Create review_sources",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select 1 as ok;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "4392bef6-7adf-52f3-bf4e-6241e859b097",
+      "name": "Create reviews",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select 1 as ok;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "dfed9eb1-6191-573f-b9ca-612e70be7e09",
+      "name": "Create review_batches",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select 1 as ok;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "2cee4917-4737-52bc-8097-a553476e9b9a",
+      "name": "Get Shopify token for Setup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "ea43533f-eb3e-5ebd-95ac-ab43c5b13f65",
+      "name": "Add the product fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation Fields($model: MetafieldDefinitionInput!, $page: MetafieldDefinitionInput!) {\\n  model: metafieldDefinitionCreate(definition: $model) { createdDefinition { id } userErrors { code message } }\\n  page: metafieldDefinitionCreate(definition: $page) { createdDefinition { id } userErrors { code message } }\\n}\", variables: ({ model: { name: 'Model number (MPN)', namespace: $('Setup settings').first().json.model_namespace, key: $('Setup settings').first().json.model_key, type: 'single_line_text_field', ownerType: 'PRODUCT', pin: true }, page: { name: 'Manufacturer review page', namespace: $('Setup settings').first().json.page_namespace, key: $('Setup settings').first().json.page_key, type: 'url', ownerType: 'PRODUCT', pin: true } }) }) }}",
+        "options": {}
+      },
+      "notes": "A field that already exists answers TAKEN, which is fine."
+    },
+    {
+      "id": "f16dfc0c-f330-5d2a-a5d6-7395d4d2db87",
+      "name": "Get saved sites",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from review_sites order by id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "71c2656c-3ee2-5b7d-9334-57cc68359095",
+      "name": "New sites",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Sites in Setup settings that aren't in the table yet.\nconst key = x => String(x.brand || '').trim().toLowerCase() + '|' + String(x.domain || '').trim().toLowerCase();\nconst have = new Set($input.all().map(i => i.json).filter(r => r.brand).map(key));\nreturn ($('Setup settings').first().json.manufacturer_sites || [])\n  .filter(x => x.brand && x.domain && !have.has(key(x)))\n  .map(x => ({ json: { brand: String(x.brand).trim(),\n    domain: String(x.domain).trim().toLowerCase().replace(/^https?:\\/\\//, '').replace(/\\/.*$/, ''),\n    source_name: String(x.source_name || x.brand).trim() } }));"
+      }
+    },
+    {
+      "id": "3429e6cb-87c3-5d48-9032-c5b34d085d37",
+      "name": "Save the site",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2200,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into review_sites (brand, domain, source_name) values ($1, $2, $3) returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.brand)) ?? null, (($json.domain)) ?? null, (($json.source_name)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "93dfb7e4-caf7-5969-bd30-10924d20f449",
+      "name": "Every hour (Find)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        350
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fd84b52c-5904-5fa1-8593-6ea34ddcd537",
+      "name": "Find now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        530
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e28b3a63-a708-545b-a675-59af18474f64",
+      "name": "Find settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        440
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"find_tag\": \"find-reviews\",\n  \"product_ids\": [],\n  \"batch_size\": 10,\n  \"model_namespace\": \"custom\",\n  \"model_key\": \"mpn\",\n  \"page_namespace\": \"custom\",\n  \"page_key\": \"review_source_url\",\n  \"pack_words\": [\n    \"kit\",\n    \"bundle\",\n    \"combo\",\n    \"pack\",\n    \"set\",\n    \"twin\",\n    \"duo\",\n    \"trio\",\n    \"refurbished\",\n    \"renewed\"\n  ],\n  \"user_agent\": \"YourStoreReviewSync/1.0 (+https://your-store.com)\"\n}",
+        "options": {}
+      },
+      "notes": "Products tagged find_tag (or the product_ids, for a test). batch_size products an hour. pack_words: a page with one of these words that your title lacks is a different product."
+    },
+    {
+      "id": "aa93cd73-9056-5777-b0b8-d8e0263004df",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Find settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "968966ae-9d59-53a7-9e7d-0703b0410da2",
+      "name": "Get products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Find settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"query Products($q: String!, $n: Int!, $ids: [ID!]!, $byIds: Boolean!, $mns: String!, $mkey: String!, $pns: String!, $pkey: String!) {\\n  products(first: $n, query: $q) @skip(if: $byIds) { nodes { id title handle vendor\\n    model: metafield(namespace: $mns, key: $mkey) { value }\\n    page: metafield(namespace: $pns, key: $pkey) { value } } }\\n  nodes(ids: $ids) @include(if: $byIds) { ... on Product { id title handle vendor\\n    model: metafield(namespace: $mns, key: $mkey) { value }\\n    page: metafield(namespace: $pns, key: $pkey) { value } } }\\n}\", variables: ((s => ({ q: 'tag:' + s.find_tag, n: s.batch_size, byIds: s.product_ids.length > 0, ids: s.product_ids.map(x => String(x).startsWith('gid://') ? String(x) : 'gid://shopify/Product/' + x), mns: s.model_namespace, mkey: s.model_key, pns: s.page_namespace, pkey: s.page_key }))($('Find settings').first().json)) }) }}",
+        "options": {}
+      },
+      "notes": "Tagged products, or the product_ids, with the model number and any review page you pasted.",
+      "executeOnce": true
+    },
+    {
+      "id": "890cfe76-c7f4-590e-b126-37c23e565c53",
+      "name": "Get sites",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        440
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from review_sites order by id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "6db75d3b-6a2a-5a6a-aa5f-fa520bc44746",
+      "name": "Get sources",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        440
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from review_sources order by id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "d599c75d-e8ba-5867-bd6a-5c613d0ec91b",
+      "name": "Find the review page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Same-product helpers.\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst words = t => String(t || '').toLowerCase().match(/[a-z0-9]+/g) || [];\n// The model as a whole token: C410 matches \"Tapo C410\" and \"C410(2-Pack)\" but not \"C4100\".\nconst hasModel = (text, model) => {\n  const parts = String(model || '').match(/[a-z0-9]+/gi);\n  if (!parts) return false;\n  return new RegExp('(^|[^a-z0-9])' + parts.map(esc).join('[\\\\s_-]*') + '($|[^a-z0-9])', 'i').test(String(text || ''));\n};\n// Words that make a page a different product from a single item: kit, 2-pack, bundle...\nconst packWords = (t, list) => words(t).filter(w => list.includes(w) || /^\\d+pack$/.test(w));\nconst extraPack = (theirs, ours, list) => [...new Set(packWords(theirs, list).filter(w => !packWords(ours, list).includes(w)))];\n// Without a model number, the titles must match word for word once the brand is taken out.\nconst sameName = (a, b, brand) => {\n  const skip = new Set(words(brand));\n  const clean = t => words(t).filter(w => !skip.has(w)).join(' ');\n  return clean(a) !== '' && clean(a) === clean(b);\n};\n\n// For each product: the page you pasted, or a search of each manufacturer site's own store search.\n// Why Code: one search per site per product with a pause between them, then a pick from the results.\nconst s = $('Find settings').first().json;\nconst d = $('Get products').first().json.data || {};\nconst products = (d.products?.nodes || d.nodes || []).filter(p => p && p.id);\nconst sites = $('Get sites').all().map(i => i.json).filter(x => x.domain);\n// A product that already has a page (other than \"not found\") is done: Find only untags it.\nconst done = new Set($('Get sources').all().map(i => i.json).filter(r => r.product_id && r.status !== 'not_found').map(r => r.product_id));\nconst sleep = ms => new Promise(r => setTimeout(r, ms));\nconst out = [];\nfor (const p of products) {\n  const base = { product_id: p.id, product_title: p.title, product_handle: p.handle, brand: p.vendor || '', model: String(p.model?.value || '').trim() };\n  if (done.has(p.id)) { out.push({ json: { ...base, skip: true } }); continue; }\n  const pasted = String(p.page?.value || '').trim();\n  const mine = sites.filter(x => String(x.brand).toLowerCase() === base.brand.toLowerCase());\n  if (pasted) {\n    const site = mine.find(x => pasted.includes(x.domain)) || {};\n    out.push({ json: { ...base, url: pasted, source_name: site.source_name || base.brand, found_by: 'pasted', status: 'new', note: '' } });\n    continue;\n  }\n  if (!mine.length) { out.push({ json: { ...base, url: '', source_name: '', found_by: 'search', status: 'not_found', note: 'No manufacturer site for ' + (base.brand || 'this vendor') + ' in review_sites' } }); continue; }\n  let pick = null, notes = [];\n  for (const site of mine) {\n    // A Shopify store's own search: free, and it returns the product titles to check.\n    const q = base.model || base.product_title.replace(new RegExp(esc(base.brand), 'ig'), '').trim();\n    let hits = [];\n    try {\n      const r = await this.helpers.httpRequest({ url: 'https://' + site.domain + '/search/suggest.json', json: true, timeout: 20000,\n        qs: { q, 'resources[type]': 'product', 'resources[limit]': 10 }, headers: { 'User-Agent': s.user_agent } });\n      hits = r?.resources?.results?.products || [];\n    } catch (e) { notes.push(site.domain + ': ' + String(e.message).slice(0, 80)); }\n    for (const h of hits) {\n      const ok = base.model ? hasModel(h.title, base.model) : sameName(h.title, base.product_title, base.brand);\n      const extra = extraPack(h.title, base.product_title, s.pack_words);\n      if (!ok) continue;\n      if (extra.length) { notes.push('Skipped ' + h.title + ' (' + extra.join(', ') + ')'); continue; }\n      pick ||= { url: 'https://' + site.domain + String(h.url).split('?')[0], source_name: site.source_name, page_title: h.title };\n    }\n    if (pick) break;\n    await sleep(1000);\n  }\n  out.push({ json: { ...base, url: pick?.url || '', source_name: pick?.source_name || '', found_by: 'search',\n    status: pick ? 'new' : 'not_found', note: (pick ? 'Found ' + pick.page_title + '. ' : 'No matching product. ') + notes.join('; ') } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "4c25dd43-e6fe-5a8f-888b-2004c2813161",
+      "name": "Needs a row?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "72b10595-5fd7-5fcb-9d55-9ae03dfbb308",
+              "leftValue": "={{ !$json.skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e16ef5e6-75f9-5c1f-9843-93912dab15d7",
+      "name": "Clear an old not-found row",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        440
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "delete from review_sources where product_id = $1 and status = $2 returning id",
+        "options": {
+          "queryReplacement": "={{ [ (($json.product_id)) ?? null, ((\"not_found\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "A product you tag again gets a fresh search.",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "5f4c0c74-cbf7-5044-a5f3-4c8d5b1ad6e3",
+      "name": "Back to the pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The delete returns the rows it removed (often none); carry on with the pages instead.\nreturn $('Needs a row?').all().map(i => ({ json: i.json }));"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "5d617dff-f242-5653-8b93-4b13a5f0250a",
+      "name": "Save the page",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2200,
+        440
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into review_sources (product_id, product_title, product_handle, brand, model, url, source_name, found_by, status, error, attempts, checked_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.product_id)) ?? null, (($json.product_title)) ?? null, (($json.product_handle)) ?? null, (($json.brand)) ?? null, (($json.model)) ?? null, (($json.url)) ?? null, (($json.source_name)) ?? null, (($json.found_by)) ?? null, (($json.status)) ?? null, (($json.note)) ?? null, ((0)) ?? null, (($now.toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "147ebf5f-3a2f-5774-9418-9144b0dd539a",
+      "name": "Products to untag",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        650
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { ids: $('Find the review page').all().map(i => i.json.product_id) } }];"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "0dc973a2-cd97-5080-942e-f8de43c7fcf2",
+      "name": "Remove the tag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        650
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Find settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation Untag($tag: [String!]!) { ' + $json.ids.map((id, i) => 'u' + i + ': tagsRemove(id: \"' + id + '\", tags: $tag) { userErrors { message } }').join(' ') + ' }', variables: { tag: [$('Find settings').first().json.find_tag] } }) }}",
+        "options": {}
+      },
+      "notes": "One tagsRemove per product, so the queue moves on. Tag a product again to search again."
+    },
+    {
+      "id": "2ec7bbb7-44a0-5c3a-9c20-1eab0f76e93d",
+      "name": "Every hour (Collect)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1100
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "74fa8b6b-cc72-5179-a8c1-c24437c2e1d7",
+      "name": "Collect now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1280
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "1aa7d9d1-abce-52ac-bb36-017010b5b03c",
+      "name": "Collect settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1190
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"batch_size\": 3,\n  \"recheck_days\": 7,\n  \"retry_hours\": 1,\n  \"max_attempts\": 3,\n  \"max_pages\": 40,\n  \"same_product\": \"page\",\n  \"skip_imported\": true,\n  \"max_photos\": 5,\n  \"pack_words\": [\n    \"kit\",\n    \"bundle\",\n    \"combo\",\n    \"pack\",\n    \"set\",\n    \"twin\",\n    \"duo\",\n    \"trio\",\n    \"refurbished\",\n    \"renewed\"\n  ],\n  \"user_agent\": \"YourStoreReviewSync/1.0 (+https://your-store.com)\",\n  \"slack_channel\": \"#review-reviews\"\n}",
+        "options": {}
+      },
+      "notes": "batch_size pages an hour. same_product: page = reviews of that product page only; title = also the other colours the manufacturer pools under the same name. skip_imported leaves out reviews the manufacturer imported from another site."
+    },
+    {
+      "id": "5c14f08e-7ed5-59cd-b5ed-68c32a660c4a",
+      "name": "Get the pages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        1190
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from review_sources order by id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "dbe6070a-2c33-5659-a553-a670c2fc7fe7",
+      "name": "Pick due pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1190
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// New pages first, then failed ones worth another try, then approved pages due a weekly re-read.\nconst s = $('Collect settings').first().json;\nconst now = Date.now(), H = 3600e3, D = 24 * H;\nconst age = r => now - new Date(r.checked_at || r.updatedAt || 0).getTime();\nconst due = $input.all().map(i => i.json).filter(r => r.url && (\n  r.status === 'new' ||\n  (r.status === 'failed' && (r.attempts || 0) < s.max_attempts && age(r) > s.retry_hours * H) ||\n  (['approved', 'no_reviews'].includes(r.status) && age(r) > s.recheck_days * D)));\ndue.sort((a, b) => (a.status === 'new' ? 0 : 1) - (b.status === 'new' ? 0 : 1) || a.id - b.id);\nreturn due.slice(0, s.batch_size).map(json => ({ json }));"
+      }
+    },
+    {
+      "id": "ad691298-9dc8-5858-a5c4-67c52fb5581c",
+      "name": "Fetch the page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        1190
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "={{ $('Collect settings').first().json.user_agent }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "notes": "One page a second, with a User-Agent that names your store. Never errors: a 403 or 404 is recorded on the page row."
+    },
+    {
+      "id": "3f269382-1d9b-54d1-bbbc-a35e87f3dacf",
+      "name": "Read the reviews",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1190
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Same-product helpers.\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst words = t => String(t || '').toLowerCase().match(/[a-z0-9]+/g) || [];\n// The model as a whole token: C410 matches \"Tapo C410\" and \"C410(2-Pack)\" but not \"C4100\".\nconst hasModel = (text, model) => {\n  const parts = String(model || '').match(/[a-z0-9]+/gi);\n  if (!parts) return false;\n  return new RegExp('(^|[^a-z0-9])' + parts.map(esc).join('[\\\\s_-]*') + '($|[^a-z0-9])', 'i').test(String(text || ''));\n};\n// Words that make a page a different product from a single item: kit, 2-pack, bundle...\nconst packWords = (t, list) => words(t).filter(w => list.includes(w) || /^\\d+pack$/.test(w));\nconst extraPack = (theirs, ours, list) => [...new Set(packWords(theirs, list).filter(w => !packWords(ours, list).includes(w)))];\n// Without a model number, the titles must match word for word once the brand is taken out.\nconst sameName = (a, b, brand) => {\n  const skip = new Set(words(brand));\n  const clean = t => words(t).filter(w => !skip.has(w)).join(' ');\n  return clean(a) !== '' && clean(a) === clean(b);\n};\n\n// Reads every review of each page, checks the set, and turns each review into a review-app row.\n// Why Code: Judge.me's widget pages through its reviews (a loop), and the checks compare the whole set.\nconst s = $('Collect settings').first().json;\nconst pages = $('Pick due pages').all().map(i => i.json);\nconst http = o => this.helpers.httpRequest({ timeout: 30000, ...o, headers: { 'User-Agent': s.user_agent, ...(o.headers || {}) } });\nconst sleep = ms => new Promise(r => setTimeout(r, ms));\nconst decode = t => String(t || '').replace(/&#(x[0-9a-f]+|\\d+);/gi, (_, n) => String.fromCodePoint(n[0].toLowerCase() === 'x' ? parseInt(n.slice(1), 16) : Number(n)))\n  .replace(/&quot;/g, '\"').replace(/&#039;|&apos;/g, \"'\").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');\nconst text = h => decode(String(h || '').replace(/<br\\s*\\/?>|<\\/p>\\s*<p[^>]*>/gi, '\\n').replace(/<[^>]+>/g, '')).replace(/\\n{3,}/g, '\\n\\n').trim();\nconst attr = (h, k) => (h.match(new RegExp('\\\\b' + k + \"=[\\\"']([^\\\"']*)[\\\"']\", 'i')) || [])[1];\nconst classText = (h, c) => { const m = h.match(new RegExp('<(div|b|span|p)\\\\b[^>]*class=[\"\\'][^\"\\']*\\\\b' + c + '\\\\b[^>]*>([\\\\s\\\\S]*?)</\\\\1>', 'i')); return m ? text(m[2]) : ''; };\nconst handleOf = u => (String(u || '').match(/\\/products\\/([^/?#]+)/) || [])[1] || '';\nconst IMPORTED = 'review_collected_from_another_provider';\n\n// Judge.me's older widget sends HTML; its newer one sends JSON. Both come from the same public endpoint.\nconst fromHtml = html => {\n  // Each review is a div whose class list has jdgm-rev on its own (not jdgm-rev-widg__reviews).\n  const starts = [...html.matchAll(/<div\\b[^>]*class=['\"](?:[^'\"]*\\s)?jdgm-rev(?:\\s[^'\"]*)?['\"][^>]*>/gi)];\n  return starts.map((m, i) => {\n    const b = html.slice(m.index, starts[i + 1]?.index ?? html.length);\n    return { id: attr(m[0], 'data-review-id'), rating: Number(attr(b, 'data-score')), title: classText(b, 'jdgm-rev__title'),\n      body: classText(b, 'jdgm-rev__body'), author: classText(b, 'jdgm-rev__author'), date: (b.match(/<time[^>]*datetime=['\"]([^'\"]+)/i) || [])[1],\n      product_url: attr(m[0], 'data-product-url') || '', product_title: decode(attr(m[0], 'data-product-title') || ''),\n      imported: (attr(b, 'data-badge-type') || '') === IMPORTED,\n      pictures: [...b.matchAll(/(?:href|data-mfp-src)=['\"](https:\\/\\/[^'\"]+\\.(?:jpe?g|png|webp)[^'\"]*)['\"]/gi)].map(x => decode(x[1])) };\n  });\n};\nconst fromJson = x => ({ id: x.uuid, rating: Number(x.rating), title: x.title || '', body: text(x.body_html), author: x.reviewer_name, date: x.created_at,\n  product_url: x.product_url || '', product_title: x.product_title || '', imported: (x.transparency_badges || []).includes(IMPORTED),\n  pictures: (x.pictures_urls || []).map(p => typeof p === 'string' ? p : (p.original || p.huge || p.compact || p.url || '')) });\n\nasync function judgeMe(html, page) {\n  if (!/judge\\.me|jdgm/i.test(html)) return null;\n  const shop = (html.match(/Shopify\\.shop\\s*=\\s*[\"']([^\"']+)/) || html.match(/([a-z0-9][a-z0-9-]*\\.myshopify\\.com)/i) || [])[1];\n  if (!shop) return null;\n  // The product's own JSON gives the id Judge.me files reviews under, and its handle.\n  const product = await http({ url: page.url.split(/[?#]/)[0] + '.js', json: true });\n  const widget = (html.match(/<div\\b[^>]*class=['\"][^'\"]*\\bjdgm-rev-widg\\b[^'\"]*['\"][^>]*>/i) || [''])[0];\n  let total = null, avg = Number(attr(widget, 'data-average-rating')) || null, reviews = [];\n  for (let n = 1; n <= s.max_pages; n++) {\n    const r = await http({ url: 'https://api.judge.me/reviews/reviews_for_widget', json: true,\n      qs: { url: shop, shop_domain: shop, platform: 'shopify', page: n, per_page: 30, product_id: String(product.id) } });\n    const batch = Array.isArray(r.reviews) ? r.reviews.map(fromJson) : fromHtml(String(r.html || ''));\n    total = Number(Array.isArray(r.reviews) ? r.number_of_reviews : r.total_count);\n    if (Array.isArray(r.reviews) && r.average_rating) avg = Number(r.average_rating);\n    reviews.push(...batch);\n    if (!batch.length || reviews.length >= total) break;\n    await sleep(500);\n  }\n  return { reader: 'Judge.me', total, avg, reviews, handle: product.handle, page_title: product.title };\n}\n\n// Any site: a Product in the page's structured data that lists every review.\nfunction structured(html, page) {\n  const found = [];\n  const walk = x => { if (Array.isArray(x)) x.forEach(walk); else if (x && typeof x === 'object') { if ([x['@type']].flat().includes('Product')) found.push(x); if (x['@graph']) walk(x['@graph']); } };\n  for (const m of html.matchAll(/<script[^>]*type=[\"']application\\/ld\\+json[\"'][^>]*>([\\s\\S]*?)<\\/script>/gi)) { try { walk(JSON.parse(m[1])); } catch (e) {} }\n  const p = found.length === 1 ? found[0] : found.find(x => page.model && (hasModel(x.mpn, page.model) || hasModel(x.sku, page.model) || hasModel(x.name, page.model)));\n  if (!p || !p.aggregateRating || !p.review) return null;\n  const reviews = [p.review].flat().map((r, i) => ({ id: r['@id'] || r.identifier || [r.author?.name || r.author, r.datePublished, i].join('|'),\n    rating: Number(r.reviewRating?.ratingValue), title: text(r.name), body: text(r.reviewBody), author: r.author?.name || r.author, date: r.datePublished,\n    product_url: '', product_title: '', imported: false, pictures: [r.image || []].flat().map(x => typeof x === 'string' ? x : x?.url || '') }));\n  return { reader: 'Structured data', total: Number(p.aggregateRating.reviewCount || p.aggregateRating.ratingCount), avg: Number(p.aggregateRating.ratingValue),\n    reviews, handle: handleOf(page.url), page_title: text(p.name) };\n}\n\nconst ddmmyyyy = d => d.toISOString().slice(0, 10).split('-').reverse().join('/');\nconst stars = list => [5, 4, 3, 2, 1].map(n => n + '★ ' + list.filter(x => x.rating === n).length).join(' · ');\nfunction toRow(r, page) {\n  // The review app's columns. The text, rating and date are the manufacturer's, unchanged.\n  let body = r.body, cont = '';\n  if (body.length > 5000) { let cut = body.lastIndexOf(' ', 5000); if (cut < 4000) cut = 5000; cont = body.slice(cut).trim(); body = body.slice(0, cut).trim(); }\n  const pics = [...new Set(r.pictures.filter(u => /^https:\\/\\/\\S+\\.(?:jpe?g|png)(?:[?#]|$)/i.test(u)))];\n  return { title: r.title || '', body, rating: r.rating, review_date: ddmmyyyy(new Date(r.date)), reviewer_name: String(r.author || 'Anonymous').trim().slice(0, 100),\n    reviewer_email: '', product_handle: page.product_handle, picture_urls: pics.slice(0, s.max_photos).join(','), curated: 'ok', reply: '',\n    'CFFirst published on': page.source_name, 'CFSource page': page.url, 'CFReview continued': cont, _photos_left_out: Math.max(0, pics.length - s.max_photos) };\n}\n\nasync function read(page, res) {\n  const code = Number(res.statusCode) || 0, html = typeof res.body === 'string' ? res.body : (typeof res.data === 'string' ? res.data : '');\n  if (code >= 400 || !html) return { status: 'failed', error: 'The page answered ' + (code || 'nothing') };\n  const title = text((html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1]);\n  // Same product: the page names the model (or has the same name), and isn't a kit or pack of it.\n  if (page.model && !hasModel(title + ' ' + page.url, page.model)) return { status: 'mismatch', page_title: title, error: \"The page title doesn't name \" + page.model };\n  const extra = extraPack(title, page.product_title, s.pack_words);\n  if (extra.length) return { status: 'mismatch', page_title: title, error: 'The page is a ' + [...new Set(extra)].join(', ') + \" and your product isn't\" };\n  const r = await judgeMe(html, page) || structured(html, page);\n  if (!r) return { status: 'unsupported', page_title: title, error: 'No Judge.me widget or complete review list on the page' };\n  // Complete set: every review the page says it has, no duplicates, and the same average.\n  if (r.reviews.some(x => !x.id)) return { status: 'failed', reader: r.reader, error: 'A review without an id: the page layout may have changed' };\n  const ids = new Set(r.reviews.map(x => String(x.id)));\n  if (!Number.isFinite(r.total)) return { status: 'unsupported', reader: r.reader, error: 'The page gives no review count' };\n  if (r.total === 0) return { status: 'no_reviews', reader: r.reader, page_title: r.page_title, stated_count: 0 };\n  if (ids.size !== r.reviews.length) return { status: 'failed', reader: r.reader, error: 'Duplicate review ids' };\n  if (r.reviews.length < r.total) return { status: 'incomplete', reader: r.reader, stated_count: r.total, error: 'Read ' + r.reviews.length + ' of ' + r.total + ' reviews' };\n  const mean = r.reviews.reduce((a, x) => a + x.rating, 0) / r.reviews.length;\n  if (r.avg && Math.abs(mean - r.avg) > 0.051) return { status: 'failed', reader: r.reader, error: 'Average ' + mean.toFixed(2) + \" doesn't match the page's \" + r.avg };\n  // Then keep only what belongs on your product page.\n  const left = {};\n  const drop = (x, why) => { left[why] = (left[why] || 0) + 1; return false; };\n  const before = t => String(t || '').split(' | ')[0].trim().toLowerCase();\n  const kept = r.reviews.filter(x => {\n    const h = handleOf(x.product_url);\n    // page: only reviews filed under this product page. title: also its other colours, named the same before \" | \".\n    const samePage = !h || h === r.handle;\n    const sameTitle = s.same_product === 'title' && x.product_title && before(x.product_title) === before(r.page_title);\n    if (!samePage && !sameTitle) return drop(x, 'other products');\n    if (s.skip_imported && x.imported) return drop(x, 'imported from another site');\n    if (!(x.rating >= 1 && x.rating <= 5)) return drop(x, 'no star rating');\n    if (!String(x.body || '').trim()) return drop(x, 'stars only, no text');\n    if (!Number.isFinite(new Date(x.date).getTime())) return drop(x, 'no date');\n    return true;\n  });\n  const rows = kept.map(x => ({ review_id: String(x.id), rating: x.rating, row: toRow(x, page) }));\n  const photos = rows.reduce((a, x) => a + x.row._photos_left_out, 0);\n  if (photos) left['photos over ' + s.max_photos + ' a review'] = photos;\n  const sorted = [...kept].sort((a, b) => a.rating - b.rating);\n  const brief = x => x && { rating: x.rating, title: x.title, body: x.body.slice(0, 1200), author: x.author, date: String(x.date).slice(0, 10) };\n  return { status: kept.length ? 'ready' : 'no_reviews', reader: r.reader, page_title: r.page_title, stated_count: r.total, review_count: kept.length,\n    average: kept.length ? Math.round(kept.reduce((a, x) => a + x.rating, 0) / kept.length * 100) / 100 : null, stars: stars(kept),\n    left_out: Object.entries(left).map(([k, v]) => v + ' ' + k).join(', '), lowest: brief(sorted[0]), highest: brief(sorted[sorted.length - 1]), rows };\n}\n\nconst out = [];\nfor (let i = 0; i < pages.length; i++) {\n  const page = pages[i];\n  let r;\n  try { r = await read(page, $input.all()[i]?.json || {}); } catch (e) { r = { status: 'failed', error: String(e.message).slice(0, 300) }; }\n  // An approved page stays approved; its new reviews flow straight to Export.\n  const status = page.status === 'approved' ? 'approved' : r.status;\n  out.push({ json: { ...page, ...r, status, rows: r.rows || [], error: r.error || '', attempts: r.status === 'failed' ? (page.attempts || 0) + 1 : 0 } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "e2d5dd39-8b36-5e03-810a-bfe47a5c3b7c",
+      "name": "One item per review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        1040
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().flatMap(i => i.json.rows.map(r => ({ json: {\n  key: i.json.id + ':' + r.review_id, source_id: i.json.id, product_id: i.json.product_id, product_handle: i.json.product_handle,\n  review_id: r.review_id, rating: r.rating, review_date: r.row.review_date, reviewer_name: r.row.reviewer_name,\n  row: JSON.stringify(Object.fromEntries(Object.entries(r.row).filter(([k]) => !k.startsWith('_')))) } })));"
+      }
+    },
+    {
+      "id": "9faa5d98-dac1-579d-9a3a-53defe16a9cc",
+      "name": "Save the review",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        1040
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into reviews (key, source_id, product_id, product_handle, review_id, rating, review_date, reviewer_name, row, status, found_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) on conflict (key) do nothing returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.key)) ?? null, (($json.source_id)) ?? null, (($json.product_id)) ?? null, (($json.product_handle)) ?? null, (($json.review_id)) ?? null, (($json.rating)) ?? null, (($json.review_date)) ?? null, (($json.reviewer_name)) ?? null, (($json.row)) ?? null, ((\"new\")) ?? null, (($now.toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "917fed62-ac68-51f6-a02f-7b42d065d2f6",
+      "name": "Update the page",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1320,
+        1340
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update review_sources set status = $1, reader = $2, page_title = $3, stated_count = $4, review_count = $5, average = $6, stars = $7, left_out = $8, error = $9, attempts = $10, checked_at = $11, \"updatedAt\" = now() where id = $12 returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.status)) ?? null, (($json.reader || '')) ?? null, (($json.page_title || '')) ?? null, (($json.stated_count ?? null)) ?? null, (($json.review_count ?? 0)) ?? null, (($json.average ?? null)) ?? null, (($json.stars || '')) ?? null, (($json.left_out || '')) ?? null, (($json.error)) ?? null, (($json.attempts)) ?? null, (($now.toISO())) ?? null, (($json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "8b548ca0-5af0-50c8-b583-353d33e54637",
+      "name": "New pages for review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        1340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Pages that are ready and have no card yet, with what the card shows.\nreturn $('Read the reviews').all().map(i => i.json).filter(p => p.status === 'ready' && !p.card_ts).map(json => ({ json }));"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "8c29be44-6943-5fb2-9327-d3cf0f0100a6",
+      "name": "Build the card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        1340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Collect settings').first().json;\nconst cut = (t, n) => t.length > n ? t.slice(0, n - 1) + '…' : t;\nconst quote = r => r ? '*' + '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating) + '* ' + (r.title ? '*' + r.title + '*\\n' : '') + cut(r.body, 900) + '\\n_' + (r.author || 'Anonymous') + ', ' + r.date + '_' : '';\nreturn $input.all().map(({ json: p }) => {\n  const same = p.lowest && p.highest && p.lowest.rating === p.highest.rating;\n  const blocks = [\n    { type: 'header', text: { type: 'plain_text', text: cut('Reviews to check: ' + p.product_title, 150) } },\n    { type: 'section', fields: [\n      { type: 'mrkdwn', text: '*Your product*\\n' + p.product_title + (p.model ? ' (' + p.model + ')' : '') },\n      { type: 'mrkdwn', text: '*Manufacturer page*\\n<' + p.url + '|' + cut(p.page_title || p.url, 120) + '>' },\n      { type: 'mrkdwn', text: '*Reviews to import*\\n' + p.review_count + ' of ' + p.stated_count + ', average ' + p.average },\n      { type: 'mrkdwn', text: '*Stars*\\n' + p.stars } ] },\n    ...(p.left_out ? [{ type: 'context', elements: [{ type: 'mrkdwn', text: 'Left out: ' + p.left_out }] }] : []),\n    // The lowest and highest rated reviews in full, so you can see the range before approving.\n    { type: 'section', text: { type: 'mrkdwn', text: (same ? '*A review*' : '*Lowest rated*') + '\\n' + quote(p.lowest) } },\n    ...(p.review_count > 1 ? [{ type: 'section', text: { type: 'mrkdwn', text: (same ? '*Another review*' : '*Highest rated*') + '\\n' + quote(p.highest) } }] : []),\n    { type: 'context', elements: [{ type: 'mrkdwn', text: 'Approve only if this is the same product: same model, same pack size, same kit contents. Every review will show \"First published on ' + p.source_name + '\".' }] },\n    { type: 'actions', block_id: 'review_actions', elements: [\n      { type: 'button', action_id: 'reviews_approve', text: { type: 'plain_text', text: 'Approve' }, style: 'primary', value: String(p.id) },\n      { type: 'button', action_id: 'reviews_reject', text: { type: 'plain_text', text: 'Reject' }, style: 'danger', value: String(p.id) } ] } ];\n  return { json: { id: p.id, product_title: p.product_title, blocks, channel: s.slack_channel } };\n});"
+      }
+    },
+    {
+      "id": "a0821aac-567b-5ab7-b4a0-a34115170974",
+      "name": "Post the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        1340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: 'Reviews to check: ' + $json.product_title, blocks: $json.blocks, unfurl_links: false }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "2c32cbf0-2aed-5939-8482-5317d339f619",
+      "name": "Save the card",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2200,
+        1340
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update review_sources set card_channel = $1, card_ts = $2, card = $3, \"updatedAt\" = now() where id = $4 returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($json.channel)) ?? null, (($json.ts)) ?? null, ((JSON.stringify($('Build the card').item.json.blocks))) ?? null, (($('Build the card').item.json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "98c98c54-5ba4-52f2-9fb1-3338609e88d9",
+      "name": "Slack button click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1950
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "manufacturer-reviews",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "notes": "Your Slack app's Interactivity Request URL. Raw Body on, so the signature can be checked."
+    },
+    {
+      "id": "65a2f807-d67d-57ee-8bc0-2f7866d38b4d",
+      "name": "Read the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        1950
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Reads the raw body first: Slack signs the exact bytes it sent. (A Set node before this would drop them.)\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || '';\nlet p = {};\ntry { p = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' '))); } catch (e) {}\nconst a = p.actions?.[0] || {};\nreturn [{ json: {\n  base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'] || '',\n  fresh: Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) <= 300, retry: !!h['x-slack-retry-num'],\n  app_id: p.api_app_id || '', user_id: p.user?.id || '', response_url: p.response_url || '',\n  action: String(a.action_id || '').replace(/^reviews_/, ''), value: String(a.value || '') } }];"
+      }
+    },
+    {
+      "id": "96a77d7d-e9c8-55d2-ba70-a271d62358b8",
+      "name": "Review settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        1950
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c50dde9c-be07-5cec-a029-f348c00ea93e",
+              "name": "slack_app_id",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "764cba15-f280-5a2f-a521-da64e7e87e32",
+              "name": "approver_ids",
+              "value": "={{ [] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "Blank slack_app_id accepts any app. approver_ids: Slack user IDs; empty means anyone in the channel."
+    },
+    {
+      "id": "e2716770-661a-5c2a-bdbd-49c9777e6b30",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1950
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      },
+      "notes": "Crypto credential: Hmac Secret = your Slack app's Signing Secret."
+    },
+    {
+      "id": "5788a9a9-d7ef-57dc-b981-105eb743082e",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        1950
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "517f131c-061a-51d7-9e4c-2fc0a642f7e9",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected && $json.fresh }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Matches Slack and is under 5 minutes old, so a captured request can't be replayed."
+    },
+    {
+      "id": "ca54dc69-16b1-598b-b4c8-fd02a952917e",
+      "name": "Not from Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        2150
+      ],
+      "parameters": {
+        "options": {
+          "responseCode": 401
+        },
+        "respondWith": "text",
+        "responseBody": "={{ 'Bad signature' }}"
+      }
+    },
+    {
+      "id": "f920de70-98b8-5752-8923-c3fd237855bd",
+      "name": "Answer Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        1950
+      ],
+      "parameters": {
+        "options": {},
+        "respondWith": "noData"
+      },
+      "notes": "Slack wants an answer within 3 seconds; everything else happens after."
+    },
+    {
+      "id": "de42756c-ebdf-5cc3-9045-13899c935b2c",
+      "name": "Not a retry?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        1950
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6ee5f464-cd50-521c-84a7-f42ec38f88ac",
+              "leftValue": "={{ !$json.retry }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Slack resends a click it thinks timed out. The first one is already being handled."
+    },
+    {
+      "id": "21e4c614-1375-59b3-b7ba-edfcf749e64e",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        1950
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7c9f2bdc-36d9-5eec-a0f7-ebb049decab3",
+              "leftValue": "={{ (!$json.slack_app_id || $json.app_id === $json.slack_app_id) && (!$json.approver_ids.length || $json.approver_ids.includes($json.user_id)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Your app and an approver."
+    },
+    {
+      "id": "bac6ead0-7f10-5619-a4cf-b0f247c14740",
+      "name": "Say not allowed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        2150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read the click').first().json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ response_type: 'ephemeral', replace_original: false, text: 'Only approvers can decide these cards.' }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "836ea2d8-8965-5f4d-97cb-7246c5836625",
+      "name": "Which button?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1760,
+        1950
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "page",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cdc6f023-939c-540a-b51a-3cc106737442",
+                    "leftValue": "={{ ['approve', 'reject'].includes($json.action) && Number($json.value) > 0 }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "imported",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "83074c64-33af-5168-8559-ad6cc3c644af",
+                    "leftValue": "={{ $json.action === 'imported' && !!$json.value }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bae591f9-07fa-5528-a0c6-a5d55ce5a5be",
+      "name": "Get the page",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1980,
+        1830
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from review_sources where id = $1 and status = $2 order by id",
+        "options": {
+          "queryReplacement": "={{ [ ((Number($json.value))) ?? null, ((\"ready\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Only a page waiting for a decision. A second click finds nothing and stops here."
+    },
+    {
+      "id": "d09563c6-8adc-5fbd-a661-415cf2de5af7",
+      "name": "Approve?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        1830
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "01bb2634-2ac7-53cb-a57d-8bee75859d49",
+              "leftValue": "={{ $('Read the click').first().json.action === 'approve' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d8959fc5-44c1-5471-8991-a5a7606493d3",
+      "name": "Mark approved",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2420,
+        1730
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update review_sources set status = $1, decided_by = $2, decided_at = $3, \"updatedAt\" = now() where id = $4 returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"approved\")) ?? null, (($('Read the click').first().json.user_id)) ?? null, (($now.toISO())) ?? null, (($json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "1c79df04-70a2-5c5e-8f92-97754003a6f7",
+      "name": "Show approved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        1730
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.card_channel, ts: $json.card_ts, text: 'Approved: ' + $json.product_title, blocks: ((card, note) => { const b = JSON.parse(card || '[]').filter(x => x.type !== 'actions'); b.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }); return b; })($json.card, ':white_check_mark: Approved by <@' + $json.decided_by + '>. Its ' + $json.review_count + ' reviews go in the next CSV.') }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f08e0a24-a5d1-5217-a9fb-bf505ed4012d",
+      "name": "Mark rejected",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2420,
+        1930
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update review_sources set status = $1, decided_by = $2, decided_at = $3, \"updatedAt\" = now() where id = $4 returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"rejected\")) ?? null, (($('Read the click').first().json.user_id)) ?? null, (($now.toISO())) ?? null, (($json.id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "2699ac14-0c1b-52a2-b4c5-0e94eddade49",
+      "name": "Show rejected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        1930
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.card_channel, ts: $json.card_ts, text: 'Rejected: ' + $json.product_title, blocks: ((card, note) => { const b = JSON.parse(card || '[]').filter(x => x.type !== 'actions'); b.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }); return b; })($json.card, ':no_entry_sign: Rejected by <@' + $json.decided_by + '>. None of its reviews will be exported.') }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "731744ab-c4d8-5200-8804-3d9aa42b78d8",
+      "name": "Get the batch",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1980,
+        2110
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from review_batches where batch_id = $1 and status = $2 order by id",
+        "options": {
+          "queryReplacement": "={{ [ (($json.value)) ?? null, ((\"delivered\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Only a batch not yet marked. A second click stops here."
+    },
+    {
+      "id": "cddb7496-47e7-56ce-91d0-549be1c7480e",
+      "name": "Mark its reviews imported",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2200,
+        2110
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update reviews set status = $1, \"updatedAt\" = now() where batch_id = $2 returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"imported\")) ?? null, (($json.batch_id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "a16935ae-9efb-5e76-97f6-d9e04cb4ecbd",
+      "name": "Mark the batch imported",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2420,
+        2110
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update review_batches set status = $1, imported_by = $2, imported_at = $3, \"updatedAt\" = now() where batch_id = $4 returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"imported\")) ?? null, (($('Read the click').first().json.user_id)) ?? null, (($now.toISO())) ?? null, (($('Get the batch').first().json.batch_id)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "8741f6df-882a-5757-a6fe-4ccbceaf0050",
+      "name": "Show imported",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        2110
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.card_channel, ts: $json.card_ts, text: 'Imported: ' + $json.review_count + ' reviews', blocks: ((card, note) => { const b = JSON.parse(card || '[]').filter(x => x.type !== 'actions'); b.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }); return b; })($json.card, ':white_check_mark: Marked imported by <@' + $json.imported_by + '>.') }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "7d34d693-3447-5159-9e35-35e9c47dc169",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        2540
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d110100f-0a27-55f3-99eb-010fe90b798e",
+      "name": "Export now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2720
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "464925d4-8c01-5a44-8817-99701739915b",
+      "name": "Export settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        2630
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"max_rows\": 500,\n  \"slack_channel\": \"#review-reviews\",\n  \"review_app\": \"Judge.me\"\n}",
+        "options": {}
+      },
+      "notes": "max_rows: the CSV stops at this many reviews, but never splits a product. Judge.me imports up to 50,000 rows a file."
+    },
+    {
+      "id": "ca7f7604-a791-5691-b9a5-2b5ab697fc3d",
+      "name": "Get approved pages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        2630
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from review_sources where status = $1 order by id",
+        "options": {
+          "queryReplacement": "={{ [ ((\"approved\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "171362b4-bc7f-57f3-a8fb-0ac95f7666cc",
+      "name": "Get new reviews",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        2630
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from reviews where status = $1 order by id",
+        "options": {
+          "queryReplacement": "={{ [ ((\"new\")) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "7763db54-cc3a-555e-ba80-ffe9a9b7d453",
+      "name": "Build the CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        2630
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// New reviews of approved pages, whole products only, as a Judge.me import file.\nconst s = $('Export settings').first().json;\nconst pages = Object.fromEntries($('Get approved pages').all().map(i => i.json).filter(p => p.id).map(p => [p.id, p]));\nconst rows = $input.all().map(i => i.json).filter(r => r.key && pages[r.source_id]);\nif (!rows.length) return [];\nconst byProduct = {};\nfor (const r of rows) (byProduct[r.product_handle] ||= []).push(r);\nconst take = [], products = [];\nfor (const [handle, list] of Object.entries(byProduct)) {\n  if (take.length && take.length + list.length > s.max_rows) break;\n  take.push(...list);\n  products.push({ handle, title: pages[list[0].source_id].product_title, count: list.length, source: pages[list[0].source_id].source_name });\n}\nconst cols = ['title', 'body', 'rating', 'review_date', 'reviewer_name', 'reviewer_email', 'product_handle', 'picture_urls', 'curated', 'reply',\n  'CFFirst published on', 'CFSource page', 'CFReview continued'];\nconst q = v => '\"' + String(v ?? '').replace(/\"/g, '\"\"') + '\"';\nconst csv = cols.join(',') + '\\r\\n' + take.map(r => { const x = JSON.parse(r.row); return cols.map(c => q(x[c])).join(','); }).join('\\r\\n') + '\\r\\n';\nconst batch_id = 'batch-' + $now.toFormat('yyyyMMdd-HHmmss');\nreturn [{ json: { batch_id, keys: take.map(r => r.key), count: take.length, products, channel: s.slack_channel, review_app: s.review_app },\n  binary: { data: await this.helpers.prepareBinaryData(Buffer.from(csv, 'utf8'), batch_id + '.csv', 'text/csv') } }];"
+      }
+    },
+    {
+      "id": "d020881a-238d-5005-9135-3532fecaae6f",
+      "name": "Build the export card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        2630
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const b = $json;\nconst lines = b.products.map(p => '• ' + p.title + ': ' + p.count + ' from ' + p.source).join('\\n');\nconst blocks = [\n  { type: 'header', text: { type: 'plain_text', text: b.count + ' reviews ready to import' } },\n  { type: 'section', text: { type: 'mrkdwn', text: lines.slice(0, 2900) } },\n  { type: 'section', text: { type: 'mrkdwn', text: 'The CSV is in the thread. In ' + b.review_app + ', go to *Reviews > Import > From review apps > Judge.me format*, attach it once, then check the import log for failed rows. Click *Mark imported* when it\\'s done.' } },\n  { type: 'actions', block_id: 'batch_actions', elements: [\n    { type: 'button', action_id: 'reviews_imported', text: { type: 'plain_text', text: 'Mark imported' }, style: 'primary', value: b.batch_id } ] } ];\nreturn [{ json: { ...b, blocks }, binary: $input.first().binary }];"
+      }
+    },
+    {
+      "id": "b7969b8a-8e44-589d-b4da-894bd2e29d40",
+      "name": "Post the export card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        2630
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: $json.count + ' reviews ready to import', blocks: $json.blocks }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "fdc37164-9015-5e7c-8e45-c3e922496e48",
+      "name": "Attach the CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        2630
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The HTTP node's answer replaces the item; bring the CSV back for the upload.\nreturn [{ json: { ...$('Build the export card').first().json, ts: $json.ts, channel_id: $json.channel }, binary: $('Build the CSV').first().binary }];"
+      }
+    },
+    {
+      "id": "84a67ebb-78f1-59b8-842d-323a1d876dd7",
+      "name": "Upload the CSV",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1760,
+        2630
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "binaryPropertyName": "data",
+        "options": {
+          "channelId": "={{ $json.channel_id }}",
+          "threadTs": "={{ $json.ts }}",
+          "fileName": "={{ $json.batch_id }}.csv",
+          "title": "={{ $json.batch_id }}",
+          "initialComment": "={{ $json.count }} reviews, one batch. Import it once."
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "Needs the files:write scope. The file goes in the card's thread."
+    },
+    {
+      "id": "64d2b722-f583-5a56-93c4-ea8cb6cf7830",
+      "name": "Save the batch",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1980,
+        2630
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into review_batches (batch_id, status, review_count, product_count, card_channel, card_ts, card, delivered_at) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *",
+        "options": {
+          "queryReplacement": "={{ [ (($('Attach the CSV').first().json.batch_id)) ?? null, ((\"delivered\")) ?? null, (($('Attach the CSV').first().json.count)) ?? null, (($('Attach the CSV').first().json.products.length)) ?? null, (($('Attach the CSV').first().json.channel_id)) ?? null, (($('Attach the CSV').first().json.ts)) ?? null, ((JSON.stringify($('Attach the CSV').first().json.blocks))) ?? null, (($now.toISO())) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "6c98947e-c6ab-5f78-8f14-70c09aebe36b",
+      "name": "Reviews in the batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        2630
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const b = $('Attach the CSV').first().json;\nreturn b.keys.map(key => ({ json: { key, batch_id: b.batch_id } }));"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "e8b98c43-084e-5169-9090-3fddc3a83f2d",
+      "name": "Mark exported",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2420,
+        2630
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update reviews set status = $1, batch_id = $2, \"updatedAt\" = now() where key = $3 returning *",
+        "options": {
+          "queryReplacement": "={{ [ ((\"exported\")) ?? null, (($json.batch_id)) ?? null, (($json.key)) ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Setup settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup settings": {
+      "main": [
+        [
+          {
+            "node": "Create review_sites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create review_sites": {
+      "main": [
+        [
+          {
+            "node": "Create review_sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create review_sources": {
+      "main": [
+        [
+          {
+            "node": "Create reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create reviews": {
+      "main": [
+        [
+          {
+            "node": "Create review_batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create review_batches": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Setup": {
+      "main": [
+        [
+          {
+            "node": "Add the product fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add the product fields": {
+      "main": [
+        [
+          {
+            "node": "Get saved sites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get saved sites": {
+      "main": [
+        [
+          {
+            "node": "New sites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New sites": {
+      "main": [
+        [
+          {
+            "node": "Save the site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every hour (Find)": {
+      "main": [
+        [
+          {
+            "node": "Find settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find now": {
+      "main": [
+        [
+          {
+            "node": "Find settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Get products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get products": {
+      "main": [
+        [
+          {
+            "node": "Get sites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get sites": {
+      "main": [
+        [
+          {
+            "node": "Get sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get sources": {
+      "main": [
+        [
+          {
+            "node": "Find the review page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find the review page": {
+      "main": [
+        [
+          {
+            "node": "Needs a row?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Products to untag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs a row?": {
+      "main": [
+        [
+          {
+            "node": "Clear an old not-found row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear an old not-found row": {
+      "main": [
+        [
+          {
+            "node": "Back to the pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back to the pages": {
+      "main": [
+        [
+          {
+            "node": "Save the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Products to untag": {
+      "main": [
+        [
+          {
+            "node": "Remove the tag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every hour (Collect)": {
+      "main": [
+        [
+          {
+            "node": "Collect settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect now": {
+      "main": [
+        [
+          {
+            "node": "Collect settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect settings": {
+      "main": [
+        [
+          {
+            "node": "Get the pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the pages": {
+      "main": [
+        [
+          {
+            "node": "Pick due pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick due pages": {
+      "main": [
+        [
+          {
+            "node": "Fetch the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch the page": {
+      "main": [
+        [
+          {
+            "node": "Read the reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the reviews": {
+      "main": [
+        [
+          {
+            "node": "One item per review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per review": {
+      "main": [
+        [
+          {
+            "node": "Save the review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update the page": {
+      "main": [
+        [
+          {
+            "node": "New pages for review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New pages for review": {
+      "main": [
+        [
+          {
+            "node": "Build the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the card": {
+      "main": [
+        [
+          {
+            "node": "Post the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the card": {
+      "main": [
+        [
+          {
+            "node": "Save the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Read the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the click": {
+      "main": [
+        [
+          {
+            "node": "Review settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review settings": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Answer Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not from Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Slack": {
+      "main": [
+        [
+          {
+            "node": "Not a retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not a retry?": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Which button?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Say not allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which button?": {
+      "main": [
+        [
+          {
+            "node": "Get the page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get the batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the page": {
+      "main": [
+        [
+          {
+            "node": "Approve?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve?": {
+      "main": [
+        [
+          {
+            "node": "Mark approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark approved": {
+      "main": [
+        [
+          {
+            "node": "Show approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark rejected": {
+      "main": [
+        [
+          {
+            "node": "Show rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the batch": {
+      "main": [
+        [
+          {
+            "node": "Mark its reviews imported",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark its reviews imported": {
+      "main": [
+        [
+          {
+            "node": "Mark the batch imported",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark the batch imported": {
+      "main": [
+        [
+          {
+            "node": "Show imported",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every morning": {
+      "main": [
+        [
+          {
+            "node": "Export settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Export now": {
+      "main": [
+        [
+          {
+            "node": "Export settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Export settings": {
+      "main": [
+        [
+          {
+            "node": "Get approved pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get approved pages": {
+      "main": [
+        [
+          {
+            "node": "Get new reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get new reviews": {
+      "main": [
+        [
+          {
+            "node": "Build the CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the CSV": {
+      "main": [
+        [
+          {
+            "node": "Build the export card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the export card": {
+      "main": [
+        [
+          {
+            "node": "Post the export card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the export card": {
+      "main": [
+        [
+          {
+            "node": "Attach the CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach the CSV": {
+      "main": [
+        [
+          {
+            "node": "Upload the CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload the CSV": {
+      "main": [
+        [
+          {
+            "node": "Save the batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the batch": {
+      "main": [
+        [
+          {
+            "node": "Reviews in the batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reviews in the batch": {
+      "main": [
+        [
+          {
+            "node": "Mark exported",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

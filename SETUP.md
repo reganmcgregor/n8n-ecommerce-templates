@@ -30,7 +30,7 @@ If you already have an Admin API access token from a custom app made before 2026
 ## Slack
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps), click **Create New App**, choose **From scratch**, and pick your workspace.
-2. Under **OAuth & Permissions**, add the bot token scope `chat:write`. Add `chat:write.public` too if you want it to post to public channels it hasn't joined. Templates that upload images to Slack (Shopify product images posts a contact sheet on every card) also need `files:write`.
+2. Under **OAuth & Permissions**, add the bot token scope `chat:write`. Add `chat:write.public` too if you want it to post to public channels it hasn't joined. Templates that upload files to Slack (Shopify product images posts a contact sheet on every card; Manufacturer reviews posts its import CSV) also need `files:write`.
 3. Click **Install to Workspace** and copy the **Bot User OAuth Token** (it starts with `xoxb-`).
 4. In n8n, create a **Slack API** credential and paste the token as the Access Token.
 5. In Slack, invite the bot to the channel the template posts to: type `/invite @your-bot-name` in the channel.
