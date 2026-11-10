@@ -111,6 +111,8 @@ def build(cred, base=None, key=None):
     if t == "googleOAuth2Api":  # OAuth: n8n stores the client; you sign in from the credential afterwards
         return {"clientId": ask("  OAuth client ID"), "clientSecret": ask("  OAuth client secret", secret=True),
                 "scope": cred.get("scope", "")}
+    if t == "httpQueryAuth":
+        return {"name": cred.get("query_name", "key"), "value": ask(f"  {cred.get('secret_label', 'API key')}", secret=True)}
     raise SystemExit(f"credentials.json lists a type this script doesn't know: {t}")
 
 

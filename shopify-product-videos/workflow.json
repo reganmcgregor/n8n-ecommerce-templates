@@ -1,0 +1,4961 @@
+{
+  "name": "Shopify product videos (template)",
+  "nodes": [
+    {
+      "id": "ba16a186-e1cd-5a72-82b3-23d84440555f",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        -200
+      ],
+      "parameters": {
+        "content": "## Add YouTube videos to Shopify product pages\nFinds videos of each product on YouTube by its model number (the manufacturer's own channel first), checks the title names that exact model and that the video can be embedded, asks you in Slack, then adds approved videos to a **Videos** list on the product. A Custom Liquid section (in the guide and README) shows them below the product details, so the gallery stays photos only. Once a month it removes any video YouTube no longer serves.\n\n### How it works\n1. **Setup** creates the `brand_channels`, `video_candidates` and `video_runs` tables, the **Product video** entry type, the **Model number (MPN)**, **Manufacturer page** and **Videos** product fields, and looks up the YouTube channel for each brand in its settings.\n2. **Find** (hourly) takes products tagged `find-videos`, searches the brand's channel and then YouTube, optionally Google and the manufacturer's page, checks every video and posts the best ones as Slack cards.\n3. **Review** is your Slack app's Request URL. Pick what the video covers, then Approve or Reject.\n4. **Publish** saves each approved video as a Product video entry and sets the product's Videos list. `dry_run` is on until you turn it off.\n5. **Check** (monthly) takes videos that were deleted, made private or can no longer be embedded off the list.\n\n### Setup\nCredentials: Shopify Custom Auth (client ID and secret), Query Auth with name `key` and your YouTube Data API key, Slack API (bot token), Crypto (Slack signing secret); DataForSEO Basic Auth only if you turn it on. Fill in each lane's settings, run Setup, publish the workflow and set your Slack app's Request URL to **Slack button click**'s production URL.\n\n### Customisation\n`model_prefixes` and `ignore_suffixes` decide how strict the model match is. `max_videos_per_product`, `min_seconds` and `max_seconds` decide what's kept. No AI model: every check is code.",
+        "width": 900,
+        "height": 1180,
+        "color": 1
+      }
+    },
+    {
+      "id": "12e272ea-f350-5053-a24b-01f0c5134702",
+      "name": "Writes to Shopify (Publish)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2340,
+        1850
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify\nSaves video entries and sets each product's Videos list. Keep `dry_run` on until the output of **What would be added** looks right.",
+        "width": 900,
+        "height": 120,
+        "color": 3
+      }
+    },
+    {
+      "id": "b355bc31-b614-52ce-91a6-cfe20f00c12c",
+      "name": "Writes to Shopify (Check)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2120,
+        2660
+      ],
+      "parameters": {
+        "content": "### Writes to Shopify\nTakes videos YouTube no longer serves off the product and deletes their entries.",
+        "width": 700,
+        "height": 120,
+        "color": 3
+      }
+    },
+    {
+      "id": "e8812305-86c3-545e-8ac1-c9c332ca45fd",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -200
+      ],
+      "parameters": {
+        "content": "## 1. Setup (run once)\nCreates the three tables, the Product video entry type and the three product fields, then looks up each brand's YouTube channel from its handle. Running it again is safe.",
+        "width": 3360,
+        "height": 330,
+        "color": 7
+      }
+    },
+    {
+      "id": "2ad5c1d8-afb4-51dd-b792-ffecfdbd47a4",
+      "name": "Lane Find",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        190
+      ],
+      "parameters": {
+        "content": "## 2. Find (hourly)\nTagged products, then a search on the brand's channel and one on all of YouTube (YouTube allows 100 searches a day free). Optional: Google through DataForSEO and the manufacturer's page. Every video is checked in code; the best few become Slack cards.",
+        "width": 5120,
+        "height": 650,
+        "color": 7
+      }
+    },
+    {
+      "id": "57122001-c40d-5428-9eb8-72067e4c4041",
+      "name": "Lane Review",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        900
+      ],
+      "parameters": {
+        "content": "## 3. Review (Slack's Request URL)\nAnswers Slack at once, checks the signature, age and approvers, and that the row is still pending. Approve needs a coverage choice; it starts Publish for that product.",
+        "width": 3580,
+        "height": 690,
+        "color": 7
+      }
+    },
+    {
+      "id": "c24dea47-e074-5dc3-af80-c836b21b7fb4",
+      "name": "Lane Publish",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1650
+      ],
+      "parameters": {
+        "content": "## 4. Publish\nChecks the video is still the one you approved, saves it as a Product video entry, then rebuilds the product's Videos list from the table (manufacturer videos first). A video is only marked live once Shopify's list holds it.",
+        "width": 4240,
+        "height": 790,
+        "color": 7
+      }
+    },
+    {
+      "id": "32eb3547-1d3d-5e99-ace4-0463b354c21f",
+      "name": "Lane Check",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2500
+      ],
+      "parameters": {
+        "content": "## 5. Check (monthly)\nRe-reads every live video. Deleted, private or no longer embeddable: taken off the product's Videos list, its entry deleted, and listed in one summary. Optionally re-tags products searched long ago.",
+        "width": 3360,
+        "height": 770,
+        "color": 7
+      }
+    },
+    {
+      "id": "a0b895d2-e4a4-5b8d-b6d7-336318a55585",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -40
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ad24cbf1-a963-53df-8beb-bd310afd7286",
+      "name": "Setup settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        -40
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"mpn_namespace\": \"custom\",\n  \"mpn_key\": \"mpn\",\n  \"page_namespace\": \"custom\",\n  \"page_key\": \"manufacturer_url\",\n  \"video_type\": \"product_video\",\n  \"videos_namespace\": \"custom\",\n  \"videos_key\": \"videos\",\n  \"brand_channels\": [\n    {\n      \"vendor\": \"Your Brand\",\n      \"handle\": \"@yourbrand\",\n      \"domains\": \"yourbrand.com\",\n      \"url_pattern\": \"\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "notes": "brand_channels: one row per channel (a brand can have several). vendor exactly as your products' Vendor (case doesn't matter), the channel's @handle, its websites, and an optional page URL pattern with {model}."
+    },
+    {
+      "id": "aee36c2c-8d0e-5045-91b4-f3371e0cf5dd",
+      "name": "Create brand_channels",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        -40
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "brand_channels",
+        "columns": {
+          "column": [
+            {
+              "name": "vendor",
+              "type": "string"
+            },
+            {
+              "name": "handle",
+              "type": "string"
+            },
+            {
+              "name": "channel_id",
+              "type": "string"
+            },
+            {
+              "name": "channel_name",
+              "type": "string"
+            },
+            {
+              "name": "domains",
+              "type": "string"
+            },
+            {
+              "name": "url_pattern",
+              "type": "string"
+            },
+            {
+              "name": "note",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "notes": "Keeps an existing table."
+    },
+    {
+      "id": "989c185e-561a-5f52-a511-3752077e5a51",
+      "name": "Create video_candidates",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        -40
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "video_candidates",
+        "columns": {
+          "column": [
+            {
+              "name": "product_id",
+              "type": "string"
+            },
+            {
+              "name": "product_title",
+              "type": "string"
+            },
+            {
+              "name": "model",
+              "type": "string"
+            },
+            {
+              "name": "video_id",
+              "type": "string"
+            },
+            {
+              "name": "url",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "name": "channel_id",
+              "type": "string"
+            },
+            {
+              "name": "channel_name",
+              "type": "string"
+            },
+            {
+              "name": "is_manufacturer",
+              "type": "boolean"
+            },
+            {
+              "name": "duration_s",
+              "type": "number"
+            },
+            {
+              "name": "views",
+              "type": "number"
+            },
+            {
+              "name": "published_at",
+              "type": "date"
+            },
+            {
+              "name": "language",
+              "type": "string"
+            },
+            {
+              "name": "match_quote",
+              "type": "string"
+            },
+            {
+              "name": "match_source",
+              "type": "string"
+            },
+            {
+              "name": "video_type",
+              "type": "string"
+            },
+            {
+              "name": "coverage",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "card_channel",
+              "type": "string"
+            },
+            {
+              "name": "card_ts",
+              "type": "string"
+            },
+            {
+              "name": "card",
+              "type": "string"
+            },
+            {
+              "name": "metaobject_id",
+              "type": "string"
+            },
+            {
+              "name": "decided_by",
+              "type": "string"
+            },
+            {
+              "name": "decided_at",
+              "type": "date"
+            },
+            {
+              "name": "error",
+              "type": "string"
+            },
+            {
+              "name": "found_at",
+              "type": "date"
+            },
+            {
+              "name": "checked_at",
+              "type": "date"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      }
+    },
+    {
+      "id": "5579fcb9-c66d-5e34-b353-3e5618ac9896",
+      "name": "Create video_runs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        -40
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "video_runs",
+        "columns": {
+          "column": [
+            {
+              "name": "product_id",
+              "type": "string"
+            },
+            {
+              "name": "product_title",
+              "type": "string"
+            },
+            {
+              "name": "model",
+              "type": "string"
+            },
+            {
+              "name": "ran_at",
+              "type": "date"
+            },
+            {
+              "name": "searches",
+              "type": "number"
+            },
+            {
+              "name": "quota_units",
+              "type": "number"
+            },
+            {
+              "name": "found",
+              "type": "number"
+            },
+            {
+              "name": "kept",
+              "type": "number"
+            },
+            {
+              "name": "dropped",
+              "type": "string"
+            },
+            {
+              "name": "error",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      }
+    },
+    {
+      "id": "6429086d-439b-5987-b5d4-4e6d7b6a0353",
+      "name": "Get Shopify token for Setup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "12c86f2e-0e3b-5dfa-b5a3-a49eea44a417",
+      "name": "Add the product fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation Fields($mpn: MetafieldDefinitionInput!, $page: MetafieldDefinitionInput!) {\\n  mpn: metafieldDefinitionCreate(definition: $mpn) { createdDefinition { id } userErrors { code message } }\\n  page: metafieldDefinitionCreate(definition: $page) { createdDefinition { id } userErrors { code message } }\\n}\", variables: ({ mpn: { name: 'Model number (MPN)', namespace: $('Setup settings').first().json.mpn_namespace, key: $('Setup settings').first().json.mpn_key, type: 'single_line_text_field', ownerType: 'PRODUCT', pin: true }, page: { name: 'Manufacturer page', namespace: $('Setup settings').first().json.page_namespace, key: $('Setup settings').first().json.page_key, type: 'url', ownerType: 'PRODUCT', pin: true } }) }) }}",
+        "options": {}
+      },
+      "notes": "A field that already exists answers TAKEN, which is fine."
+    },
+    {
+      "id": "eead14a4-f2ef-5cf4-b77a-df61008907ba",
+      "name": "Add the video type",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation VideoType($d: MetaobjectDefinitionCreateInput!) {\\n  metaobjectDefinitionCreate(definition: $d) { metaobjectDefinition { id } userErrors { code message } }\\n}\", variables: ({ d: { name: 'Product video', type: $('Setup settings').first().json.video_type, displayNameKey: 'title', access: { storefront: 'PUBLIC_READ' }, fieldDefinitions: [{ key: 'title', name: 'Title', type: 'single_line_text_field', required: true }, { key: 'video_id', name: 'YouTube video ID', type: 'single_line_text_field', required: true }, { key: 'url', name: 'Video URL', type: 'url', required: true }, { key: 'channel_name', name: 'Channel', type: 'single_line_text_field' }, { key: 'coverage', name: 'Coverage', type: 'single_line_text_field' }, { key: 'video_type', name: 'Video type', type: 'single_line_text_field' }] } }) }) }}",
+        "options": {}
+      },
+      "notes": "The Product video entry type, readable by the storefront. An existing type answers TAKEN, which is fine."
+    },
+    {
+      "id": "8cc0e826-56ab-59cd-9662-9d4e7e4e6403",
+      "name": "Get the video type",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"query VideoType($type: String!) {\\n  metaobjectDefinitionByType(type: $type) { id }\\n}\", variables: ({ type: $('Setup settings').first().json.video_type }) }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "619ad402-213d-5ec6-ab0b-496aa53e7b42",
+      "name": "Add the Videos field",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Setup settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation VideosField($d: MetafieldDefinitionInput!) {\\n  metafieldDefinitionCreate(definition: $d) { createdDefinition { id } userErrors { code message } }\\n}\", variables: ({ d: { name: 'Videos', namespace: $('Setup settings').first().json.videos_namespace, key: $('Setup settings').first().json.videos_key, type: 'list.metaobject_reference', ownerType: 'PRODUCT', pin: true, access: { storefront: 'PUBLIC_READ' }, validations: [{ name: 'metaobject_definition_id', value: $json.data.metaobjectDefinitionByType.id }] } }) }) }}",
+        "options": {}
+      },
+      "notes": "A list of Product video entries on each product, which the theme section reads."
+    },
+    {
+      "id": "43eb871b-0ec7-5b9b-a645-a4318f0349b3",
+      "name": "Get brand channels",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        -40
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "brand_channels"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "82006804-2b05-56bf-8793-7153b91169b3",
+      "name": "New brands",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        -40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Channels in Setup settings that aren't in the table yet. A brand can have several (support, regional).\n// Each new one costs one channel lookup (1 quota unit).\nconst key = b => String(b.vendor || '').trim().toLowerCase() + '|' + String(b.handle || '').trim().toLowerCase();\nconst have = new Set($input.all().map(i => i.json).filter(r => r.vendor).map(key));\nreturn ($('Setup settings').first().json.brand_channels || [])\n  .filter(b => b.vendor && b.handle && !have.has(key(b)))\n  .map(b => ({ json: { vendor: String(b.vendor).trim(), handle: String(b.handle || '').trim(), domains: String(b.domains || ''), url_pattern: String(b.url_pattern || '') } }));"
+      }
+    },
+    {
+      "id": "bdbecd9a-27f4-5550-bc6c-f6194681ee8d",
+      "name": "Look up the channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -40
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ part: 'snippet', forHandle: $json.handle }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "name": "YouTube Data API key"
+        }
+      },
+      "notes": "channels.list by @handle: 1 quota unit."
+    },
+    {
+      "id": "d19d09c1-6eb8-5e60-a3ac-09cbc5f0d617",
+      "name": "Channel row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().map((it, i) => {\n  const b = $('New brands').itemMatching(i).json;\n  const c = (it.json.body?.items || [])[0];\n  return { json: { ...b, channel_id: c?.id || '', channel_name: c?.snippet?.title || '',\n    note: c ? '' : 'No channel found for ' + b.handle + (it.json.body?.error ? ' (' + it.json.body.error.message + ')' : '') } };\n});"
+      }
+    },
+    {
+      "id": "319ae9c3-aa81-552b-9653-a4945461e813",
+      "name": "Save the brand",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3080,
+        -40
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "brand_channels"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "vendor": "={{ $json.vendor }}",
+            "handle": "={{ $json.handle }}",
+            "channel_id": "={{ $json.channel_id }}",
+            "channel_name": "={{ $json.channel_name }}",
+            "domains": "={{ $json.domains }}",
+            "url_pattern": "={{ $json.url_pattern }}",
+            "note": "={{ $json.note }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "vendor",
+              "displayName": "vendor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "handle",
+              "displayName": "handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "channel_id",
+              "displayName": "channel_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "channel_name",
+              "displayName": "channel_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "domains",
+              "displayName": "domains",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "url_pattern",
+              "displayName": "url_pattern",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "note",
+              "displayName": "note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bc248a65-e597-5833-9ba9-48d086814ce8",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        410
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9667bc17-0b5d-538f-950d-052f96d57d41",
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        590
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a93ed93d-af79-5471-a562-fffcabc96242",
+      "name": "Find settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        500
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"find_tag\": \"find-videos\",\n  \"product_ids\": [],\n  \"batch_size\": 2,\n  \"channel_results\": 10,\n  \"open_results\": 15,\n  \"max_videos_per_product\": 3,\n  \"min_seconds\": 30,\n  \"max_seconds\": 1800,\n  \"language\": \"en\",\n  \"region_code\": \"US\",\n  \"model_prefixes\": [],\n  \"ignore_suffixes\": [\n    \"BK\",\n    \"BLK\",\n    \"WH\",\n    \"WHT\"\n  ],\n  \"use_manufacturer_page\": false,\n  \"use_dataforseo\": false,\n  \"search_location\": \"United States\",\n  \"search_language\": \"en\",\n  \"mpn_namespace\": \"custom\",\n  \"mpn_key\": \"mpn\",\n  \"page_namespace\": \"custom\",\n  \"page_key\": \"manufacturer_url\",\n  \"videos_namespace\": \"custom\",\n  \"videos_key\": \"videos\",\n  \"user_agent\": \"YourStoreVideoBot/1.0 (+https://your-store.com)\",\n  \"slack_channel\": \"#review-videos\"\n}",
+        "options": {}
+      },
+      "notes": "batch_size 2 every hour is 48 products and 96 searches a day with one channel per brand, inside YouTube's free 100 searches. product_ids (numbers or gids) replaces the tag for a test batch."
+    },
+    {
+      "id": "d5049b34-3ec1-57ab-9865-af367053d1d7",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Find settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "5609eb34-4827-5c88-a13c-e8a55721f8fb",
+      "name": "Brand channels",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        500
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "brand_channels"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "24ca4a62-846a-5d40-bb61-7e087f77469d",
+      "name": "Get products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Find settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"query Products($q: String!, $n: Int!, $ids: [ID!]!, $byIds: Boolean!, $mns: String!, $mkey: String!, $pns: String!, $pkey: String!, $vns: String!, $vkey: String!) {\\n  products(first: $n, query: $q) @skip(if: $byIds) { nodes { id title handle vendor onlineStoreUrl\\n    mpn: metafield(namespace: $mns, key: $mkey) { value }\\n    page: metafield(namespace: $pns, key: $pkey) { value }\\n    videos: metafield(namespace: $vns, key: $vkey) { references(first: 50) { nodes { ... on Metaobject { video_id: field(key: \\\"video_id\\\") { value } } } } }\\n    media(first: 100) { nodes { mediaContentType ... on ExternalVideo { originUrl } } } } }\\n  nodes(ids: $ids) @include(if: $byIds) { ... on Product { id title handle vendor onlineStoreUrl\\n    mpn: metafield(namespace: $mns, key: $mkey) { value }\\n    page: metafield(namespace: $pns, key: $pkey) { value }\\n    videos: metafield(namespace: $vns, key: $vkey) { references(first: 50) { nodes { ... on Metaobject { video_id: field(key: \\\"video_id\\\") { value } } } } }\\n    media(first: 100) { nodes { mediaContentType ... on ExternalVideo { originUrl } } } } }\\n}\", variables: ((s => ({ q: 'tag:' + s.find_tag, n: s.batch_size, byIds: s.product_ids.length > 0, ids: s.product_ids.map(x => String(x).startsWith('gid://') ? String(x) : 'gid://shopify/Product/' + x), mns: s.mpn_namespace, mkey: s.mpn_key, pns: s.page_namespace, pkey: s.page_key, vns: s.videos_namespace, vkey: s.videos_key }))($('Find settings').first().json)) }) }}",
+        "options": {}
+      },
+      "notes": "Tagged products, or the product_ids. Reads the model number, the manufacturer page field and the videos already on the product.",
+      "executeOnce": true
+    },
+    {
+      "id": "d52e0a83-d347-51e1-99cd-c8d64d40ee73",
+      "name": "Build the searches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One item per YouTube search: the brand's channel (if Setup found one), then all of YouTube.\nconst s = $('Find settings').first().json;\nconst d = $('Get products').first().json.data || {};\nconst list = (d.products?.nodes || d.nodes || []).filter(p => p && p.id);\nconst brands = $('Brand channels').all().map(i => i.json).filter(b => b.vendor);\nconst out = [];\nfor (const p of list) {\n  const vendor = String(p.vendor || '').trim();\n  const rows = brands.filter(b => String(b.vendor).trim().toLowerCase() === vendor.toLowerCase());\n  let model = String(p.mpn?.value || '').replace(/\\(.*?\\)/g, '').trim(), model_from = 'model number';\n  if (!model) {\n    // No model number: the first title word with a digit in it (RLC-820A, C440), always reviewed.\n    model = (String(p.title).split(/[\\s,\\/]+/).find(w => w.length >= 4 && /\\d/.test(w) && /[a-z]/i.test(w) && !/^\\d+(k|p|mp|mm|gb|tb)$/i.test(w)) || '');\n    model_from = 'title';\n  }\n  const product = { product_id: p.id, product_title: p.title, handle: p.handle, vendor, model, model_from, store_url: p.onlineStoreUrl || '',\n    page_url: p.page?.value || '', existing: [...(p.videos?.references?.nodes || []).map(n => n.video_id?.value || ''), ...(p.media?.nodes || []).map(m => m.originUrl || '')].join(' '),\n    channels: rows.filter(b => b.channel_id).map(b => b.channel_id),\n    domains: rows.flatMap(b => String(b.domains || '').split(',')).map(x => x.trim().toLowerCase()).filter(Boolean),\n    url_pattern: (rows.find(b => b.url_pattern) || {}).url_pattern || '' };\n  if (!model) {\n    // Nothing to search for. A 1-unit call keeps the product in step with the rest, and the run row says why.\n    out.push({ json: { ...product, kind: 'skip', skip_reason: 'no model number', url: 'https://www.googleapis.com/youtube/v3/videos', params: { part: 'id', id: 'none' } } });\n    continue;\n  }\n  const withBrand = model.toLowerCase().startsWith(vendor.toLowerCase()) ? model : vendor + ' ' + model;\n  for (const ch of product.channels)\n    out.push({ json: { ...product, kind: 'channel', url: 'https://www.googleapis.com/youtube/v3/search',\n      params: { part: 'snippet', type: 'video', channelId: ch, q: model, maxResults: s.channel_results, order: 'relevance' } } });\n  out.push({ json: { ...product, kind: 'youtube', url: 'https://www.googleapis.com/youtube/v3/search',\n    params: { part: 'snippet', type: 'video', q: withBrand.replace(model, '\"' + model + '\"'), maxResults: s.open_results,\n      relevanceLanguage: s.language, regionCode: s.region_code, videoEmbeddable: 'true' } } });\n}\nreturn out;"
+      },
+      "notes": "Search the channel by model, and YouTube by brand plus the quoted model."
+    },
+    {
+      "id": "505f8b17-5efb-5b77-9d85-34ea0ba86ab1",
+      "name": "Search YouTube",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        500
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.params) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "name": "YouTube Data API key"
+        }
+      },
+      "notes": "search.list: 100 calls a day on the free quota."
+    },
+    {
+      "id": "d2eac958-2a4a-5685-a94e-94630fc5c011",
+      "name": "Back to products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One item per product again, with every video id the searches found and any error.\nconst builds = $('Build the searches').all().map(i => i.json);\nconst res = $input.all().map(i => i.json);\nconst by = {};\nbuilds.forEach((b, i) => {\n  const { kind, params, url, skip_reason, ...product } = b;\n  const p = by[b.product_id] ||= { ...product, ids: [], errors: [], searches: 0, units: 0, skip: false };\n  const r = res[i] || {}, body = r.body || {};\n  if (kind === 'skip') { p.skip = true; p.errors.push(skip_reason); p.units += 1; return; }\n  p.searches++; // search.list has its own bucket: 100 calls a day\n  if (Number(r.statusCode) >= 400 || body.error)\n    return p.errors.push('YouTube search: ' + (body.error?.errors?.[0]?.reason || body.error?.message || r.statusCode));\n  (body.items || []).forEach((it, rank) => {\n    if (it.id?.videoId) p.ids.push({ video_id: it.id.videoId, from: kind, rank, description: it.snippet?.description || '' });\n  });\n});\nreturn Object.values(by).map(json => ({ json }));"
+      }
+    },
+    {
+      "id": "6ecfed99-495a-5f29-8833-5c2157610ce4",
+      "name": "Search Google too?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        500
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1a148298-6a79-5b08-90dd-43c253b6ae74",
+              "leftValue": "={{ $('Find settings').first().json.use_dataforseo === true && $input.all().some(i => !i.json.skip) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "use_dataforseo. Off by default: YouTube's own search finds most videos for free."
+    },
+    {
+      "id": "9ae173ef-db61-5b19-8aee-d785dec0175d",
+      "name": "Google searches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Plain queries (no site: operator, which DataForSEO bills at five times the price).\nconst s = $('Find settings').first().json;\nconst out = [];\nfor (const it of $input.all()) {\n  const p = it.json;\n  if (p.skip) continue;\n  const q = p.model.toLowerCase().startsWith(p.vendor.toLowerCase()) ? p.model : p.vendor + ' ' + p.model;\n  const task = k => [{ keyword: k, location_name: s.search_location, language_code: s.search_language, depth: 10 }];\n  out.push({ json: { product_id: p.product_id, purpose: 'videos', task: task(q + ' video') } });\n  if (s.use_manufacturer_page && !p.page_url && !p.url_pattern && p.domains.length)\n    out.push({ json: { product_id: p.product_id, purpose: 'page', task: task(q) } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "991bf1b5-d11b-51d6-9791-2d82f146e863",
+      "name": "Search Google",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/serp/google/organic/live/advanced",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.task) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "name": "DataForSEO"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "DataForSEO live SERP, about US$0.002 a search."
+    },
+    {
+      "id": "3ddb7f0c-93e7-5f46-a097-ebaf73b9b052",
+      "name": "Read Google results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Video ids from any YouTube link in the results, and the manufacturer page: a result on one of the brand's\n// websites whose path or title has the whole model code (so C440 doesn't take the C440-W page).\nconst tasks = $('Google searches').all().map(i => i.json);\nconst res = $input.all().map(i => i.json);\nconst by = Object.fromEntries($('Back to products').all().map(i => [i.json.product_id, { ...i.json, ids: [...i.json.ids], errors: [...i.json.errors] }]));\nconst ytid = u => (String(u || '').match(/(?:youtube\\.com\\/(?:watch\\?(?:[^#]*&)?v=|shorts\\/|embed\\/)|youtu\\.be\\/)([A-Za-z0-9_-]{11})/) || [])[1];\nconst norm = t => String(t || '').toUpperCase().replace(/\\+/g, 'PLUS');\nconst compact = t => norm(t).replace(/[^A-Z0-9]/g, '');\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst host = u => ((String(u).match(/^https?:\\/\\/([^\\/?#]+)/i) || [])[1] || '').toLowerCase();\ntasks.forEach((t, i) => {\n  const p = by[t.product_id];\n  const task = (res[i]?.tasks || [])[0] || {};\n  p.google_cost = (p.google_cost || 0) + Number(task.cost || 0);\n  if (task.status_code !== 20000) return p.errors.push('Google search: ' + (task.status_message || res[i]?.error?.message || res[i]?.status_message || 'failed'));\n  const items = task.result?.[0]?.items || [];\n  if (t.purpose === 'videos') {\n    const walk = (xs, depth = 0) => { for (const x of xs || []) {\n      const id = ytid(x.url);\n      if (id) p.ids.push({ video_id: id, from: 'google', rank: p.ids.length, description: x.description || '' });\n      if (depth < 3) walk(x.items, depth + 1);\n    } };\n    return walk(items);\n  }\n  const code = norm(p.model).replace(/\\(.*?\\)/g, '').trim();\n  const inTitle = s => new RegExp('(^|[^A-Z0-9])' + esc(code) + '($|[^A-Z0-9])').test(norm(s));\n  const inPath = u => String(u).replace(/^https?:\\/\\/[^\\/]+/i, '').split(/[\\/?#.]/).map(compact).includes(compact(code));\n  const onBrand = u => p.domains.some(d => host(u) === d || host(u).endsWith('.' + d));\n  const hit = items.find(x => x.type === 'organic' && x.url && onBrand(x.url) && (inPath(x.url) || inTitle(x.title)));\n  if (hit) p.google_page_url = hit.url;\n});\nreturn Object.values(by).map(json => ({ json }));"
+      }
+    },
+    {
+      "id": "c59991a9-5644-56cd-b061-1ae38963d78a",
+      "name": "Read manufacturer pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Optional (use_manufacturer_page): YouTube videos embedded or linked on the manufacturer's own product page.\n// The page comes from the Manufacturer page field, the brand's url_pattern, or the Google search.\nconst s = $('Find settings').first().json;\nconst items = $input.all().map(i => ({ ...i.json, ids: [...i.json.ids] }));\nif (!s.use_manufacturer_page) return items.map(json => ({ json }));\nfunction allowed(robots, path) { // RFC 9309, the * group: the longest matching rule wins; * is a wildcard, $ ends the path\n  let on = false, best = { len: -1, allow: true };\n  const hits = rule => new RegExp('^' + rule.split('*').map(x => x.replace(/[.+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('.*').replace(/\\\\\\$$/, '$')).test(path);\n  for (const line of String(robots).split(/\\r?\\n/)) {\n    const [k, ...v] = line.replace(/#.*/, '').split(':'); const key = k.trim().toLowerCase(), val = v.join(':').trim();\n    if (key === 'user-agent') on = val === '*';\n    else if (on && (key === 'allow' || key === 'disallow') && val && val.length > best.len && hits(val)) best = { len: val.length, allow: key === 'allow' };\n  }\n  return best.allow;\n}\nconst re = /(?:youtube(?:-nocookie)?\\.com\\/(?:embed\\/|watch\\?(?:[^\"'#<>\\s]*?&(?:amp;)?)?v=|shorts\\/)|youtu\\.be\\/)([A-Za-z0-9_-]{11})/g;\nfor (const p of items) {\n  if (p.skip) continue;\n  const slug = p.model.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');\n  const url = p.page_url || (p.url_pattern ? p.url_pattern.replace('{model}', slug) : '') || p.google_page_url || '';\n  if (!url) { p.page_note = 'no manufacturer page'; continue; }\n  const m = /^(https?:\\/\\/[^\\/?#]+)([^#]*)/i.exec(url);\n  if (!m) { p.page_note = 'bad page url'; continue; }\n  try {\n    let robots = '';\n    try { robots = await this.helpers.httpRequest({ url: m[1] + '/robots.txt', headers: { 'User-Agent': s.user_agent }, json: false, timeout: 15000 }); } catch (e) {}\n    if (!allowed(robots, m[2] || '/')) { p.page_note = 'robots.txt disallows the page'; continue; }\n    const html = String(await this.helpers.httpRequest({ url, headers: { 'User-Agent': s.user_agent, Accept: 'text/html' }, json: false, timeout: 30000 }));\n    const seen = new Set(); let x;\n    while ((x = re.exec(html))) if (!seen.has(x[1])) { seen.add(x[1]); p.ids.push({ video_id: x[1], from: 'page', rank: seen.size, description: '' }); }\n    p.page_note = seen.size + ' videos on ' + url;\n  } catch (e) { p.page_note = 'page fetch failed: ' + String(e.message || e).slice(0, 120); }\n}\nreturn items.map(json => ({ json }));"
+      }
+    },
+    {
+      "id": "1d8a2d26-4048-50bd-bd83-0cccba808194",
+      "name": "Known videos",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2860,
+        500
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "product_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.product_id }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "notes": "Every video already offered for these products, approved or rejected, so none is offered twice.",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "8c63a1fe-6c91-58ee-b4ba-4e97f9acc68f",
+      "name": "Video id lists",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Unique ids per product, without ones already offered or already on the product. Up to 50 per videos.list call.\nconst known = new Set($('Known videos').all().map(i => i.json).filter(r => r.video_id).map(r => r.product_id + '|' + r.video_id));\nreturn $('Read manufacturer pages').all().map(it => {\n  const p = it.json, seen = new Set(), lookup = [], pre = { 'already offered': 0, 'already on the product': 0 };\n  for (const v of p.ids) {\n    if (seen.has(v.video_id)) continue;\n    seen.add(v.video_id);\n    if (known.has(p.product_id + '|' + v.video_id)) pre['already offered']++;\n    else if (p.existing.includes(v.video_id)) pre['already on the product']++;\n    else lookup.push(v.video_id);\n  }\n  return { json: { ...p, lookup: lookup.slice(0, 50), pre_dropped: pre } };\n});"
+      }
+    },
+    {
+      "id": "c6736d75-7ae7-5ad3-a83d-56cc40888f0f",
+      "name": "Get video details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        500
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ part: 'snippet,contentDetails,status,statistics', id: $json.lookup.join(',') || 'none', maxResults: 50 }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "name": "YouTube Data API key"
+        }
+      },
+      "notes": "videos.list: 1 quota unit for up to 50 videos."
+    },
+    {
+      "id": "72bd2d67-0611-57de-84dc-7ce63e9cd4f9",
+      "name": "Check the videos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Keeps a video only if its title (or the manufacturer's page) names this exact model and YouTube says it can be shown.\nconst s = $('Find settings').first().json;\nconst esc = t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nfunction keys(p) {\n  const raw = String(p.model || '').replace(/\\(.*?\\)/g, '').trim(), ks = new Set([raw]);\n  for (const suf of s.ignore_suffixes || []) { const r = new RegExp('[-\\\\s]' + esc(suf) + '$', 'i'); if (r.test(raw)) ks.add(raw.replace(r, '')); }\n  for (const k of [...ks]) for (const pre of [p.vendor, ...(s.model_prefixes || [])])\n    if (pre && new RegExp('^' + esc(pre) + '[\\\\s-]+', 'i').test(k)) ks.add(k.replace(new RegExp('^' + esc(pre) + '[\\\\s-]+', 'i'), ''));\n  return [...ks].filter(k => k.length >= 3 && /\\d/.test(k));\n}\n// Whole-token match: C440 matches \"VIGI C440 Setup\" and \"C-440\", not \"C440-W\", \"C4400\" or \"C440.2\".\nfunction match(p, text) {\n  for (const k of keys(p)) {\n    const pattern = (k.match(/[a-z]+|\\d+/gi) || []).join('[\\\\s_-]*');\n    const m = new RegExp('(^|[^a-z0-9])(' + pattern + ')(?![a-z0-9]|-[a-z0-9]|\\\\.\\\\d)', 'i').exec(String(text || ''));\n    if (m) return m[2];\n  }\n  return null;\n}\nconst codes = t => [...new Set((String(t).match(/\\b(?=[a-z-]*\\d)(?=[\\d-]*[a-z])[a-z0-9]+(?:-[a-z0-9]+)*\\b/gi) || [])\n  .filter(c => /\\d{2,}/.test(c) && !/^\\d+(p|k|mp|mm|gb|tb|hz|fps|w|th|st|nd|rd|s)$/i.test(c)).map(c => c.toUpperCase().replace(/-/g, '')))];\nconst TYPES = [['review', /\\b(review\\w*|worth it|test(ed|ing)|honest|long[- ]term)\\b/i], ['unboxing', /\\b(unbox\\w*|first (look|impressions?)|hands[- ]on|out (of )?the box)\\b/i],\n  ['setup', /\\b(set ?up|install\\w*|how to|configur\\w*|tutorial|step[- ]by[- ]step|mount\\w*|guide)\\b/i],\n  ['demo', /\\b(demo|features?|overview|night vision|footage|sample|app)\\b/i]];\nconst seconds = d => { const m = /P(?:(\\d+)D)?T?(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?/.exec(d || '') || []; return (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0); };\nconst now = new Date().toISOString();\nreturn $input.all().map((it, i) => {\n  const p = $('Video id lists').itemMatching(i).json, r = it.json;\n  const dropped = { ...p.pre_dropped }, drop = why => { dropped[why] = (dropped[why] || 0) + 1; };\n  const errors = [...p.errors];\n  if (Number(r.statusCode) >= 400 || r.body?.error) errors.push('YouTube details: ' + (r.body?.error?.errors?.[0]?.reason || r.statusCode));\n  const found = Object.fromEntries(p.ids.map(v => [v.video_id, v]));\n  const cands = [];\n  for (const v of r.body?.items || []) {\n    const src = found[v.id] || {}, sn = v.snippet || {}, st = v.status || {};\n    const dur = seconds(v.contentDetails?.duration), lang = String(sn.defaultAudioLanguage || sn.defaultLanguage || '');\n    if (!st.embeddable) { drop('not embeddable'); continue; }\n    if (!['public', 'unlisted'].includes(st.privacyStatus)) { drop('private'); continue; }\n    if (sn.liveBroadcastContent && sn.liveBroadcastContent !== 'none') { drop('live or upcoming'); continue; }\n    if (dur < s.min_seconds) { drop('too short'); continue; }\n    if (dur > s.max_seconds) { drop('too long'); continue; }\n    if (lang && !lang.toLowerCase().startsWith(String(s.language).toLowerCase())) { drop('other language'); continue; }\n    if (/#shorts?\\b/i.test((sn.title || '') + ' ' + (sn.description || ''))) { drop('a Short (vertical)'); continue; }\n    const inTitle = match(p, sn.title), inDesc = inTitle ? null : match(p, (sn.description || '') + ' ' + (src.description || ''));\n    const fromPage = src.from === 'page';\n    if (!inTitle && !inDesc && !fromPage) { drop('model not named'); continue; }\n    const others = codes(sn.title).filter(c => c !== String(inTitle || p.model).toUpperCase().replace(/[\\s-]/g, '') && !String(p.model).toUpperCase().replace(/[\\s-]/g, '').includes(c));\n    const comparison = /\\b(vs\\.?|versus|comparison|compared?)\\b/i.test(sn.title) || others.length > 0;\n    const video_type = comparison ? 'comparison' : (TYPES.find(([, re]) => re.test(sn.title)) || ['other'])[0];\n    const is_manufacturer = p.channels.includes(sn.channelId);\n    const match_source = inTitle ? 'title' : fromPage ? 'manufacturer page' : 'description';\n    const coverage = comparison ? 'comparison' : (match_source === 'description' || p.model_from === 'title') ? 'uncertain' : 'exact';\n    cands.push({ product_id: p.product_id, product_title: p.product_title, model: p.model, video_id: v.id, url: 'https://www.youtube.com/watch?v=' + v.id,\n      title: String(sn.title || '').slice(0, 300), channel_id: sn.channelId || '', channel_name: sn.channelTitle || '', is_manufacturer,\n      duration_s: dur, views: Number(v.statistics?.viewCount || 0), published_at: sn.publishedAt || null, language: lang || 'unknown',\n      match_quote: inTitle || inDesc || p.model, match_source, video_type, coverage, status: 'pending', found_at: now,\n      score: (is_manufacturer ? 4 : 0) + (fromPage ? 4 : 0) + (inTitle ? 2 : 0) + (coverage === 'exact' ? 1 : 0) });\n  }\n  // Best first, then one of each type before a second of any type (a setup video and a review beat three unboxings).\n  cands.sort((a, b) => b.score - a.score || b.views - a.views);\n  const keep = [], types = new Set();\n  for (const c of cands) if (keep.length < s.max_videos_per_product && !types.has(c.video_type)) { keep.push(c); types.add(c.video_type); }\n  for (const c of cands) if (keep.length < s.max_videos_per_product && !keep.includes(c)) keep.push(c);\n  if (cands.length > keep.length) dropped['not in the top ' + s.max_videos_per_product] = cands.length - keep.length;\n  for (const c of keep) delete c.score;\n  return { json: { product_id: p.product_id, product_title: p.product_title, model: p.model, searches: p.searches, quota_units: p.units + 1,\n    found: p.lookup.length, kept: keep.length, dropped, keep, error: errors.join('; '), page_note: p.page_note || '' } };\n});"
+      },
+      "notes": "No AI model: the title has to name the model, and YouTube's own fields say whether the video can be shown."
+    },
+    {
+      "id": "afc11656-4656-509f-b057-285d1d3e8358",
+      "name": "Record the run",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3740,
+        500
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_runs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "product_id": "={{ $json.product_id }}",
+            "product_title": "={{ $json.product_title }}",
+            "model": "={{ $json.model }}",
+            "ran_at": "={{ $now.toISO() }}",
+            "searches": "={{ $json.searches }}",
+            "quota_units": "={{ $json.quota_units }}",
+            "found": "={{ $json.found }}",
+            "kept": "={{ $json.kept }}",
+            "dropped": "={{ JSON.stringify($json.dropped) }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_title",
+              "displayName": "product_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ran_at",
+              "displayName": "ran_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "searches",
+              "displayName": "searches",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "quota_units",
+              "displayName": "quota_units",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "found",
+              "displayName": "found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "kept",
+              "displayName": "kept",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "dropped",
+              "displayName": "dropped",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bbbd4713-98e5-523d-b49c-51d55ca3908c",
+      "name": "Searched OK?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        3960,
+        670
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "886e40ea-7148-51e7-9e43-346c20ca5a22",
+              "leftValue": "={{ !$json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "A product whose search failed (quota, network) keeps its tag and is tried again next run."
+    },
+    {
+      "id": "149ef4b0-027b-54da-a412-9a847f5548fd",
+      "name": "Remove the tag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        670
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Find settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation Untag($id: ID!, $tags: [String!]!) {\\n  tagsRemove(id: $id, tags: $tags) { userErrors { message } }\\n}\", variables: ({ id: $json.product_id, tags: [$('Find settings').first().json.find_tag] }) }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "3d20e62a-951a-5f2e-ab66-f58e2a4bcc23",
+      "name": "One row per video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $('Check the videos').all().flatMap(i => i.json.keep).map(json => ({ json }));"
+      }
+    },
+    {
+      "id": "7e0d9161-f29f-5423-af49-5b96dcde47b6",
+      "name": "Save the candidate",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4180,
+        500
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "product_id": "={{ $json.product_id }}",
+            "product_title": "={{ $json.product_title }}",
+            "model": "={{ $json.model }}",
+            "video_id": "={{ $json.video_id }}",
+            "url": "={{ $json.url }}",
+            "title": "={{ $json.title }}",
+            "channel_id": "={{ $json.channel_id }}",
+            "channel_name": "={{ $json.channel_name }}",
+            "is_manufacturer": "={{ $json.is_manufacturer }}",
+            "duration_s": "={{ $json.duration_s }}",
+            "views": "={{ $json.views }}",
+            "published_at": "={{ $json.published_at }}",
+            "language": "={{ $json.language }}",
+            "match_quote": "={{ $json.match_quote }}",
+            "match_source": "={{ $json.match_source }}",
+            "video_type": "={{ $json.video_type }}",
+            "coverage": "={{ $json.coverage }}",
+            "status": "={{ $json.status }}",
+            "found_at": "={{ $json.found_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_title",
+              "displayName": "product_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "video_id",
+              "displayName": "video_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "channel_id",
+              "displayName": "channel_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "channel_name",
+              "displayName": "channel_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "is_manufacturer",
+              "displayName": "is_manufacturer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "duration_s",
+              "displayName": "duration_s",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "views",
+              "displayName": "views",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "language",
+              "displayName": "language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "match_quote",
+              "displayName": "match_quote",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "match_source",
+              "displayName": "match_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "video_type",
+              "displayName": "video_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "coverage",
+              "displayName": "coverage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "found_at",
+              "displayName": "found_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a13218cc-6d50-5f85-9600-278dc168969f",
+      "name": "Build the card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Find settings').first().json;\nconst esc = t => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst LABELS = { exact: 'This product', comparison: 'Comparison (several products)', mention: 'Brief mention', uncertain: 'Not sure yet' };\nconst TYPES = { setup: 'Setup tutorial', review: 'Review', unboxing: 'Unboxing', comparison: 'Comparison', demo: 'Feature demo', other: 'Video' };\nconst dur = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;\nconst num = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);\nreturn $input.all().map(it => {\n  const v = it.json, opt = k => ({ text: { type: 'plain_text', text: LABELS[k] }, value: k });\n  const match = v.match_source === 'title' ? `Matched *${esc(v.match_quote)}* in the video title.`\n    : v.match_source === 'manufacturer page' ? 'On the manufacturer\\'s product page.'\n    : `*${esc(v.match_quote)}* is only in the description. Check it's this model.`;\n  const blocks = [\n    { type: 'header', text: { type: 'plain_text', text: ('Video for ' + v.product_title).slice(0, 150) } },\n    { type: 'section', text: { type: 'mrkdwn', text: `*<${v.url}|${esc(v.title).replace(/\\|/g, ' ')}>*\\n` + (v.is_manufacturer ? ':white_check_mark: Manufacturer channel: ' : 'Channel: ') + esc(v.channel_name) } },\n    { type: 'image', image_url: `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`, alt_text: String(v.title).slice(0, 2000) },\n    { type: 'context', elements: [{ type: 'mrkdwn', text: [TYPES[v.video_type], dur(v.duration_s), num(v.views) + ' views',\n      'published ' + String(v.published_at || '').slice(0, 10), v.language === 'unknown' ? 'language not set' : v.language].join(' · ') }] },\n    { type: 'section', text: { type: 'mrkdwn', text: match + (v.video_type === 'comparison' ? '\\nIt names other models too: probably a comparison.' : '') } },\n    { type: 'input', block_id: 'field_coverage', optional: true, label: { type: 'plain_text', text: 'What does it cover?' },\n      element: { type: 'static_select', action_id: 'coverage', options: Object.keys(LABELS).map(opt), initial_option: opt(v.coverage) } },\n    { type: 'context', block_id: 'video_hint', elements: [{ type: 'mrkdwn', text: 'Watch it first: the checks read the title, channel and YouTube\\'s settings, not the video.' }] },\n    { type: 'actions', block_id: 'video_actions', elements: [\n      { type: 'button', text: { type: 'plain_text', text: 'Watch' }, url: v.url, action_id: 'video_watch' },\n      { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Approve' }, action_id: 'video_approve', value: String(v.id) },\n      { type: 'button', style: 'danger', text: { type: 'plain_text', text: 'Reject' }, action_id: 'video_reject', value: String(v.id) }] },\n  ];\n  return { json: { row_id: v.id, card: JSON.stringify(blocks),\n    body: { channel: s.slack_channel, text: `Video for ${v.product_title}: ${v.title}`, blocks, unfurl_links: false, unfurl_media: false } } };\n});"
+      }
+    },
+    {
+      "id": "ba273b52-6643-5594-8a1e-5c429ec14508",
+      "name": "Post the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1100
+            }
+          }
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e17dd6bb-0272-5b53-8e88-589792dcfc4d",
+      "name": "Save the card",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4840,
+        500
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Build the card').item.json.row_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "card_channel": "={{ $json.channel || \"\" }}",
+            "card_ts": "={{ $json.ts || \"\" }}",
+            "card": "={{ $('Build the card').item.json.card }}",
+            "error": "={{ $json.ok ? '' : 'Slack: ' + ($json.error || 'post failed') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "card_channel",
+              "displayName": "card_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "card_ts",
+              "displayName": "card_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "card",
+              "displayName": "card",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1da9c3c-ab19-5cd1-a762-079d00c17a2d",
+      "name": "Slack button click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1220
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "product-videos",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "notes": "Your Slack app's Interactivity Request URL. Raw Body on, so the signature can be checked."
+    },
+    {
+      "id": "6cacbd3d-f230-5f21-b602-93000bc7570f",
+      "name": "Read the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        1220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Reads the raw body first: Slack signs the exact bytes it sent. (A Set node before this would drop them.)\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || '';\nlet p = {};\ntry { p = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' '))); } catch (e) {}\nconst a = p.actions?.[0] || {};\nreturn [{ json: {\n  base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'] || '',\n  fresh: Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) <= 300, retry: !!h['x-slack-retry-num'],\n  app_id: p.api_app_id || '', user_id: p.user?.id || '', response_url: p.response_url || '',\n  action: String(a.action_id || '').replace(/^video_/, ''), row_id: Number(a.value) || 0,\n  coverage: p.state?.values?.field_coverage?.coverage?.selected_option?.value || '' } }];"
+      }
+    },
+    {
+      "id": "fb26537e-34fc-56fc-a344-ec73c49dff72",
+      "name": "Review settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        1220
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e20f200b-5d3c-5c06-bb5f-612be313ccc2",
+              "name": "slack_app_id",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d8f67973-bccc-5689-8ad6-55ed51a03a44",
+              "name": "approver_ids",
+              "value": "={{ [] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "Blank slack_app_id accepts any app. approver_ids: Slack user IDs; empty means anyone in the channel."
+    },
+    {
+      "id": "72b63c30-65c0-56d1-8c27-abc1b25f559f",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1220
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      },
+      "notes": "Crypto credential: Hmac Secret = your Slack app's Signing Secret."
+    },
+    {
+      "id": "845888e0-76b1-5031-bb45-59a86c14f32b",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        1220
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8eb512fc-1f6d-56f9-bded-3724baead58d",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected && $json.fresh }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Matches Slack and is under 5 minutes old, so a captured request can't be replayed."
+    },
+    {
+      "id": "47b1c23e-94ca-5b67-9bd8-8236fc34f67c",
+      "name": "Not from Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        1420
+      ],
+      "parameters": {
+        "options": {
+          "responseCode": 401
+        },
+        "respondWith": "text",
+        "responseBody": "={{ 'Bad signature' }}"
+      }
+    },
+    {
+      "id": "0cb32bab-583f-59bd-b645-e0d985434599",
+      "name": "Answer Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        1220
+      ],
+      "parameters": {
+        "options": {},
+        "respondWith": "noData"
+      },
+      "notes": "Slack wants an answer within 3 seconds; everything else happens after."
+    },
+    {
+      "id": "406f93f1-656a-5459-9325-7df3ec1d646c",
+      "name": "Not a retry?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        1220
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ab565ce9-a698-505f-a146-7c8cae88a5e1",
+              "leftValue": "={{ !$json.retry }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Slack resends a click it thinks timed out. The first one is already being handled."
+    },
+    {
+      "id": "d55d9d20-aa0d-5d6a-a2ab-76954a2cf124",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        1220
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c492f8ea-ae03-56e4-b1c6-db5f0a4df8e8",
+              "leftValue": "={{ (!$json.slack_app_id || $json.app_id === $json.slack_app_id) && (!$json.approver_ids.length || $json.approver_ids.includes($json.user_id)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Your app and an approver."
+    },
+    {
+      "id": "e37365c7-bf13-5929-b36b-d044cdce5179",
+      "name": "Say not allowed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        1420
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read the click').first().json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ response_type: 'ephemeral', replace_original: false, text: 'Only approvers can decide these cards.' }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "946380f7-40be-5095-9306-0d36bbc48961",
+      "name": "A decision?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        1220
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "674271a2-d1fb-56f9-b672-f8b934668ab9",
+              "leftValue": "={{ ['approve', 'reject'].includes($json.action) && $json.row_id > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "The Watch button sends a click too; it needs nothing."
+    },
+    {
+      "id": "d2bb537a-055a-54e4-9ed8-7489496e607e",
+      "name": "Get the row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        1220
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.row_id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "notes": "Only a pending row. A second click, or a card already decided, finds nothing and stops here."
+    },
+    {
+      "id": "7d97cf15-c12c-52de-9763-a677ceb1c826",
+      "name": "Which button?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2200,
+        1220
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "approve",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e2ad4bb2-6fbb-5c18-9c71-0dc340b27feb",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'approve' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "reject",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a598b7f8-1556-57af-9fd5-befcdf3a60dc",
+                    "leftValue": "={{ $('Read the click').first().json.action === 'reject' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "83bca0fd-1c5d-5231-a5a1-4e1535544595",
+      "name": "Coverage picked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        1120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "397469cb-d036-54b5-8612-78cddacb24f2",
+              "leftValue": "={{ ['exact', 'comparison', 'mention'].includes($('Read the click').first().json.coverage) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d51544c5-e37c-50ba-af38-d65554c0b706",
+      "name": "Ask for coverage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        1260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read the click').first().json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ response_type: 'ephemeral', replace_original: false, text: 'Pick what the video covers first, then Approve.' }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e629bf3d-0819-512b-90bf-4f9ad1544636",
+      "name": "Mark approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        1060
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved",
+            "coverage": "={{ $('Read the click').first().json.coverage }}",
+            "decided_by": "={{ $('Read the click').first().json.user_id }}",
+            "decided_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "coverage",
+              "displayName": "coverage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0a459a00-17a9-5ec3-a38c-fe303161debb",
+      "name": "Show approved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        1060
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.card_channel, ts: $json.card_ts, text: 'Approved: ' + $json.title, blocks: ((card, note) => { const b = JSON.parse(card || '[]').filter(x => !['actions', 'input'].includes(x.type) && x.block_id !== 'video_hint'); b.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }); return b; })($json.card, ':white_check_mark: Approved by <@' + $json.decided_by + '> as ' + ({ exact: 'this product', comparison: 'a comparison', mention: 'a brief mention' })[$json.coverage] + '. Adding it to the product.') }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a3e848ac-a495-5be9-aa97-b25619f16ac1",
+      "name": "Publish input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3080,
+        1060
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "33b11d44-25da-58ad-af96-8d32105d4a21",
+              "name": "product_id",
+              "value": "={{ $('Mark approved').first().json.product_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b569837c-c152-5428-b68f-c4896dcd12eb",
+      "name": "Publish this product",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3300,
+        1060
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $workflow.id }}"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "notes": "Starts the Publish lane for this product without waiting. Its hourly run is the safety net."
+    },
+    {
+      "id": "5490fb4a-bbea-573a-b57d-a20f29fec420",
+      "name": "Mark rejected",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        1420
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "rejected",
+            "decided_by": "={{ $('Read the click').first().json.user_id }}",
+            "decided_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_by",
+              "displayName": "decided_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c806956e-7807-5792-98f3-010d52343872",
+      "name": "Show rejected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        1420
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.card_channel, ts: $json.card_ts, text: 'Rejected: ' + $json.title, blocks: ((card, note) => { const b = JSON.parse(card || '[]').filter(x => !['actions', 'input'].includes(x.type) && x.block_id !== 'video_hint'); b.push({ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }); return b; })($json.card, ':no_entry_sign: Rejected by <@' + $json.decided_by + '>. It won\\'t be offered again.') }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e569430a-41f0-5b3e-befe-e3e9adbcef1b",
+      "name": "Called by a workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        1810
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "notes": "Review calls this with product_id. The only Execute Workflow Trigger on the canvas."
+    },
+    {
+      "id": "ab7e4cf6-2dbc-57ac-be3f-aae92cc5379b",
+      "name": "Every hour (Publish)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1990
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cad4947e-7bb7-5c2f-b750-71677bff9c93",
+      "name": "Publish now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2170
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c4677192-3b0b-5fc7-9baa-ab5da22c471b",
+      "name": "Publish settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        1990
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "291c70b5-2d93-5b3c-9b6c-b692b32fdf52",
+              "name": "store_domain",
+              "value": "your-store.myshopify.com",
+              "type": "string"
+            },
+            {
+              "id": "7477f590-b17b-58a0-a254-c9fb7ff83b97",
+              "name": "dry_run",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "21b30fe4-52b3-5898-9246-d65aec7c989b",
+              "name": "videos_namespace",
+              "value": "custom",
+              "type": "string"
+            },
+            {
+              "id": "876aaddd-8b80-5ece-8df9-2dc57a2fc534",
+              "name": "videos_key",
+              "value": "videos",
+              "type": "string"
+            },
+            {
+              "id": "f5c639c5-9b5b-5a2d-b46e-5e5d4ef8a9e0",
+              "name": "video_type",
+              "value": "product_video",
+              "type": "string"
+            },
+            {
+              "id": "4851bb81-55cd-527d-8f03-2e936338f395",
+              "name": "batch_size",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "af503aa9-9f02-51cb-8b78-efd95ca9893c",
+              "name": "product_id",
+              "value": "={{ $json.product_id || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "dry_run: checks the videos and shows what would be saved, writes nothing. videos_namespace, videos_key and video_type match Setup settings."
+    },
+    {
+      "id": "ef82e762-044b-5d88-b9a5-e91f2da0ee1f",
+      "name": "Get Shopify token for Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        1990
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Publish settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "f7179609-c4e2-5bb8-9a92-b15215e98b8c",
+      "name": "Get approved videos",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        1990
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "approved"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "3cd10738-0b1c-55d6-8cc4-3056cbca7b78",
+      "name": "Pick the videos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1990
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Publish settings').first().json;\nlet rows = $input.all().map(i => i.json).filter(r => r.id);\nif (s.product_id) rows = rows.filter(r => r.product_id === s.product_id);\nreturn rows.slice(0, s.batch_size).map(json => ({ json }));"
+      }
+    },
+    {
+      "id": "d87a553a-ee44-55e3-b34c-3ee754cf1d96",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        1990
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ee209d86-773a-55c9-8546-77eca088a7af",
+              "leftValue": "={{ $('Publish settings').first().json.dry_run === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "321cafee-dfc7-50fa-b33d-e81616adc80d",
+      "name": "Claim it",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        2070
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "approved"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "publishing"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "notes": "Only one run can move a row from approved to publishing, so two runs never publish the same video."
+    },
+    {
+      "id": "978fda95-b700-5efc-8f7c-1d05d883e970",
+      "name": "Check it again",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        2070
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ part: 'snippet,status', id: $json.video_id }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "name": "YouTube Data API key"
+        }
+      },
+      "notes": "1 quota unit."
+    },
+    {
+      "id": "8758685a-9c8c-59d2-8500-a500ad5057fa",
+      "name": "Still the same?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        2070
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Refuses a video that changed since someone approved it.\nreturn $('Claim it').all().map((it, i) => {\n  const r = it.json, v = ($input.all()[i].json.body?.items || [])[0];\n  let problem = '';\n  if (!v) problem = 'The video is gone or private now.';\n  else if (!v.status?.embeddable) problem = 'The video can no longer be embedded.';\n  else if (v.snippet?.title !== r.title || v.snippet?.channelId !== r.channel_id) problem = 'Its title or channel changed since review.';\n  return { json: { ...r, problem } };\n});"
+      }
+    },
+    {
+      "id": "0dfe6662-a2d3-59b2-b58e-4ebd1962b6ab",
+      "name": "OK to add?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        2070
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "07a75a60-7402-51c2-9323-6daf191fc4b0",
+              "leftValue": "={{ !$json.problem }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b75366a2-2f31-5a17-86e7-d0e42bcae74f",
+      "name": "Mark changed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        2270
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "failed",
+            "error": "={{ $json.problem }}",
+            "checked_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "checked_at",
+              "displayName": "checked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e4780492-1852-53e7-a72c-7ef1de5bd2cf",
+      "name": "Reply: not added",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        2270
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.card_channel, thread_ts: $json.card_ts, text: 'Not added: ' + $json.error + ' Find will offer it again only if you delete its row.' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a5896e3b-0897-5955-9aee-eea070f1f9a3",
+      "name": "What would be added",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        1870
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// dry_run is on: the video entry Publish would save, and nothing else.\nreturn $input.all().map(i => ({ json: { product: i.json.product_title, handle: 'video-' + i.json.id, fields: {\n  title: i.json.title, video_id: i.json.video_id, url: i.json.url, channel_name: i.json.channel_name, coverage: i.json.coverage, video_type: i.json.video_type } } }));"
+      }
+    },
+    {
+      "id": "fef5948b-3b7b-54d5-b5f8-e504a43319df",
+      "name": "Save the video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        2070
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Publish settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Publish').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation SaveVideo($handle: MetaobjectHandleInput!, $video: MetaobjectUpsertInput!) {\\n  metaobjectUpsert(handle: $handle, metaobject: $video) {\\n    metaobject { id }\\n    userErrors { field message }\\n  }\\n}\", variables: ({ handle: { type: $('Publish settings').first().json.video_type, handle: 'video-' + $json.id }, video: { fields: [{ key: 'title', value: $json.title }, { key: 'video_id', value: $json.video_id }, { key: 'url', value: $json.url }, { key: 'channel_name', value: $json.channel_name }, { key: 'coverage', value: $json.coverage }, { key: 'video_type', value: $json.video_type }] } }) }) }}",
+        "options": {}
+      },
+      "notes": "One product_video entry per approved row. Upsert by handle, so a retry never makes a second entry."
+    },
+    {
+      "id": "ec8bada6-a0db-5c9f-abd7-d30f52150d14",
+      "name": "Live videos for Publish",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        2070
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "live"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "notes": "Videos already on these products, so the list Publish writes keeps them.",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "0aeee076-9591-5857-a523-8c69fe6e30d1",
+      "name": "Video lists",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        2070
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One item per product: its live videos (manufacturer channel first, then oldest first) plus the ones saved in this run.\nconst saved = $('OK to add?').all(0).map((it, i) => {\n  const res = $('Save the video').all()[i]?.json || {};\n  const errors = [...(res.errors || []), ...(res.data?.metaobjectUpsert?.userErrors || [])].map(e => e.message);\n  return { ...it.json, metaobject_id: res.data?.metaobjectUpsert?.metaobject?.id || '', error: errors.join('; ') };\n});\nconst live = $input.all().map(i => i.json).filter(r => r.id && r.metaobject_id);\nconst order = (a, b) => (b.is_manufacturer === true) - (a.is_manufacturer === true) || String(a.decided_at).localeCompare(String(b.decided_at));\nconst by = {};\nfor (const r of saved) (by[r.product_id] ||= { product_id: r.product_id, rows: [] }).rows.push(r);\nreturn Object.values(by).map(p => {\n  const ids = [...live.filter(r => r.product_id === p.product_id), ...p.rows.filter(r => r.metaobject_id)].sort(order).map(r => r.metaobject_id);\n  return { json: { ...p, ids: [...new Set(ids)] } };\n});"
+      },
+      "notes": "The table is the record: each run rebuilds the whole list from it, so a missed write is put right next time."
+    },
+    {
+      "id": "6ebc89d4-74f0-517a-85b0-a199658db987",
+      "name": "Attach the videos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        2070
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Publish settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Publish').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation Attach($fields: [MetafieldsSetInput!]!) {\\n  metafieldsSet(metafields: $fields) {\\n    metafields { id value owner { ... on Product { onlineStoreUrl onlineStorePreviewUrl } } }\\n    userErrors { field message }\\n  }\\n}\", variables: ({ fields: [{ ownerId: $json.product_id, namespace: $('Publish settings').first().json.videos_namespace, key: $('Publish settings').first().json.videos_key, type: 'list.metaobject_reference', value: JSON.stringify($json.ids) }] }) }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "286f9d08-b0a5-5e05-a81f-743aecdaa2f3",
+      "name": "Did it work?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        2070
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Back to one item per video, marked added only when Shopify's list now holds its entry.\nconst out = [];\n$input.all().forEach((it, i) => {\n  const p = $('Video lists').all()[i].json, res = it.json;\n  const errors = [...(res.errors || []), ...(res.data?.metafieldsSet?.userErrors || [])].map(e => e.message);\n  const mf = (res.data?.metafieldsSet?.metafields || [])[0] || {};\n  const listed = String(mf.value || '');\n  const owner = mf.owner || {};\n  for (const r of p.rows) {\n    const added = !!r.metaobject_id && listed.includes(r.metaobject_id);\n    out.push({ json: { ...r, added, store_url: owner.onlineStoreUrl || owner.onlineStorePreviewUrl || '', store_is_preview: !owner.onlineStoreUrl,\n      error: added ? '' : (r.error || errors.join('; ') || 'Shopify didn\\'t save the video list.') } });\n  }\n});\nreturn out;"
+      }
+    },
+    {
+      "id": "0c245ce0-0495-5c9b-ba1c-13e6366d0d73",
+      "name": "Added?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3520,
+        2070
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3ebd0833-d625-5a65-b715-efc211a54cd7",
+              "leftValue": "={{ $json.added }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8c22a827-7ab4-5bfa-afba-1b4e9818f22f",
+      "name": "Mark live",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3740,
+        1990
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Did it work?').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "live",
+            "metaobject_id": "={{ $('Did it work?').item.json.metaobject_id }}",
+            "checked_at": "={{ $now.toISO() }}",
+            "error": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "metaobject_id",
+              "displayName": "metaobject_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "checked_at",
+              "displayName": "checked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2a8b242b-ac94-583a-9597-46d8fd83c96b",
+      "name": "Reply: live",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3960,
+        1990
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.card_channel, thread_ts: $json.card_ts, unfurl_links: false, text: $('Did it work?').item.json.store_is_preview ? \"Added. The product isn't published yet: <\" + $('Did it work?').item.json.store_url + \"|preview it>\" : 'Live on the store: <' + $('Did it work?').item.json.store_url + '|' + $json.product_title + '>' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "97fc6d26-5bcd-5cca-bb6d-7b42b63ffbe0",
+      "name": "Mark failed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3740,
+        2190
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Did it work?').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "failed",
+            "error": "={{ $('Did it work?').item.json.error }}",
+            "checked_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "checked_at",
+              "displayName": "checked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5d0f5037-e959-5300-b870-073452848994",
+      "name": "Reply: failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3960,
+        2190
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.card_channel, thread_ts: $json.card_ts, text: 'Couldn\\'t add it: ' + $json.error }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8e29c2c4-4883-5b32-b546-de30149afdaf",
+      "name": "First of the month",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        2880
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "triggerAtDayOfMonth": 1,
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "04539407-9d3d-55d7-bf75-9a96c0631558",
+      "name": "Check now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        3060
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c84d0714-9357-5bf9-ad63-74a1f4fb1bde",
+      "name": "Check settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        2970
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4c28565d-4fbd-5fdc-a77b-c71c431edf84",
+              "name": "store_domain",
+              "value": "your-store.myshopify.com",
+              "type": "string"
+            },
+            {
+              "id": "f5d8e778-4c86-5ada-baa7-e345c18ea44e",
+              "name": "log_channel",
+              "value": "#log-videos",
+              "type": "string"
+            },
+            {
+              "id": "44887b44-d9c7-5530-9644-3e445c9fac2f",
+              "name": "research_after_days",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "a9884041-45ff-5ecb-b9e5-bd43df94894e",
+              "name": "videos_namespace",
+              "value": "custom",
+              "type": "string"
+            },
+            {
+              "id": "a237ef48-9c7f-52ba-9284-e227580d4cc8",
+              "name": "videos_key",
+              "value": "videos",
+              "type": "string"
+            },
+            {
+              "id": "af94236f-78b4-58b9-8e87-2ba97a74323b",
+              "name": "find_tag",
+              "value": "find-videos",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "research_after_days: tag products again for Find when their last search is older than this and found nothing. 0 is off."
+    },
+    {
+      "id": "416ed910-da73-5762-8815-e88579037389",
+      "name": "Get Shopify token for Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        2970
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Check settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md.",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      }
+    },
+    {
+      "id": "21899af3-3747-518a-bbec-2716b267345e",
+      "name": "Get live videos",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        2880
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "live"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "21a7f6fa-e6e5-50f5-9f9d-d9ed0381dbe5",
+      "name": "Batch the ids",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        2880
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r.video_id);\nconst out = [];\nfor (let i = 0; i < rows.length; i += 50) out.push({ json: { rows: rows.slice(i, i + 50), ids: rows.slice(i, i + 50).map(r => r.video_id).join(',') } });\nreturn out;"
+      }
+    },
+    {
+      "id": "45050974-53e7-58af-b468-dba6a2acd476",
+      "name": "Check the live videos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        2880
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ part: 'snippet,status', id: $json.ids, maxResults: 50 }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "name": "YouTube Data API key"
+        }
+      },
+      "notes": "1 quota unit per 50 videos."
+    },
+    {
+      "id": "ec0fee7f-a044-5eee-881f-1dfc4b0c6791",
+      "name": "What changed?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        2880
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// A video YouTube no longer returns was deleted or made private. A failed call is skipped, never read as \"gone\".\nconst gone = [];\n$input.all().forEach((it, i) => {\n  const b = $('Batch the ids').itemMatching(i).json, r = it.json;\n  if (Number(r.statusCode) >= 400 || r.body?.error) return;\n  const now = Object.fromEntries((r.body?.items || []).map(v => [v.id, v]));\n  for (const row of b.rows) {\n    const v = now[row.video_id];\n    const reason = !v ? 'deleted or made private' : !v.status?.embeddable ? 'embedding turned off' : v.snippet?.channelId !== row.channel_id ? 'moved to another channel' : '';\n    if (reason) gone.push({ json: { ...row, reason } });\n  }\n});\nreturn gone;"
+      }
+    },
+    {
+      "id": "f8594306-0864-505f-8820-fada0f13ae40",
+      "name": "Mark removed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        2880
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "removed",
+            "checked_at": "={{ $now.toISO() }}",
+            "error": "={{ $json.reason }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "checked_at",
+              "displayName": "checked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fe383d87-992f-5f4c-8169-6cb8aa9af9f3",
+      "name": "Still live",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        2880
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_candidates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "live"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "a0c2c856-8098-5519-adad-a1cbb8a2606a",
+      "name": "New video lists",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        2880
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One item per product that lost a video: the live videos it still has, in the same order Publish uses.\nconst gone = $('What changed?').all().map(i => i.json);\nconst live = $input.all().map(i => i.json).filter(r => r.id && r.metaobject_id);\nconst order = (a, b) => (b.is_manufacturer === true) - (a.is_manufacturer === true) || String(a.decided_at).localeCompare(String(b.decided_at));\nreturn [...new Set(gone.map(r => r.product_id))].map(product_id => ({ json: { product_id,\n  ids: live.filter(r => r.product_id === product_id).sort(order).map(r => r.metaobject_id) } }));"
+      }
+    },
+    {
+      "id": "89045259-7f60-5df6-9e65-baeefbc9fdfb",
+      "name": "Update the list",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        2880
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Check settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Check').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation List($set: [MetafieldsSetInput!]!, $clear: [MetafieldIdentifierInput!]!, $hasVideos: Boolean!) {\\n  metafieldsSet(metafields: $set) @include(if: $hasVideos) { userErrors { message } }\\n  metafieldsDelete(metafields: $clear) @skip(if: $hasVideos) { userErrors { message } }\\n}\", variables: ((s => ({ hasVideos: $json.ids.length > 0, set: [{ ownerId: $json.product_id, namespace: s.videos_namespace, key: s.videos_key, type: 'list.metaobject_reference', value: JSON.stringify($json.ids) }], clear: [{ ownerId: $json.product_id, namespace: s.videos_namespace, key: s.videos_key }] }))($('Check settings').first().json)) }) }}",
+        "options": {}
+      },
+      "notes": "Sets the list without the removed videos, or deletes the field when none are left."
+    },
+    {
+      "id": "4707b511-c23e-5783-abc4-306682119dd7",
+      "name": "Entries to delete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        2880
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $('What changed?').all().filter(i => i.json.metaobject_id).map(i => ({ json: { id: i.json.metaobject_id } }));"
+      }
+    },
+    {
+      "id": "5e2d3bd9-9b71-5355-b2fb-ee128f2a7010",
+      "name": "Delete the entry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        2880
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Check settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Check').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation Delete($id: ID!) {\\n  metaobjectDelete(id: $id) { deletedId userErrors { message } }\\n}\", variables: ({ id: $json.id }) }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "bb9ab181-66cd-550a-a9d2-27c150994a6c",
+      "name": "Sum up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        2880
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $('What changed?').all().map(i => i.json);\nconst lines = rows.slice(0, 20).map(r => `• ${r.product_title}: \"${r.title}\" (${r.reason})`);\nreturn [{ json: { text: `Removed ${rows.length} video${rows.length === 1 ? '' : 's'} YouTube no longer shows:\\n` + lines.join('\\n') + (rows.length > 20 ? `\\n…and ${rows.length - 20} more.` : '') } }];"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "7cccf536-7d40-5b2d-b9f5-40b6fae5ef1c",
+      "name": "Post the summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        2880
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Check settings').first().json.log_channel, text: $json.text }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "dc59b1b9-4ecc-509b-9dfd-318cd7f1149c",
+      "name": "Search again?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        3100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3cf90feb-e04f-5a7a-9991-f12b0e32f81c",
+              "leftValue": "={{ $('Check settings').first().json.research_after_days > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a9fc573f-c942-5d8b-904d-796e7e063693",
+      "name": "Get the runs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        3100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "video_runs"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "5c90ae90-ed1c-5b1b-9b54-3678f85893d2",
+      "name": "Due again",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        3100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Products whose last search is older than research_after_days and kept nothing get the tag back.\nconst days = $('Check settings').first().json.research_after_days, cutoff = Date.now() - days * 864e5;\nconst last = {};\nfor (const r of $input.all().map(i => i.json)) if (r.product_id && (!last[r.product_id] || r.ran_at > last[r.product_id].ran_at)) last[r.product_id] = r;\nreturn Object.values(last).filter(r => Number(r.kept) === 0 && new Date(r.ran_at).getTime() < cutoff).map(r => ({ json: { product_id: r.product_id } }));"
+      }
+    },
+    {
+      "id": "ae0e01c2-5a49-52d8-95cc-ac4ba2193cd5",
+      "name": "Tag it again",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        3100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Check settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Check').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"mutation Tag($id: ID!, $tags: [String!]!) {\\n  tagsAdd(id: $id, tags: $tags) { userErrors { message } }\\n}\", variables: ({ id: $json.product_id, tags: [$('Check settings').first().json.find_tag] }) }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Setup settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup settings": {
+      "main": [
+        [
+          {
+            "node": "Create brand_channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create brand_channels": {
+      "main": [
+        [
+          {
+            "node": "Create video_candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create video_candidates": {
+      "main": [
+        [
+          {
+            "node": "Create video_runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create video_runs": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Setup": {
+      "main": [
+        [
+          {
+            "node": "Add the product fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add the product fields": {
+      "main": [
+        [
+          {
+            "node": "Add the video type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add the video type": {
+      "main": [
+        [
+          {
+            "node": "Get the video type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the video type": {
+      "main": [
+        [
+          {
+            "node": "Add the Videos field",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add the Videos field": {
+      "main": [
+        [
+          {
+            "node": "Get brand channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get brand channels": {
+      "main": [
+        [
+          {
+            "node": "New brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New brands": {
+      "main": [
+        [
+          {
+            "node": "Look up the channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Look up the channel": {
+      "main": [
+        [
+          {
+            "node": "Channel row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Channel row": {
+      "main": [
+        [
+          {
+            "node": "Save the brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Find settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Find settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Brand channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brand channels": {
+      "main": [
+        [
+          {
+            "node": "Get products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get products": {
+      "main": [
+        [
+          {
+            "node": "Build the searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the searches": {
+      "main": [
+        [
+          {
+            "node": "Search YouTube",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search YouTube": {
+      "main": [
+        [
+          {
+            "node": "Back to products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back to products": {
+      "main": [
+        [
+          {
+            "node": "Search Google too?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Google too?": {
+      "main": [
+        [
+          {
+            "node": "Google searches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read manufacturer pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google searches": {
+      "main": [
+        [
+          {
+            "node": "Search Google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Google": {
+      "main": [
+        [
+          {
+            "node": "Read Google results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Google results": {
+      "main": [
+        [
+          {
+            "node": "Read manufacturer pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read manufacturer pages": {
+      "main": [
+        [
+          {
+            "node": "Known videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Known videos": {
+      "main": [
+        [
+          {
+            "node": "Video id lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video id lists": {
+      "main": [
+        [
+          {
+            "node": "Get video details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get video details": {
+      "main": [
+        [
+          {
+            "node": "Check the videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the videos": {
+      "main": [
+        [
+          {
+            "node": "Record the run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record the run": {
+      "main": [
+        [
+          {
+            "node": "Searched OK?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "One row per video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Searched OK?": {
+      "main": [
+        [
+          {
+            "node": "Remove the tag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per video": {
+      "main": [
+        [
+          {
+            "node": "Save the candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the candidate": {
+      "main": [
+        [
+          {
+            "node": "Build the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the card": {
+      "main": [
+        [
+          {
+            "node": "Post the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the card": {
+      "main": [
+        [
+          {
+            "node": "Save the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish input": {
+      "main": [
+        [
+          {
+            "node": "Publish this product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Read the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the click": {
+      "main": [
+        [
+          {
+            "node": "Review settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review settings": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Answer Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not from Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Slack": {
+      "main": [
+        [
+          {
+            "node": "Not a retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not a retry?": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "A decision?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Say not allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A decision?": {
+      "main": [
+        [
+          {
+            "node": "Get the row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the row": {
+      "main": [
+        [
+          {
+            "node": "Which button?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which button?": {
+      "main": [
+        [
+          {
+            "node": "Coverage picked?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coverage picked?": {
+      "main": [
+        [
+          {
+            "node": "Mark approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask for coverage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark approved": {
+      "main": [
+        [
+          {
+            "node": "Show approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Show approved": {
+      "main": [
+        [
+          {
+            "node": "Publish input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark rejected": {
+      "main": [
+        [
+          {
+            "node": "Show rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Called by a workflow": {
+      "main": [
+        [
+          {
+            "node": "Publish settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every hour (Publish)": {
+      "main": [
+        [
+          {
+            "node": "Publish settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish now": {
+      "main": [
+        [
+          {
+            "node": "Publish settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Publish": {
+      "main": [
+        [
+          {
+            "node": "Get approved videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get approved videos": {
+      "main": [
+        [
+          {
+            "node": "Pick the videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick the videos": {
+      "main": [
+        [
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "What would be added",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim it": {
+      "main": [
+        [
+          {
+            "node": "Check it again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check it again": {
+      "main": [
+        [
+          {
+            "node": "Still the same?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still the same?": {
+      "main": [
+        [
+          {
+            "node": "OK to add?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OK to add?": {
+      "main": [
+        [
+          {
+            "node": "Save the video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark changed": {
+      "main": [
+        [
+          {
+            "node": "Reply: not added",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the video": {
+      "main": [
+        [
+          {
+            "node": "Live videos for Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live videos for Publish": {
+      "main": [
+        [
+          {
+            "node": "Video lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video lists": {
+      "main": [
+        [
+          {
+            "node": "Attach the videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach the videos": {
+      "main": [
+        [
+          {
+            "node": "Did it work?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Did it work?": {
+      "main": [
+        [
+          {
+            "node": "Added?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Added?": {
+      "main": [
+        [
+          {
+            "node": "Mark live",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark live": {
+      "main": [
+        [
+          {
+            "node": "Reply: live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark failed": {
+      "main": [
+        [
+          {
+            "node": "Reply: failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "First of the month": {
+      "main": [
+        [
+          {
+            "node": "Check settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check now": {
+      "main": [
+        [
+          {
+            "node": "Check settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Check": {
+      "main": [
+        [
+          {
+            "node": "Get live videos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Search again?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get live videos": {
+      "main": [
+        [
+          {
+            "node": "Batch the ids",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch the ids": {
+      "main": [
+        [
+          {
+            "node": "Check the live videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the live videos": {
+      "main": [
+        [
+          {
+            "node": "What changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What changed?": {
+      "main": [
+        [
+          {
+            "node": "Mark removed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark removed": {
+      "main": [
+        [
+          {
+            "node": "Still live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still live": {
+      "main": [
+        [
+          {
+            "node": "New video lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New video lists": {
+      "main": [
+        [
+          {
+            "node": "Update the list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update the list": {
+      "main": [
+        [
+          {
+            "node": "Entries to delete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entries to delete": {
+      "main": [
+        [
+          {
+            "node": "Delete the entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete the entry": {
+      "main": [
+        [
+          {
+            "node": "Sum up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sum up": {
+      "main": [
+        [
+          {
+            "node": "Post the summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search again?": {
+      "main": [
+        [
+          {
+            "node": "Get the runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the runs": {
+      "main": [
+        [
+          {
+            "node": "Due again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Due again": {
+      "main": [
+        [
+          {
+            "node": "Tag it again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
