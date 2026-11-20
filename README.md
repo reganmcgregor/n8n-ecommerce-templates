@@ -29,6 +29,10 @@ Free n8n templates for running an online store: monitoring competitor prices, ad
 | [Manufacturer reviews](manufacturer-reviews/) | Finds each product's page on the manufacturer's own store, reads every review of that exact product, checks the set is complete and the same product (not a kit, a pack or another product the manufacturer pooled in), asks you in Slack, and gives your review app a Judge.me CSV with the source on every review. Every star rating kept, text unchanged. No AI model needed. |
 | [Shopify product videos](shopify-product-videos/) | Finds YouTube videos of each product by its model number (the manufacturer's own channel first), checks in code that the title names that exact model and that the video can be embedded, asks you in Slack, and shows the ones you approve in a Videos section below the product details, with the player loading only on click. Removes any video YouTube stops serving. No AI model needed. |
 
+## Before you start: niche research
+
+[Niche research](niche-research/) isn't an n8n template. It's three prompts and a scorecard for Claude Code (or another agent with MCP support) that score niche ideas against six boxes with Ahrefs or DataForSEO data, one subagent per niche, before you build a store.
+
 ## Getting started
 
 1. Read [SETUP.md](SETUP.md) for the credentials the templates share: a Shopify app, a Slack app and an AI model.

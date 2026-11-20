@@ -1,0 +1,159 @@
+# Niche scorecard
+#
+# Write this before you pull any data, and change it only here, with a dated
+# note saying why. Every score the agents record carries the version it was
+# computed under, so a change of rule is visible instead of a quiet goalpost move.
+
+version: 1
+changelog:
+  - version: 1
+    date: YYYY-MM-DD
+    note: Set before any data was pulled.
+
+market:
+  country: au                # the country code your SEO data tool uses (au, us, gb, nz...)
+  language: en
+  currency: USD              # Ahrefs and DataForSEO report money in USD
+  channel: organic           # organic search only, no paid ads assumed
+  keywords_per_niche: 6      # 4 to 6 seed keywords per niche; one results page is a thin sample
+
+# Run before anything else. A niche that fails one is out, whatever it scores.
+kill_checks:
+  legal_to_sell: >
+    Documented illegality of SALE in your country kills a niche. Legality of
+    use doesn't, and neither does installation licensing (a customer can buy a
+    ceiling fan online and have an electrician install it).
+  platform_allowed: >
+    Your store platform and payment provider allow the products (Shopify's
+    Acceptable Use Policy and the Shopify Payments restricted businesses list).
+
+# The money check runs BEFORE the results-page check, so a niche that only
+# looks good on the SERP dies here.
+money_gate:
+  rule: pass at least 2 of 3
+  proofs:
+    volume:
+      metric: total monthly searches across the niche's seed keywords, from one tool
+      threshold: ">= 3000"
+    weak_incumbent_earning:
+      metric: >
+        the highest monthly organic traffic value (USD) of any site in the
+        niche with a Domain Rating of 35 or less
+      threshold: ">= 2000"
+      why: >
+        A weak site already earning proves the niche makes money AND that you
+        can win it without authority. Use this, not CPC: shopping-intent terms
+        are monetised through Shopping rather than text ads, and ad-restricted
+        categories show suppressed or no CPC.
+    trend:
+      metric: >
+        5-year Google Trends for the two biggest keywords, average of the last
+        52 weeks against the first 52; use the lower of the two
+      threshold: "not below -25%"
+      note: Trends gives a relative index. Use it to catch decline only.
+
+# Out if the results page is already owned by marketplaces and big retailers.
+marketplace_check:
+  rule: out if marketplaces + big-box retailers hold 6 or more of the organic results on page one
+  marketplaces: [amazon, ebay, etsy, temu, aliexpress, kogan, catch]   # edit for your country
+  big_box: [bunnings, jb hi-fi, harvey norman, officeworks, big w, kmart, target]   # edit for your country
+
+# Each dimension is scored 1 to 5. The six boxes feed them as shown.
+# Scoring rules:
+#   - Every clause in an anchor must hold. Give the highest anchor that fully holds.
+#   - If the evidence sits between two anchors, give the half point (3.5).
+#   - If the evidence is "not found", give 2 and mark the score provisional.
+# The weighted score is out of 5.
+dimensions:
+  serp_beatability:
+    weight: 0.32
+    boxes: [weak incumbents, not big-box]
+    measure: >
+      Across the organic results on page one for every seed keyword: the lowest
+      Domain Rating, the median Domain Rating, and how many ranking pages have 5
+      or fewer referring domains. (Marketplace and big-box slots are the
+      separate marketplace_check.)
+    score:
+      5: a site under DR 15 on page one for most keywords, and most pages on 5 or fewer referring domains
+      4: a site under DR 25 on page one for most keywords, and median DR under 35
+      3: median DR 35 to 45, and some pages on 5 or fewer referring domains
+      2: median DR 45 to 60, and little under DR 40
+      1: nothing under DR 45 on page one
+  margin:
+    weight: 0.20
+    boxes: [good margins, prosumer buyers]
+    measure: >
+      Value per visit (traffic value divided by traffic) of the incumbents leads.
+      Then move the score down one if street prices run 25% or more under the
+      manufacturer's RRP (a store's own "was" price isn't an RRP), or if 10 or
+      more stores sell the same SKU at much the same price.
+    score:
+      5: value per visit over USD 1.00
+      4: value per visit USD 0.60 to 1.00
+      3: value per visit USD 0.40 to 0.60
+      2: value per visit USD 0.20 to 0.40
+      1: value per visit under USD 0.20
+  demand:
+    weight: 0.18
+    boxes: [lower volume]
+    measure: >
+      Total volume and traffic potential across the keyword set, and how much of
+      it sits in the long tail rather than one head term.
+    score:
+      5: over 30,000 searches a month across the set, spread over many terms
+      4: 10,000 to 30,000
+      3: 3,000 to 10,000
+      2: 1,000 to 3,000
+      1: under 1,000
+  supply:
+    weight: 0.15
+    boxes: [good margins]
+    measure: >
+      How many suppliers you can open an account with today (distributors with
+      open trade accounts, brand dealer or stockist programmes, wholesale feeds,
+      direct import) and whether stock and prices come as a feed you can automate.
+    score:
+      5: 3 or more suppliers, at least one with a stock and price feed
+      4: 2 suppliers, one with a feed
+      3: 2 suppliers, CSV or manual price lists only
+      2: 1 supplier
+      1: import only, or made to order
+  freight:
+    weight: 0.08
+    boxes: [a bit awkward]
+    measure: Typical parcel size and weight against the order value.
+    score:
+      5: fits a satchel
+      4: small carton under 5 kg
+      3: standard carton under 20 kg
+      2: large or long carton, or over 20 kg
+      1: pallet or two-person delivery
+  moat:
+    weight: 0.07
+    boxes: [a bit awkward, prosumer buyers]
+    measure: >
+      Friction most competitors haven't cleared (taboo but legal, licences,
+      fiddly to choose, few ads allowed) and an enthusiast community with its
+      own forums and vocabulary. A compliance mark every competitor already
+      has isn't a barrier.
+    score:
+      5: a barrier most competitors haven't cleared, and an active enthusiast community
+      3: one of the two
+      1: neither
+
+# Multiply the weighted score by each one that applies (they multiply together).
+penalties:
+  distributors_sell_retail: 0.85   # the suppliers you could open an account with also sell to the public online and rank
+  commodity_range: 0.85            # many stores run the same feed on the same SKUs
+  payment_risk: 0.70               # payment providers restrict or reserve funds for this category
+
+# Separates "weak because nobody looked" from "weak because there's nothing to win".
+verdict:
+  opportunity: money proofs >= 2 and serp_beatability >= 3.5
+  contested: money proofs >= 2 and serp_beatability < 3.5     # park it
+  desert: money proofs <= 1 and serp_beatability >= 3.5       # out
+  irrelevant: money proofs <= 1 and serp_beatability < 3.5    # out
+
+# Include one niche you already know is hard. If it doesn't come out at the
+# bottom, the rubric is wrong.
+negative_control: graphics cards
