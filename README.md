@@ -1,9 +1,10 @@
 # n8n ecommerce templates
 
-Free n8n templates for running an online store: monitoring competitor prices, adding products, writing product titles and descriptions, syncing inventory, enriching product data and images, building and sorting collections, and internal linking. Each one is a single n8n canvas with a lane per job, keeps its state in n8n Data Tables (or in Supabase, with the `workflow-supabase.json` version), and asks you in Slack before it changes anything in your store.
+Free n8n templates for running an online store: monitoring competitor prices, adding products, writing product titles and descriptions, syncing inventory, enriching product data and images, building and sorting collections, and internal linking. Each one is a single n8n canvas with a lane per job, keeps its state in n8n Data Tables (or in Supabase, with the `workflow-supabase.json` version), and asks you in Slack before it changes anything in your store. To run them all together as one store, start with [the Slack-run store](slack-run-store/).
 
 | Template | What it does |
 | --- | --- |
+| [The Slack-run store](slack-run-store/) | Every template below wired into one system, the six phases from my talk The Slack Side Hustle: one Slack app with one button URL, one Supabase database, a conductor that moves each new product through enrichment, buyer guides for your top collections, `/store` to run any job from Slack, and a review page to approve a hundred cards at once. Start with the 8-workflow starter or import all 27. |
 | [Competitor price monitoring](competitor-price-monitoring/) | Finds who else sells your exact products by model number, reads their prices from structured data, and posts a weekly Slack report of every product where a competitor is cheaper. No AI model needed. |
 | [Add products to Shopify](add-products-to-shopify/) | Brings a wholesaler's CSV price list (and, optionally, AliExpress listings) into one table, finds what you don't sell yet, writes the copy with AI and creates Shopify drafts you approve in Slack. |
 | [AI product titles](ai-product-titles/) | Rewrites the Shopify product titles you tag to a formula per product type, checks every model number in code, and learns from the titles you approve. |

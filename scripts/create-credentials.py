@@ -17,6 +17,7 @@ Python 3.8+ standard library only.
 import getpass
 import json
 import os
+import secrets
 import sys
 import urllib.error
 import urllib.parse
@@ -95,6 +96,8 @@ def build(cred, base=None, key=None):
         return {"baseUrl": ask("  Base URL", default="https://ollama.com"), "apiKey": ask("  API key", secret=True)}
     if t == "httpBasicAuth":
         return {"user": ask(f"  {cred.get('user_label', 'User')}"), "password": ask(f"  {cred.get('password_label', 'Password')}", secret=True)}
+    if t == "httpHeaderAuth" and cred.get("generate"):  # a shared key between your own workflows: made here, never shown
+        return {"name": cred.get("header", "Authorization"), "value": cred.get("prefix", "") + secrets.token_urlsafe(32)}
     if t == "httpHeaderAuth":
         key = ask(f"  {cred.get('secret_label', 'API key')}", secret=True)
         return {"name": cred.get("header", "Authorization"), "value": cred.get("prefix", "Bearer ") + key}

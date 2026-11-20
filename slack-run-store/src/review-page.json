@@ -1,0 +1,842 @@
+{
+  "name": "Store 6 · Review page",
+  "nodes": [
+    {
+      "id": "3c0d0c70-0001-4d2a-8e10-00000000e001",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -560
+      ],
+      "parameters": {
+        "width": 700,
+        "height": 660,
+        "color": 4,
+        "content": "## Store 6 · Review page\n\nWhen the cards pile up, `/store status` or `/store page` gives you a private link to this page: every review queue, up to 100 waiting in each, with a tick box on each one and Approve or Reject for the lot.\n\n**Page** checks the link's signature and expiry (`/store` signs it with your Slack signing secret), reads each queue's rows (the `rows` query per queue in system.json) and draws the page.\n\n**Decide** doesn't approve anything itself. For each ticked item it reads the card from Slack, builds the same button tap Slack would send (with the card's own ticked boxes and dropdowns), signs it with your signing secret and sends it to that workflow's own webhook. So every decision runs through the workflow's own checks and writes, and the Slack card updates to match, exactly as if you'd pressed the button. Then it reads the queue again to report what's decided.\n\nReading cards needs the bot scopes `channels:history` (and `groups:history` for private channels). The manifest adds them."
+      }
+    },
+    {
+      "id": "3c0d0c70-0002-4d2a-8e10-00000000e002",
+      "name": "Review page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "3c0d0c70-0002-4d2a-8e10-00000000e0aa",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "review",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "3c0d0c70-0003-4d2a-8e10-00000000e003",
+      "name": "Page settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"decide_url\": \"https://your-n8n.example.com/webhook/review-decide\",\n  \"store_name\": \"Your Store\",\n  \"per_queue\": 100,\n  \"queues\": []\n}",
+        "options": {}
+      },
+      "notes": "build.py writes queues from system.json."
+    },
+    {
+      "id": "3c0d0c70-0004-4d2a-8e10-00000000e004",
+      "name": "Check the link",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ (q => q.u + '|' + q.n + '|' + q.exp + '|' + (q.q || ''))($('Review page').first().json.query) }}",
+        "dataPropertyName": "expected",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "id": "3c0d0c70-0005-4d2a-8e10-00000000e005",
+      "name": "Link valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3c0d0c70-0005-4d2a-8e10-00000000e0b1",
+              "leftValue": "={{ $json.expected === $('Review page').first().json.query.sig && Number($('Review page').first().json.query.exp) > $now.toSeconds() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3c0d0c70-0006-4d2a-8e10-00000000e006",
+      "name": "Build the query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: one UNION over the queues in settings, each with its own rows query; the list comes from build.py.\nconst s = $('Page settings').first().json;\nconst want = ($('Review page').first().json.query.q || '').toLowerCase();\nconst qs = s.queues.filter(q => !want || q.key.startsWith(want) || q.label.toLowerCase().startsWith(want));\nconst parts = qs.map(q => `(select '${q.key}'::text as queue, to_jsonb(x) as r from (${q.rows}) x order by x.since nulls last limit ${Number(s.per_queue) || 100})`);\nreturn [{ json: { sql: parts.length ? parts.join(' union all ') : 'select null::text as queue, null::jsonb as r where false', keys: qs.map(q => q.key) } }];"
+      }
+    },
+    {
+      "id": "3c0d0c70-0007-4d2a-8e10-00000000e007",
+      "name": "Get what's waiting",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "3c0d0c70-0008-4d2a-8e10-00000000e008",
+      "name": "Build the page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: an HTML page with a section per queue; the HTML node can't loop over groups.\nconst s = $('Page settings').first().json;\nconst q = $('Review page').first().json.query;\nconst byKey = Object.fromEntries(s.queues.map(x => [x.key, x]));\nconst rows = $input.all().map(i => i.json).filter(r => r.queue && r.r);\nconst esc = t => String(t ?? '').replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\nconst groups = {};\nfor (const r of rows) (groups[r.queue] = groups[r.queue] || []).push(r.r);\nconst order = s.queues.map(x => x.key).filter(k => groups[k]);\nconst sections = order.map(k => {\n  const qd = byKey[k];\n  const items = groups[k].map(r => `<label class=\"item\"><input type=\"checkbox\" data-q=\"${esc(k)}\" value=\"${esc(r.id)}\"><span><b>${esc(r.label)}</b><small>${esc(r.detail)}</small></span><em class=\"st\" id=\"st-${esc(k)}-${esc(r.id)}\"></em></label>`).join('');\n  const btns = `<button data-q=\"${esc(k)}\" data-d=\"approve\" class=\"go\">${esc(qd.replay?.approve_label || 'Approve')} ticked</button>` + (qd.replay?.reject ? `<button data-q=\"${esc(k)}\" data-d=\"reject\">${esc(qd.replay?.reject_label || 'Reject')} ticked</button>` : '');\n  return `<section><h2>${esc(qd.label)} <span>${groups[k].length}</span></h2><p class=\"bar\"><label><input type=\"checkbox\" class=\"all\" data-q=\"${esc(k)}\"> Tick all</label>${btns}</p>${items}</section>`;\n}).join('') || '<p class=\"none\">Nothing waiting for a decision.</p>';\nconst auth = JSON.stringify({ u: q.u, n: q.n, exp: q.exp, q: q.q || '', sig: q.sig });\nconst html = `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(s.store_name)} · Review</title><style>\n:root{--ink:#1d1c1d;--muted:#616061;--line:#e8e8e8;--go:#007a5a;--bg:#fff}\n*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink);background:var(--bg)}\nmain{max-width:860px;margin:0 auto;padding:16px}h1{font-size:20px;margin:8px 0 16px}h2{font-size:16px;margin:28px 0 8px;display:flex;gap:8px;align-items:center}h2 span{font-size:12px;background:#f0f0f0;border-radius:10px;padding:1px 8px}\n.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px}.bar label{margin-right:auto;color:var(--muted)}\nbutton{font:inherit;border:1px solid #bbb;background:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}button.go{background:var(--go);border-color:var(--go);color:#fff}button:disabled{opacity:.5}\n.item{display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-top:1px solid var(--line)}.item span{flex:1;min-width:0}.item b{display:block;font-weight:600}.item small{display:block;color:var(--muted);overflow-wrap:anywhere}\n.st{font-style:normal;font-size:13px;white-space:nowrap}.ok{color:var(--go)}.err{color:#b3261e}.none{color:var(--muted)}\n</style></head><body><main><h1>${esc(s.store_name)}: waiting for a decision</h1><p class=\"none\">Each decision goes through its workflow exactly as a button tap in Slack would, and the card updates there too.</p>${sections}</main><script>\nconst AUTH=${auth};const URL_=${JSON.stringify(s.decide_url)};\ndocument.querySelectorAll('.all').forEach(a=>a.onchange=()=>document.querySelectorAll('input[data-q=\"'+a.dataset.q+'\"]:not(.all)').forEach(c=>{if(!c.disabled)c.checked=a.checked}));\ndocument.querySelectorAll('button[data-d]').forEach(b=>b.onclick=async()=>{\n const boxes=[...document.querySelectorAll('input[data-q=\"'+b.dataset.q+'\"]:not(.all):checked')];if(!boxes.length)return;\n const btns=document.querySelectorAll('button');btns.forEach(x=>x.disabled=true);\n for(let i=0;i<boxes.length;i+=10){const chunk=boxes.slice(i,i+10);chunk.forEach(c=>document.getElementById('st-'+b.dataset.q+'-'+c.value).textContent='working…');\n  try{const r=await fetch(URL_,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...AUTH,decisions:chunk.map(c=>({queue:b.dataset.q,id:c.value,decision:b.dataset.d}))})});const j=await r.json();\n   for(const x of (j.results||[])){const el=document.getElementById('st-'+x.queue+'-'+x.id);if(el){el.textContent=x.message;el.className='st '+(x.ok?'ok':'err')}const cb=document.querySelector('input[data-q=\"'+x.queue+'\"][value=\"'+x.id+'\"]');if(cb&&x.ok){cb.checked=false;cb.disabled=true}}\n   if(j.message&&!j.results)chunk.forEach(c=>{const el=document.getElementById('st-'+b.dataset.q+'-'+c.value);el.textContent=j.message;el.className='st err'});\n  }catch(e){chunk.forEach(c=>{const el=document.getElementById('st-'+b.dataset.q+'-'+c.value);el.textContent='No answer, try again';el.className='st err'})}}\n btns.forEach(x=>x.disabled=false);});\n</script></body></html>`;\nreturn [{ json: { html } }];"
+      }
+    },
+    {
+      "id": "3c0d0c70-0009-4d2a-8e10-00000000e009",
+      "name": "Send the page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        -100
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "3c0d0c70-000a-4d2a-8e10-00000000e00a",
+      "name": "Link expired",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        140
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><body style=\"font:16px system-ui;padding:24px\">This link has expired or was changed. Run <b>/store page</b> in Slack for a new one.</body>",
+        "options": {
+          "responseCode": 403,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "content-type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "3c0d0c70-000b-4d2a-8e10-00000000e00b",
+      "name": "Page decision",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        600
+      ],
+      "webhookId": "3c0d0c70-000b-4d2a-8e10-00000000e0ab",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "review-decide",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "notes": "The page posts up to 10 decisions at a time, with the link's signature."
+    },
+    {
+      "id": "3c0d0c70-000c-4d2a-8e10-00000000e00c",
+      "name": "Decide settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        600
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"internal_url\": \"http://localhost:5678\",\n  \"slack_app_id\": \"\",\n  \"slack_team_id\": \"\",\n  \"queues\": []\n}",
+        "options": {}
+      },
+      "notes": "build.py writes queues. internal_url is how n8n reaches its own webhooks."
+    },
+    {
+      "id": "3c0d0c70-000d-4d2a-8e10-00000000e00d",
+      "name": "Check the page signature",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        480,
+        600
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ (b => b.u + '|' + b.n + '|' + b.exp + '|' + (b.q || ''))($('Page decision').first().json.body) }}",
+        "dataPropertyName": "expected",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "id": "3c0d0c70-000e-4d2a-8e10-00000000e00e",
+      "name": "Signed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3c0d0c70-000e-4d2a-8e10-00000000e0b2",
+              "leftValue": "={{ $json.expected === $('Page decision').first().json.body.sig && Number($('Page decision').first().json.body.exp) > $now.toSeconds() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3c0d0c70-000f-4d2a-8e10-00000000e00f",
+      "name": "Build the lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: the lookup is a UNION over only the queues these decisions touch, each with its own rows query.\nconst s = $('Decide settings').first().json;\nconst d = ($('Page decision').first().json.body.decisions || []).slice(0, 10);\nconst keys = [...new Set(d.map(x => x.queue))].filter(k => s.queues.some(q => q.key === k));\nconst parts = keys.map(k => `(select '${k}'::text as queue, to_jsonb(x) as r from (${s.queues.find(q => q.key === k).rows}) x where '${k}:' || x.id = any($1::text[]))`);\nreturn [{ json: { sql: parts.length ? parts.join(' union all ') : 'select null::text as queue, null::jsonb as r where $1::text[] is null', ids: d.map(x => `${x.queue}:${x.id}`) } }];"
+      }
+    },
+    {
+      "id": "3c0d0c70-0010-4d2a-8e10-00000000e010",
+      "name": "Get those rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        500
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ [ $json.ids ] }}"
+        }
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Only rows still waiting come back, so a decision made in Slack meanwhile is skipped."
+    },
+    {
+      "id": "3c0d0c70-0011-4d2a-8e10-00000000e011",
+      "name": "Plan the taps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: picks each queue's button (a row can override it) and where its card is; per queue, from settings.\nconst s = $('Decide settings').first().json;\nconst found = Object.fromEntries($input.all().filter(i => i.json.queue).map(i => [`${i.json.queue}:${i.json.r.id}`, i.json.r]));\nconst out = [];\nfor (const x of ($('Page decision').first().json.body.decisions || []).slice(0, 10)) {\n  const q = s.queues.find(z => z.key === x.queue);\n  const r = found[`${x.queue}:${x.id}`];\n  const base = { queue: x.queue, id: x.id, decision: x.decision };\n  if (!q || !r) { out.push({ json: { ...base, skip: 'Already decided' } }); continue; }\n  const action = x.decision === 'approve' ? (r.approve_action || q.replay.approve) : (r.reject_action || q.replay.reject);\n  if (!action) { out.push({ json: { ...base, skip: 'No such button on this card' } }); continue; }\n  const channel = r.channel || q.channel;\n  out.push({ json: { ...base, label: r.label, action, value: r.value, channel, ts: r.ts || '', path: q.replay.path,\n    history: r.ts ? `channel=${encodeURIComponent(channel)}&latest=${r.ts}&inclusive=true&limit=1` : `channel=${encodeURIComponent(channel)}&limit=200` } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "3c0d0c70-0012-4d2a-8e10-00000000e012",
+      "name": "Read the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.skip ? 'https://slack.com/api/api.test' : 'https://slack.com/api/conversations.history?' + $json.history }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1200
+            }
+          }
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "Why HTTP: the Slack node has no read-one-message operation. The card's blocks give the tap its ticked boxes and dropdowns. Queues that don't store the card's ts (collection copy) search the channel's last 200 messages for the button."
+    },
+    {
+      "id": "3c0d0c70-0013-4d2a-8e10-00000000e013",
+      "name": "Build the taps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: builds Slack's block_actions payload, including state from the card's own inputs, and the signing base string.\nconst s = $('Decide settings').first().json;\nconst who = $('Page decision').first().json.body;\nconst plans = $('Plan the taps').all().map(i => i.json);\nconst stateOf = blocks => { const v = {}; for (const b of blocks || []) { const els = b.type === 'input' ? [b.element] : b.type === 'actions' ? b.elements : b.accessory ? [b.accessory] : []; for (const e of els) { if (!e || !e.action_id) continue; let val;\n  if (e.type === 'checkboxes' || e.type === 'multi_static_select') val = { type: e.type, selected_options: e.initial_options || [] };\n  else if (e.type === 'radio_buttons' || e.type === 'static_select') val = { type: e.type, selected_option: e.initial_option || null };\n  else if (e.type === 'plain_text_input') val = { type: e.type, value: e.initial_value ?? null };\n  else continue; (v[b.block_id] = v[b.block_id] || {})[e.action_id] = val; } } return v; };\nconst findButton = (blocks, action, value) => { for (const b of blocks || []) for (const e of (b.elements || []).concat(b.accessory ? [b.accessory] : [])) if (e.action_id === action && (value == null || e.value === value)) return { block_id: b.block_id, e }; return null; };\nreturn $input.all().map((it, i) => {\n  const p = plans[i];\n  if (p.skip) return { json: p };\n  const msgs = it.json?.messages || [];\n  const msg = p.ts ? msgs.find(m => m.ts === p.ts) || msgs[0] : msgs.find(m => findButton(m.blocks, p.action, p.value));\n  const ts = p.ts || msg?.ts;\n  if (!ts) return { json: { ...p, skip: 'Card not found in Slack' } };\n  const btn = findButton(msg?.blocks, p.action, p.value) || findButton(msg?.blocks, p.action, null);\n  const now = Math.floor(Date.now() / 1000);\n  const payload = { type: 'block_actions', api_app_id: s.slack_app_id || '', team: { id: s.slack_team_id || '' },\n    user: { id: who.u, username: who.n, name: who.n }, channel: { id: p.channel }, container: { type: 'message', message_ts: ts, channel_id: p.channel },\n    message: { ts, text: msg?.text || '', blocks: msg?.blocks || [] }, state: { values: stateOf(msg?.blocks) },\n    actions: [{ type: 'button', action_id: p.action, value: btn?.e?.value ?? p.value, block_id: btn?.block_id || '', action_ts: String(now) }],\n    response_url: '', trigger_id: '' };\n  const body = 'payload=' + encodeURIComponent(JSON.stringify(payload));\n  return { json: { ...p, ts, body, now: String(now), base: `v0:${now}:${body}`, url: s.internal_url.replace(/\\/$/, '') + '/webhook/' + p.path } };\n});"
+      }
+    },
+    {
+      "id": "3c0d0c70-0014-4d2a-8e10-00000000e014",
+      "name": "Sign the tap",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        500
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base || 'skip' }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      },
+      "notes": "Signed with your Slack signing secret, as Slack would sign it."
+    },
+    {
+      "id": "3c0d0c70-0015-4d2a-8e10-00000000e015",
+      "name": "Send the tap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.skip ? $('Decide settings').first().json.internal_url.replace(/\\/$/, '') + '/healthz' : $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-slack-signature",
+              "value": "={{ 'v0=' + $json.sig }}"
+            },
+            {
+              "name": "x-slack-request-timestamp",
+              "value": "={{ $json.now || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/x-www-form-urlencoded",
+        "body": "={{ $json.body || '' }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "notes": "Why HTTP: the workflow's own Slack webhook, so the decision runs through its own checks. One at a time, 1.5 s apart, so its card updates land in order."
+    },
+    {
+      "id": "3c0d0c70-0016-4d2a-8e10-00000000e016",
+      "name": "Let them finish",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        500
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "executeOnce": true,
+      "notes": "Most workflows answer Slack first and decide after, so give the last one a moment before reading the queue again."
+    },
+    {
+      "id": "3c0d0c70-0017-4d2a-8e10-00000000e017",
+      "name": "Read the queue again",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2880,
+        500
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $('Build the lookup').first().json.sql }}",
+        "options": {
+          "queryReplacement": "={{ [ $('Build the lookup').first().json.ids ] }}"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "3c0d0c70-0018-4d2a-8e10-00000000e018",
+      "name": "Report back",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: matches each decision to whether its row left the queue, for the page's per-item status.\nconst still = new Set($input.all().filter(i => i.json.queue).map(i => `${i.json.queue}:${i.json.r.id}`));\nconst done = { approve: 'Approved', reject: 'Rejected' };\nconst results = $('Build the taps').all().map(i => i.json).map(p => {\n  if (p.skip) return { queue: p.queue, id: p.id, ok: p.skip === 'Already decided', message: p.skip };\n  const left = !still.has(`${p.queue}:${p.id}`);\n  return { queue: p.queue, id: p.id, ok: left, message: left ? (done[p.decision] || 'Done') : 'Still waiting: open the card in Slack to see why' };\n});\nreturn [{ json: { results, log: results.map(r => `${r.queue}:${r.id} ${r.message}`).join('; ') } }];"
+      }
+    },
+    {
+      "id": "3c0d0c70-0019-4d2a-8e10-00000000e019",
+      "name": "Log the decisions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3360,
+        500
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into store_activity (source, user_id, user_name, action, detail) values ('review page', $1, $2, $3, $4)",
+        "options": {
+          "queryReplacement": "={{ [ $('Page decision').first().json.body.u, $('Page decision').first().json.body.n, ($('Page decision').first().json.body.decisions || [])[0]?.decision || '', $json.log ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "3c0d0c70-001a-4d2a-8e10-00000000e01a",
+      "name": "Send the results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3600,
+        500
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ results: $('Report back').first().json.results }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "3c0d0c70-001b-4d2a-8e10-00000000e01b",
+      "name": "Refuse the decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        740
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ message: 'Link expired. Run /store page for a new one.' }) }}",
+        "options": {
+          "responseCode": 403
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Review page": {
+      "main": [
+        [
+          {
+            "node": "Page settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page settings": {
+      "main": [
+        [
+          {
+            "node": "Check the link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the link": {
+      "main": [
+        [
+          {
+            "node": "Link valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link valid?": {
+      "main": [
+        [
+          {
+            "node": "Build the query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Link expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the query": {
+      "main": [
+        [
+          {
+            "node": "Get what's waiting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get what's waiting": {
+      "main": [
+        [
+          {
+            "node": "Build the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the page": {
+      "main": [
+        [
+          {
+            "node": "Send the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page decision": {
+      "main": [
+        [
+          {
+            "node": "Decide settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide settings": {
+      "main": [
+        [
+          {
+            "node": "Check the page signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the page signature": {
+      "main": [
+        [
+          {
+            "node": "Signed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signed?": {
+      "main": [
+        [
+          {
+            "node": "Build the lookup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refuse the decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the lookup": {
+      "main": [
+        [
+          {
+            "node": "Get those rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get those rows": {
+      "main": [
+        [
+          {
+            "node": "Plan the taps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan the taps": {
+      "main": [
+        [
+          {
+            "node": "Read the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the card": {
+      "main": [
+        [
+          {
+            "node": "Build the taps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the taps": {
+      "main": [
+        [
+          {
+            "node": "Sign the tap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the tap": {
+      "main": [
+        [
+          {
+            "node": "Send the tap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send the tap": {
+      "main": [
+        [
+          {
+            "node": "Let them finish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Let them finish": {
+      "main": [
+        [
+          {
+            "node": "Read the queue again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the queue again": {
+      "main": [
+        [
+          {
+            "node": "Report back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report back": {
+      "main": [
+        [
+          {
+            "node": "Log the decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log the decisions": {
+      "main": [
+        [
+          {
+            "node": "Send the results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

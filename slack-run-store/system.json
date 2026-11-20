@@ -1,0 +1,1082 @@
+{
+  "_about": "Which template does what in which phase, which Slack channel each settings key posts to, how the router finds each workflow's button taps, which review queues the page and /store status read, and the conductor's stages. build.py reads it; config.json holds your own values.",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Publish products",
+      "folder": "1-publish"
+    },
+    {
+      "phase": 2,
+      "name": "Maintain products",
+      "folder": "2-maintain"
+    },
+    {
+      "phase": 3,
+      "name": "Enrich products",
+      "folder": "3-enrich"
+    },
+    {
+      "phase": 4,
+      "name": "Enrich collections",
+      "folder": "4-collections"
+    },
+    {
+      "phase": 5,
+      "name": "Distribution",
+      "folder": "5-distribution"
+    },
+    {
+      "phase": 6,
+      "name": "Bulk operations",
+      "folder": "6-bulk"
+    }
+  ],
+  "router_ignore": [
+    "link_",
+    "pin_open",
+    "ig_open",
+    "video_watch",
+    "acc_link",
+    "faq_link"
+  ],
+  "templates": [
+    {
+      "slug": "add-products-to-shopify",
+      "title": "Add products",
+      "phase": 1,
+      "phase_folder": "1-publish",
+      "starter": true,
+      "jobs_prefix": "products",
+      "lane_names": {
+        "every-day-at-05-00": "ingest",
+        "every-6-hours": "token",
+        "every-day-at-06-00": "detect",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "slack_channel": "log-ingest"
+        },
+        "Detect settings": {
+          "slack_channel": "review-supplier-offers"
+        },
+        "Review settings": {
+          "slack_channel": "review-supplier-offers"
+        },
+        "Draft settings": {
+          "slack_channel": "review-product-drafts"
+        },
+        "Go live settings": {
+          "slack_channel": "review-product-drafts"
+        }
+      },
+      "slack": {
+        "webhook": "product-review",
+        "action_prefixes": [
+          "product_",
+          "draft_"
+        ],
+        "channels": [
+          "review-supplier-offers",
+          "review-product-drafts"
+        ]
+      },
+      "queues": [
+        {
+          "key": "supplier-offers",
+          "label": "Supplier offers",
+          "channel": "review-supplier-offers",
+          "table": "offers",
+          "rows": "select id::text as id, case when title ilike brand || ' %' then title else concat_ws(' ', brand, coalesce(title, source_sku)) end as label, concat_ws(' · ', mpn, source, case when cost is not null then 'cost ' || round(cost::numeric, 2) end) as detail, id || ':' || card_nonce as value, card_ts as ts, null::text as channel, \"updatedAt\" as since from offers where status = 'pending_review' and card_nonce is not null",
+          "replay": {
+            "approve": "product_approve",
+            "reject": "product_reject",
+            "approve_label": "Approve",
+            "reject_label": "Reject"
+          }
+        },
+        {
+          "key": "product-drafts",
+          "label": "Product drafts",
+          "channel": "review-product-drafts",
+          "table": "offers",
+          "rows": "select id::text as id, case when title ilike brand || ' %' then title else concat_ws(' ', brand, coalesce(title, source_sku)) end as label, concat_ws(' · ', mpn, product_id) as detail, id || ':' || card_nonce as value, draft_card_ts as ts, null::text as channel, \"updatedAt\" as since from offers where status = 'drafted' and card_nonce is not null",
+          "replay": {
+            "approve": "draft_golive",
+            "reject": "draft_reject",
+            "approve_label": "Go live",
+            "reject_label": "Reject"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "ai-product-titles",
+      "title": "AI product titles",
+      "phase": 1,
+      "phase_folder": "1-publish",
+      "jobs_prefix": "titles",
+      "lane_names": {
+        "every-3-hours": "write",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Write settings": {
+          "slack_channel": "review-titles"
+        }
+      },
+      "slack": {
+        "webhook": "title-review",
+        "action_prefixes": [
+          "title_"
+        ],
+        "callback_ids": [
+          "title_edit"
+        ],
+        "channels": [
+          "review-titles"
+        ]
+      },
+      "queues": [
+        {
+          "key": "titles",
+          "label": "Product titles",
+          "channel": "review-titles",
+          "table": "title_drafts",
+          "rows": "select id::text as id, new_title as label, 'was: ' || old_title as detail, product_id as value, slack_ts as ts, null::text as channel, \"updatedAt\" as since from title_drafts where status = 'pending'",
+          "replay": {
+            "approve": "title_approve",
+            "reject": "title_reject"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "automated-inventory-management",
+      "title": "Inventory and discontinued products",
+      "phase": 2,
+      "phase_folder": "2-maintain",
+      "starter": true,
+      "jobs_prefix": "inventory",
+      "lane_names": {
+        "every-day-at-01-05": "locations",
+        "every-3-hours": "ingest",
+        "every-3-hours-at-half-past": "sync",
+        "every-day-at-09-00": "sweep",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "slack_review_channel": "review-discontinued",
+          "slack_log_channel": "log-inventory"
+        }
+      },
+      "slack": {
+        "webhook": "inventory-review",
+        "action_prefixes": [
+          "retire_"
+        ],
+        "channels": [
+          "review-discontinued"
+        ]
+      },
+      "queues": [
+        {
+          "key": "discontinued",
+          "label": "Discontinued products",
+          "channel": "review-discontinued",
+          "table": "retire_queue",
+          "rows": "select id::text as id, title as label, concat_ws(' · ', handle, 'redirect to ' || redirect_to) as detail, product_id as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from retire_queue where status = 'proposed'",
+          "replay": {
+            "approve": "retire_redirect",
+            "reject": "retire_keep",
+            "approve_label": "Archive and redirect",
+            "reject_label": "Keep"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "shopify-repricing-engine",
+      "title": "Repricing engine",
+      "phase": 2,
+      "phase_folder": "2-maintain",
+      "starter": true,
+      "jobs_prefix": "pricing",
+      "lane_names": {
+        "every-hour-at-30": "decide",
+        "every-hour-at-40": "review",
+        "every-day-at-08-00": "report",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "slack_review_channel": "review-pricing",
+          "slack_alert_channel": "alerts",
+          "slack_digest_channel": "log-pricing"
+        }
+      },
+      "slack": {
+        "webhook": "repricing",
+        "action_prefixes": [
+          "price_"
+        ],
+        "channels": [
+          "review-pricing",
+          "log-pricing"
+        ]
+      },
+      "queues": [
+        {
+          "key": "pricing",
+          "label": "Held prices",
+          "channel": "review-pricing",
+          "table": "price_decisions",
+          "rows": "select id::text as id, coalesce(title, sku) as label, concat_ws(' · ', sku, 'now ' || current_price, 'proposed ' || proposed_price) as detail, variant_id || '|' || proposed_price as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from price_decisions where status = 'held'",
+          "replay": {
+            "approve": "price_apply",
+            "reject": "price_hold",
+            "approve_label": "Apply",
+            "reject_label": "Hold"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "n8n-workflow-monitoring",
+      "title": "Workflow monitoring",
+      "phase": 2,
+      "phase_folder": "2-maintain",
+      "starter": true,
+      "jobs_prefix": "monitor",
+      "lane_names": {
+        "every-15-minutes": "watch",
+        "every-morning": "digest",
+        "run-once-to-set-up": "setup"
+      },
+      "skip_lanes": [
+        "every-5-minutes-demo",
+        "try-it-by-hand"
+      ],
+      "channels": {
+        "*": {
+          "slack_channel": "alerts"
+        },
+        "Digest settings": {
+          "slack_channel": "digest"
+        }
+      },
+      "error_workflow": true
+    },
+    {
+      "slug": "competitor-price-monitoring",
+      "title": "Competitor prices",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "starter": true,
+      "jobs_prefix": "competitors",
+      "lane_names": {
+        "every-day-at-03-00": "discover",
+        "every-6-hours": "recapture",
+        "mondays-at-08-00": "report",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "slack_channel": "log-competitors"
+        }
+      }
+    },
+    {
+      "slug": "product-manuals-spec-sheets",
+      "title": "Manuals and spec sheets",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "documents",
+      "lane_names": {
+        "every-hour-find": "find",
+        "every-10-minutes-review": "review",
+        "every-10-minutes-publish": "publish",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Review settings": {
+          "slack_channel": "review-documents"
+        },
+        "Publish settings": {
+          "slack_channel": "log-sources"
+        }
+      },
+      "slack": {
+        "webhook": "product-documents-review",
+        "action_prefixes": [
+          "doc_"
+        ],
+        "channels": [
+          "review-documents"
+        ]
+      },
+      "queues": [
+        {
+          "key": "documents",
+          "label": "Manuals and spec sheets",
+          "channel": "review-documents",
+          "table": "documents",
+          "rows": "select id::text as id, coalesce(product_title, model) || ': ' || coalesce(doc_title, doc_type) as label, concat_ws(' · ', doc_type, url) as detail, id::text as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from documents where status = 'in_review'",
+          "replay": {
+            "approve": "doc_approve",
+            "reject": "doc_reject"
+          }
+        }
+      ],
+      "conductor": {
+        "stage": "sources",
+        "tag_from": [
+          "Find settings",
+          "queue_tag"
+        ],
+        "pending": "select product_id::text as product_id from documents where status in ('review', 'in_review')"
+      }
+    },
+    {
+      "slug": "product-images",
+      "title": "Product images",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "images",
+      "lane_names": {
+        "every-hour": "find",
+        "every-hour-backstop": "publish",
+        "every-monday": "alt-text",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Find settings": {
+          "slack_channel": "review-images"
+        },
+        "Alt text settings": {
+          "slack_channel": "review-images"
+        }
+      },
+      "slack": {
+        "webhook": "product-images-review",
+        "action_prefixes": [
+          "img_",
+          "alt_",
+          "keep",
+          "main"
+        ],
+        "channels": [
+          "review-images"
+        ]
+      },
+      "queues": [
+        {
+          "key": "images",
+          "label": "Product images",
+          "channel": "review-images",
+          "table": "image_queue",
+          "rows": "select id::text as id, title as label, concat_ws(' · ', vendor, mpn) as detail, product_id as value, card_ts as ts, card_channel as channel, \"updatedAt\" as since from image_queue where status = 'review'",
+          "replay": {
+            "approve": "img_approve",
+            "reject": "img_reject",
+            "needs_card_state": true
+          }
+        }
+      ],
+      "conductor": {
+        "stage": "sources",
+        "tag_from": [
+          "Find settings",
+          "pick_tag"
+        ],
+        "pending": "select product_id from image_queue where status = 'review'"
+      }
+    },
+    {
+      "slug": "product-data-enrichment",
+      "title": "Product attributes",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "attributes",
+      "lane_names": {
+        "every-15-minutes": "extract",
+        "every-10-minutes": "review",
+        "every-15-minutes-push": "push",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Review settings": {
+          "slack_channel": "review-attributes"
+        }
+      },
+      "slack": {
+        "webhook": "spec-review",
+        "action_prefixes": [
+          "attr_",
+          "bulk_"
+        ],
+        "channels": [
+          "review-attributes"
+        ]
+      },
+      "queues": [
+        {
+          "key": "attributes",
+          "label": "Product attributes",
+          "channel": "review-attributes",
+          "table": "attribute_values",
+          "rows": "select slack_ts as id, case when count(distinct product_id) = 1 then max(product_title) else count(distinct product_id) || ' products: ' || left(string_agg(distinct product_title, ', '), 160) end as label, count(*) || ' values: ' || left(string_agg(key || ' = ' || value, ', '), 240) as detail, case when count(distinct product_id) = 1 then max(product_id) else 'bulk' end as value, slack_ts as ts, max(slack_channel) as channel, min(\"updatedAt\") as since, case when count(distinct product_id) = 1 then 'attr_approve' else 'bulk_approve' end as approve_action, case when count(distinct product_id) = 1 then 'attr_reject' else 'bulk_reject' end as reject_action from attribute_values where review_status = 'pending' and slack_ts is not null group by slack_ts",
+          "replay": {
+            "approve": "attr_approve",
+            "reject": "attr_reject",
+            "needs_card_state": true
+          }
+        }
+      ],
+      "conductor": {
+        "stage": "sources",
+        "tag_from": [
+          "Extract settings",
+          "queue_tag"
+        ],
+        "pending": "select product_id from attribute_values where review_status = 'pending'"
+      }
+    },
+    {
+      "slug": "ai-product-descriptions",
+      "title": "AI product descriptions",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "descriptions",
+      "lane_names": {
+        "every-3-hours": "write",
+        "every-hour": "push",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Write settings": {
+          "slack_channel": "review-descriptions"
+        }
+      },
+      "slack": {
+        "webhook": "description-review",
+        "action_prefixes": [
+          "desc_",
+          "edit_description"
+        ],
+        "channels": [
+          "review-descriptions"
+        ]
+      },
+      "queues": [
+        {
+          "key": "descriptions",
+          "label": "Product descriptions",
+          "channel": "review-descriptions",
+          "table": "description_drafts",
+          "rows": "select id::text as id, title as label, left(draft_text, 240) as detail, product_id as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from description_drafts where status = 'pending'",
+          "replay": {
+            "approve": "desc_approve",
+            "reject": "desc_reject",
+            "needs_card_state": true
+          }
+        }
+      ],
+      "conductor": {
+        "stage": "copy",
+        "tag_from": [
+          "Write settings",
+          "queue_tag"
+        ],
+        "pending": "select product_id from description_drafts where status = 'pending'"
+      }
+    },
+    {
+      "slug": "ai-product-faqs",
+      "title": "AI product FAQs",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "faqs",
+      "lane_names": {
+        "every-hour": "draft",
+        "every-15-minutes": "publish",
+        "every-monday": "refresh",
+        "run-once-to-set-up": "setup",
+        "run-find-now": "find"
+      },
+      "channels": {
+        "*": {
+          "review_channel": "review-faqs"
+        }
+      },
+      "slack": {
+        "webhook": "faq-review",
+        "action_prefixes": [
+          "faq_",
+          "ask_"
+        ],
+        "callback_ids": [
+          "faq_add_question"
+        ],
+        "channels": [
+          "review-faqs"
+        ]
+      },
+      "queues": [
+        {
+          "key": "faqs",
+          "label": "Product FAQs",
+          "channel": "review-faqs",
+          "table": "faq_drafts",
+          "rows": "select id::text as id, title as label, concat_ws(' · ', model, 'revision ' || revision) as detail, json_build_object('p', product_id, 'r', revision)::text as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from faq_drafts where status = 'review'",
+          "replay": {
+            "approve": "faq_approve",
+            "reject": "faq_reject"
+          }
+        }
+      ],
+      "conductor": {
+        "stage": "copy",
+        "tag_from": [
+          "Draft settings",
+          "queue_tag"
+        ],
+        "pending": "select product_id from faq_drafts where status = 'review'"
+      }
+    },
+    {
+      "slug": "manufacturer-reviews",
+      "title": "Manufacturer reviews",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "reviews",
+      "lane_names": {
+        "every-hour-find": "find",
+        "every-hour-collect": "collect",
+        "every-morning": "export",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "slack_channel": "review-manufacturer-reviews"
+        }
+      },
+      "slack": {
+        "webhook": "manufacturer-reviews",
+        "action_prefixes": [
+          "reviews_"
+        ],
+        "channels": [
+          "review-manufacturer-reviews"
+        ]
+      },
+      "queues": [
+        {
+          "key": "manufacturer-reviews",
+          "label": "Manufacturer reviews",
+          "channel": "review-manufacturer-reviews",
+          "table": "review_sources",
+          "rows": "select id::text as id, product_title as label, concat_ws(' · ', review_count || ' reviews', 'average ' || average, url) as detail, id::text as value, card_ts as ts, card_channel as channel, \"updatedAt\" as since from review_sources where status = 'ready' and card_ts is not null",
+          "replay": {
+            "approve": "reviews_approve",
+            "reject": "reviews_reject"
+          }
+        }
+      ],
+      "conductor": {
+        "stage": "copy",
+        "tag_from": [
+          "Find settings",
+          "find_tag"
+        ],
+        "pending": "select product_id from review_sources where status in ('new', 'ready')"
+      }
+    },
+    {
+      "slug": "compatible-accessories",
+      "title": "Compatible accessories",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "accessories",
+      "lane_names": {
+        "every-hour": "match",
+        "every-hour-at-30": "publish",
+        "run-once-to-set-up": "setup",
+        "run-find-now": "find"
+      },
+      "channels": {
+        "*": {
+          "review_channel": "review-accessories"
+        }
+      },
+      "slack": {
+        "webhook": "compatible-accessories",
+        "action_prefixes": [
+          "acc_"
+        ],
+        "channels": [
+          "review-accessories"
+        ]
+      },
+      "queues": [
+        {
+          "key": "accessories",
+          "label": "Compatible accessories",
+          "channel": "review-accessories",
+          "table": "accessory_reviews",
+          "rows": "select id::text as id, title as label, concat_ws(' · ', model, 'revision ' || revision) as detail, json_build_object('a', regexp_replace(accessory_id, '\\D', '', 'g')::bigint, 'r', revision)::text as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from accessory_reviews where status = 'review'",
+          "replay": {
+            "approve": "acc_approve",
+            "reject": "acc_reject",
+            "approve_label": "Approve all",
+            "reject_label": "Reject all"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "shopify-product-videos",
+      "title": "Product videos",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "videos",
+      "lane_names": {
+        "every-hour": "find",
+        "every-hour-publish": "publish",
+        "first-of-the-month": "check",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Find settings": {
+          "slack_channel": "review-videos"
+        },
+        "Check settings": {
+          "log_channel": "log-videos"
+        }
+      },
+      "slack": {
+        "webhook": "product-videos",
+        "action_prefixes": [
+          "video_",
+          "coverage"
+        ],
+        "channels": [
+          "review-videos"
+        ]
+      },
+      "queues": [
+        {
+          "key": "videos",
+          "label": "Product videos",
+          "channel": "review-videos",
+          "table": "video_candidates",
+          "rows": "select id::text as id, product_title || ': ' || title as label, concat_ws(' · ', channel_name, coverage, 'https://youtu.be/' || video_id) as detail, id::text as value, card_ts as ts, card_channel as channel, \"updatedAt\" as since from video_candidates where status = 'pending'",
+          "replay": {
+            "approve": "video_approve",
+            "reject": "video_reject",
+            "needs_card_state": true
+          }
+        }
+      ],
+      "conductor": {
+        "stage": "copy",
+        "tag_from": [
+          "Find settings",
+          "find_tag"
+        ],
+        "pending": "select product_id from video_candidates where status = 'pending'"
+      }
+    },
+    {
+      "slug": "shopify-product-groups",
+      "title": "Product groups",
+      "phase": 3,
+      "phase_folder": "3-enrich",
+      "jobs_prefix": "groups",
+      "lane_names": {
+        "every-hour": "group",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "slack_channel": "log-catalogue"
+        }
+      }
+    },
+    {
+      "slug": "shopify-collections-seo",
+      "title": "Collection proposals",
+      "phase": 4,
+      "phase_folder": "4-collections",
+      "jobs_prefix": "collections",
+      "lane_names": {
+        "every-monday": "propose",
+        "every-day": "brands",
+        "every-sunday": "retire",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "slack_channel": "review-collection-proposals"
+        }
+      },
+      "slack": {
+        "webhook": "collection-review",
+        "action_prefixes": [
+          "collection_"
+        ],
+        "channels": [
+          "review-collection-proposals"
+        ]
+      },
+      "queues": [
+        {
+          "key": "collection-proposals",
+          "label": "Collection proposals",
+          "channel": "review-collection-proposals",
+          "table": "collection_proposals",
+          "rows": "select id::text as id, kind || ': ' || title as label, concat_ws(' · ', handle, source) as detail, id::text as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from collection_proposals where status = 'pending'",
+          "replay": {
+            "approve": "collection_approve",
+            "reject": "collection_skip",
+            "reject_label": "Skip"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "category-page-seo",
+      "title": "Collection copy",
+      "phase": 4,
+      "phase_folder": "4-collections",
+      "jobs_prefix": "copy",
+      "lane_names": {
+        "every-4-hours": "write",
+        "every-day": "sort",
+        "every-monday": "audit",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Write settings": {
+          "slack_channel": "review-collection-copy"
+        },
+        "Sort settings": {
+          "slack_channel": "log-collections"
+        },
+        "Audit settings": {
+          "slack_channel": "log-collections"
+        }
+      },
+      "full_plan_disable": [
+        "Every day"
+      ],
+      "slack": {
+        "webhook": "copy-review",
+        "action_prefixes": [
+          "copy_"
+        ],
+        "channels": [
+          "review-collection-copy"
+        ]
+      },
+      "queues": [
+        {
+          "key": "collection-copy",
+          "label": "Collection copy",
+          "channel": "review-collection-copy",
+          "table": "collection_copy",
+          "rows": "select id::text as id, title as label, concat_ws(' · ', keyword, case when volume is not null then volume::int || ' searches' end, left(intro, 200)) as detail, handle as value, null::text as ts, null::text as channel, \"updatedAt\" as since from collection_copy where status = 'review'",
+          "replay": {
+            "approve": "copy_approve",
+            "reject": "copy_skip",
+            "reject_label": "Skip"
+          }
+        }
+      ],
+      "skip_lanes": [
+        "run-sort-now"
+      ]
+    },
+    {
+      "slug": "shopify-collection-sorting",
+      "title": "Collection sorting",
+      "phase": 4,
+      "phase_folder": "4-collections",
+      "jobs_prefix": "sort",
+      "lane_names": {
+        "every-2-hours": "sort",
+        "run-setup": "setup"
+      },
+      "main_lane": "every-2-hours",
+      "channels": {
+        "*": {
+          "slack_channel": "log-collections"
+        }
+      }
+    },
+    {
+      "slug": "ecommerce-internal-linking",
+      "title": "Internal linking",
+      "phase": 4,
+      "phase_folder": "4-collections",
+      "jobs_prefix": "links",
+      "lane_names": {
+        "every-day": "link",
+        "every-monday": "audit",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "slack_channel": "log-collections"
+        }
+      }
+    },
+    {
+      "slug": "google-shopping-feed-optimization",
+      "title": "Google Shopping feed",
+      "phase": 5,
+      "phase_folder": "5-distribution",
+      "jobs_prefix": "google",
+      "lane_names": {
+        "every-day-at-6am": "check",
+        "every-day-at-7am": "read-back",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "*": {
+          "review_channel": "review-google",
+          "log_channel": "log-google"
+        }
+      },
+      "slack": {
+        "webhook": "google-feed-review",
+        "action_prefixes": [
+          "google_"
+        ],
+        "callback_ids": [
+          "google_edit"
+        ],
+        "channels": [
+          "review-google"
+        ]
+      },
+      "queues": [
+        {
+          "key": "google",
+          "label": "Held from Google",
+          "channel": "review-google",
+          "table": "feed_status",
+          "rows": "select product_id as id, 'Product ' || product_id as label, state as detail, product_id as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from feed_status where state = 'held'",
+          "replay": {
+            "approve": "google_recheck",
+            "approve_label": "Recheck"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "pinterest-automation",
+      "title": "Pinterest pins",
+      "phase": 5,
+      "phase_folder": "5-distribution",
+      "jobs_prefix": "pins",
+      "lane_names": {
+        "every-morning": "draft",
+        "every-hour": "sync",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Draft settings": {
+          "slack_channel": "review-pins"
+        },
+        "Sync settings": {
+          "log_channel": "log-pinterest"
+        }
+      },
+      "slack": {
+        "webhook": "pinterest-pin-review-pg",
+        "action_prefixes": [
+          "pin_"
+        ],
+        "callback_ids": [
+          "pin_edit"
+        ],
+        "channels": [
+          "review-pins"
+        ]
+      },
+      "queues": [
+        {
+          "key": "pins",
+          "label": "Pinterest pins",
+          "channel": "review-pins",
+          "table": "pins",
+          "rows": "select id::text as id, coalesce(title, product_title) as label, concat_ws(' · ', product_title, pin_kind) as detail, id::text as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from pins where status = 'draft' and slack_ts is not null",
+          "replay": {
+            "approve": "pin_approve",
+            "reject": "pin_skip",
+            "reject_label": "Skip"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "instagram-automation",
+      "title": "Instagram posts",
+      "phase": 5,
+      "phase_folder": "5-distribution",
+      "jobs_prefix": "instagram",
+      "lane_names": {
+        "every-morning": "draft",
+        "every-15-minutes": "publish",
+        "every-monday": "token",
+        "monday-morning": "report",
+        "run-once-to-set-up": "setup"
+      },
+      "channels": {
+        "Draft settings": {
+          "slack_channel": "review-instagram"
+        },
+        "*": {
+          "log_channel": "log-instagram",
+          "review_channel": "review-instagram"
+        }
+      },
+      "slack": {
+        "webhook": "instagram-post-review-pg",
+        "action_prefixes": [
+          "ig_"
+        ],
+        "callback_ids": [
+          "ig_edit"
+        ],
+        "channels": [
+          "review-instagram"
+        ]
+      },
+      "queues": [
+        {
+          "key": "instagram",
+          "label": "Instagram posts",
+          "channel": "review-instagram",
+          "table": "instagram_posts",
+          "rows": "select id::text as id, coalesce(headline, product_title) as label, product_title as detail, id::text as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from instagram_posts where status = 'draft' and slack_ts is not null",
+          "replay": {
+            "approve": "ig_approve",
+            "reject": "ig_skip",
+            "reject_label": "Skip"
+          }
+        }
+      ]
+    }
+  ],
+  "conductor_stages": [
+    {
+      "stage": "sources",
+      "label": "Sources, images and attributes"
+    },
+    {
+      "stage": "copy",
+      "label": "Descriptions, FAQs, reviews and videos"
+    }
+  ],
+  "glue": {
+    "router": {
+      "name": "Store · Slack router",
+      "source": "router.json",
+      "phase_folder": "0-slack",
+      "starter": true
+    },
+    "conductor": {
+      "name": "Store 3 · Conductor",
+      "source": "conductor.json",
+      "phase_folder": "3-enrich",
+      "channels": {
+        "*": {
+          "log_channel": "log-publish"
+        }
+      },
+      "credentials_from": "glue-credentials.json",
+      "jobs": [
+        {
+          "job": "conductor",
+          "phase": 3,
+          "title": "Conductor",
+          "lane": "move",
+          "path": "run-conductor",
+          "setup": false
+        }
+      ]
+    },
+    "buyer-guides": {
+      "name": "Store 4 · Buyer guides",
+      "source": "buyer-guides.json",
+      "phase_folder": "4-collections",
+      "channels": {
+        "*": {
+          "review_channel": "review-buyer-guides"
+        }
+      },
+      "credentials_from": "glue-credentials.json",
+      "slack": {
+        "webhook": "buyer-guide-review",
+        "action_prefixes": [
+          "guide_"
+        ],
+        "channels": [
+          "review-buyer-guides"
+        ]
+      },
+      "jobs": [
+        {
+          "job": "guides",
+          "phase": 4,
+          "title": "Buyer guides",
+          "lane": "write",
+          "path": "run-buyer-guides",
+          "setup": false
+        },
+        {
+          "job": "guides setup",
+          "phase": 4,
+          "title": "Buyer guides",
+          "lane": "setup",
+          "path": "run-buyer-guides",
+          "setup": true
+        }
+      ],
+      "queues": [
+        {
+          "key": "buyer-guides",
+          "label": "Buyer guides",
+          "phase": 4,
+          "workflow": "Buyer guides",
+          "channel": "review-buyer-guides",
+          "table": "buyer_guides",
+          "rows": "select id::text as id, title as label, concat_ws(' · ', keyword, words || ' words', flags) as detail, json_build_object('c', collection_id, 'r', revision)::text as value, slack_ts as ts, slack_channel as channel, \"updatedAt\" as since from buyer_guides where status = 'review'",
+          "replay": {
+            "approve": "guide_approve",
+            "reject": "guide_skip",
+            "reject_label": "Skip"
+          }
+        }
+      ]
+    },
+    "command": {
+      "name": "Store 6 · Slack command",
+      "source": "command.json",
+      "phase_folder": "6-bulk",
+      "starter": true,
+      "credentials_from": "glue-credentials.json"
+    },
+    "review-page": {
+      "name": "Store 6 · Review page",
+      "source": "review-page.json",
+      "phase_folder": "6-bulk",
+      "starter": true,
+      "credentials_from": "glue-credentials.json"
+    }
+  }
+}

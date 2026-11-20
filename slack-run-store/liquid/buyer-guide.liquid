@@ -1,0 +1,17 @@
+{% comment %}
+  Buyer guide, written by Store 4 · Buyer guides and approved in Slack.
+  Paste into a Custom Liquid block on your collection template, under the product grid.
+  The workflow writes plain h3, p and ul tags into the collection metafield custom.buyer_guide.
+{% endcomment %}
+{%- assign guide = collection.metafields.custom.buyer_guide.value -%}
+{%- if guide != blank -%}
+  <section class="buyer-guide" aria-label="Buyer's guide">
+    <h2 class="buyer-guide__title">Buyer's guide: {{ collection.title | escape }}</h2>
+    <div class="buyer-guide__body rte">{{ guide }}</div>
+  </section>
+  <style>
+    .buyer-guide { max-width: 72ch; margin: 3rem auto 0; }
+    .buyer-guide__body h3 { margin: 1.75rem 0 .5rem; }
+    .buyer-guide__body ul { padding-left: 1.25rem; }
+  </style>
+{%- endif -%}

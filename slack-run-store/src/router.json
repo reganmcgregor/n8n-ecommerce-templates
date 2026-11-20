@@ -1,0 +1,185 @@
+{
+  "name": "Store · Slack router",
+  "nodes": [
+    {
+      "id": "0d7c1a10-0001-4b6e-9a01-5a1c00000001",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-720, -420],
+      "parameters": {
+        "width": 640,
+        "height": 520,
+        "color": 4,
+        "content": "## Store · Slack router\n\nA Slack app can send its button taps and modal submissions to one URL only. This is that URL, for every workflow in the store.\n\n1. **Read the tap** reads the raw body Slack sent and the action or modal it came from.\n2. **Sign the request** and **Pick the workflow** check Slack's signature (and that the request is under five minutes old), then look up the workflow: by the button's `action_id` prefix, then the modal's `callback_id`, then the channel the card is in.\n3. **Pass the tap on** posts the exact same body and signature headers to that workflow's own webhook, so it checks the signature itself, as it would on its own.\n4. **Answer Slack** returns whatever that workflow answered (a modal error, say) within Slack's three seconds.\n\nThe routes are in **Router settings**, written by build.py from system.json. Set `internal_url` to the address n8n can reach itself on (for example `http://localhost:5678`), so taps don't go out and back through your proxy."
+      }
+    },
+    {
+      "id": "0d7c1a10-0002-4b6e-9a01-5a1c00000002",
+      "name": "Slack sends every tap",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "0d7c1a10-0002-4b6e-9a01-5a1c0000000a",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack",
+        "responseMode": "responseNode",
+        "options": { "rawBody": true }
+      },
+      "notes": "Your Slack app's Interactivity Request URL (the manifest sets it). Raw body on, so the signature can be checked."
+    },
+    {
+      "id": "0d7c1a10-0003-4b6e-9a01-5a1c00000003",
+      "name": "Read the tap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: Extract From File can't read a form-encoded body kept as binary, and the signature needs those exact bytes.\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers || {};\nconst ts = h['x-slack-request-timestamp'] || '';\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || '';\nlet p = {};\ntry { p = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' '))); } catch (e) { p = {}; }\nreturn [{ json: {\n  raw, ts, signature: h['x-slack-signature'] || '', base: `v0:${ts}:${raw}`,\n  fresh: Math.abs(Date.now() / 1000 - Number(ts)) <= 300,\n  type: p.type || '', action_id: p.actions?.[0]?.action_id || '', callback_id: p.view?.callback_id || p.callback_id || '',\n  channel_id: p.channel?.id || p.container?.channel_id || '', channel_name: p.channel?.name || ''\n} }];"
+      },
+      "notes": "Reads the raw body and pulls out what routing needs."
+    },
+    {
+      "id": "0d7c1a10-0004-4b6e-9a01-5a1c00000004",
+      "name": "Router settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 0],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"internal_url\": \"http://localhost:5678\",\n  \"slack_app_id\": \"\",\n  \"slack_team_id\": \"\",\n  \"routes\": {}\n}",
+        "options": {}
+      },
+      "notes": "build.py writes routes from system.json. internal_url is how n8n reaches its own webhooks."
+    },
+    {
+      "id": "0d7c1a10-0005-4b6e-9a01-5a1c00000005",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [720, 0],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $('Read the tap').first().json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": { "crypto": { "name": "Slack signing secret" } },
+      "notes": "HMAC of v0:timestamp:body with your Slack app's signing secret."
+    },
+    {
+      "id": "0d7c1a10-0006-4b6e-9a01-5a1c00000006",
+      "name": "Pick the workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: the route is a longest-prefix match over three lists, which Switch can't express without one output per workflow.\nconst t = $('Read the tap').first().json;\nconst s = $('Router settings').first().json;\nconst r = s.routes || {};\nconst signed = t.fresh && ('v0=' + $input.first().json.sig) === t.signature;\nif (!signed) return [{ json: { ok: false, status: 401, reason: 'bad or stale signature' } }];\nconst starts = (v, list) => (list || []).find(x => v && v.startsWith(x.prefix));\nlet hit = null;\nif (t.type === 'block_actions') {\n  if ((r.ignore_actions || []).some(a => t.action_id.startsWith(a))) return [{ json: { ok: false, status: 200, reason: 'link button, nothing to do' } }];\n  hit = starts(t.action_id, r.action_prefixes);\n} else if (t.callback_id) {\n  hit = starts(t.callback_id, r.callback_ids);\n}\nif (!hit && (t.channel_id || t.channel_name)) {\n  hit = (r.channels || []).find(c => c.channel === t.channel_id || c.channel === '#' + t.channel_name || c.channel === t.channel_name) || null;\n}\nif (!hit) return [{ json: { ok: false, status: 200, reason: `no route for ${t.type} ${t.action_id || t.callback_id}` } }];\nreturn [{ json: { ok: true, path: hit.path, workflow: hit.workflow, url: s.internal_url.replace(/\\/$/, '') + '/webhook/' + hit.path } }];"
+      },
+      "notes": "Signature first. Then action_id prefix, modal callback_id, channel."
+    },
+    {
+      "id": "0d7c1a10-0007-4b6e-9a01-5a1c00000007",
+      "name": "Routed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1200, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "0d7c1a10-0007-4b6e-9a01-5a1c0000000b",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0d7c1a10-0008-4b6e-9a01-5a1c00000008",
+      "name": "Pass the tap on",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, -100],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-slack-signature", "value": "={{ $('Read the tap').first().json.signature }}" },
+            { "name": "x-slack-request-timestamp", "value": "={{ $('Read the tap').first().json.ts }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/x-www-form-urlencoded",
+        "body": "={{ $('Read the tap').first().json.raw }}",
+        "options": {
+          "response": { "response": { "fullResponse": true, "neverError": true, "responseFormat": "text" } },
+          "timeout": 2500
+        }
+      },
+      "notes": "Why HTTP: the workflow's own webhook checks the same signature, so it gets the exact body and headers. 2.5 s timeout keeps Slack's 3 s limit."
+    },
+    {
+      "id": "0d7c1a10-0009-4b6e-9a01-5a1c00000009",
+      "name": "Answer Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1680, -100],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ (() => { const b = $json.body ?? $json.data ?? ''; const t = typeof b === 'string' ? b : JSON.stringify(b); return /^\\s*\\{\\s*\"message\"\\s*:\\s*\"Workflow was started\"/.test(t) ? '' : t; })() }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode && $json.statusCode < 300 ? $json.statusCode : 200 }}",
+          "responseHeaders": {
+            "entries": [
+              { "name": "content-type", "value": "={{ $json.headers?.['content-type'] || 'text/plain' }}" }
+            ]
+          }
+        }
+      },
+      "notes": "Hands back the workflow's own answer, such as a modal's validation errors. A timeout still answers 200, so Slack doesn't show an error."
+    },
+    {
+      "id": "0d7c1a10-000a-4b6e-9a01-5a1c0000000c",
+      "name": "Nothing to pass on",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 140],
+      "parameters": {
+        "respondWith": "noData",
+        "options": { "responseCode": "={{ $json.status }}" }
+      },
+      "notes": "401 for a bad signature. 200 for link buttons and taps with no route, so Slack shows nothing."
+    }
+  ],
+  "connections": {
+    "Slack sends every tap": { "main": [[{ "node": "Read the tap", "type": "main", "index": 0 }]] },
+    "Read the tap": { "main": [[{ "node": "Router settings", "type": "main", "index": 0 }]] },
+    "Router settings": { "main": [[{ "node": "Sign the request", "type": "main", "index": 0 }]] },
+    "Sign the request": { "main": [[{ "node": "Pick the workflow", "type": "main", "index": 0 }]] },
+    "Pick the workflow": { "main": [[{ "node": "Routed?", "type": "main", "index": 0 }]] },
+    "Routed?": {
+      "main": [
+        [{ "node": "Pass the tap on", "type": "main", "index": 0 }],
+        [{ "node": "Nothing to pass on", "type": "main", "index": 0 }]
+      ]
+    },
+    "Pass the tap on": { "main": [[{ "node": "Answer Slack", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

@@ -1,0 +1,704 @@
+{
+  "name": "Store 3 · Conductor",
+  "nodes": [
+    {
+      "id": "1c0d0c70-0001-4d2a-8e10-00000000c001",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -520
+      ],
+      "parameters": {
+        "width": 700,
+        "height": 600,
+        "color": 4,
+        "content": "## Store 3 · Conductor\n\nThe phase 3 templates each work on products that carry their tag (`documents`, `needs-images`, `enrich`, `describe`, `faq`, `find-reviews`, `find-videos`). The conductor adds those tags in order, so every product that goes live is enriched without you tagging anything.\n\n1. **Find new products** enrols live products it hasn't seen yet (a draft is picked up when it goes live) (`enrol: \"all\"` on the first run enrols the whole catalogue instead).\n2. Each product moves through `stages`. A stage is finished when its tags are gone from the product (each template removes its own tag once it has drafted) **and** nothing for that product is still waiting for a decision in Slack. Descriptions wait for approved attributes that way.\n3. A product that sits in a stage longer than `max_stage_days` moves on anyway, and the log line says so.\n4. One line in your log channel when anything moved.\n\nbuild.py writes `stages` from system.json, with each tag read from its template's own settings, and leaves out templates that aren't in your plan."
+      }
+    },
+    {
+      "id": "1c0d0c70-0002-4d2a-8e10-00000000c002",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -160
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1c0d0c70-0003-4d2a-8e10-00000000c003",
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "1c0d0c70-0004-4d2a-8e10-00000000c004",
+      "name": "Run from /store",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        160
+      ],
+      "webhookId": "008b66ab-6a85-5f57-9d98-1b98d2e20675",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "store-run-conductor",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Store run key"
+        }
+      },
+      "notes": "/store run conductor. Header auth: Store run key."
+    },
+    {
+      "id": "1c0d0c70-0005-4d2a-8e10-00000000c005",
+      "name": "Conductor settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"product_query\": \"status:active\",\n  \"enrol\": \"new\",\n  \"batch_size\": 100,\n  \"max_stage_days\": 7,\n  \"log_channel\": \"#log-publish\",\n  \"dry_run\": false,\n  \"stages\": [\n    {\n      \"stage\": \"sources\",\n      \"label\": \"Sources, images and attributes\",\n      \"steps\": [\n        {\n          \"workflow\": \"Manuals and spec sheets\",\n          \"tag\": \"documents\",\n          \"pending\": \"select product_id::text as product_id from documents where status in ('review', 'in_review')\"\n        },\n        {\n          \"workflow\": \"Product images\",\n          \"tag\": \"needs-images\",\n          \"pending\": \"select product_id from image_queue where status = 'review'\"\n        },\n        {\n          \"workflow\": \"Product attributes\",\n          \"tag\": \"enrich\",\n          \"pending\": \"select product_id from attribute_values where review_status = 'pending'\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"copy\",\n      \"label\": \"Descriptions, FAQs, reviews and videos\",\n      \"steps\": [\n        {\n          \"workflow\": \"AI product descriptions\",\n          \"tag\": \"describe\",\n          \"pending\": \"select product_id from description_drafts where status = 'pending'\"\n        },\n        {\n          \"workflow\": \"AI product FAQs\",\n          \"tag\": \"faq\",\n          \"pending\": \"select product_id from faq_drafts where status = 'review'\"\n        },\n        {\n          \"workflow\": \"Manufacturer reviews\",\n          \"tag\": \"find-reviews\",\n          \"pending\": \"select product_id from review_sources where status in ('new', 'ready')\"\n        },\n        {\n          \"workflow\": \"Product videos\",\n          \"tag\": \"find-videos\",\n          \"pending\": \"select product_id from video_candidates where status = 'pending'\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "executeOnce": true,
+      "notes": "enrol: \"new\" starts from the first run; \"all\" also enrols every product already live. stages comes from build.py."
+    },
+    {
+      "id": "1c0d0c70-0006-4d2a-8e10-00000000c006",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Conductor settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md."
+    },
+    {
+      "id": "1c0d0c70-0007-4d2a-8e10-00000000c007",
+      "name": "Get the last run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        740,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select coalesce((select value from store_state where key = 'conductor_since'), '') as since, now() as now",
+        "options": {}
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "1c0d0c70-0008-4d2a-8e10-00000000c008",
+      "name": "Find new products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Conductor settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const s = $('Conductor settings').first().json; const since = $json.since || (s.enrol === 'all' ? '2000-01-01T00:00:00Z' : new Date($json.now).toISOString()); return JSON.stringify({ query: `query New($q: String!) { products(first: 250, sortKey: UPDATED_AT, query: $q) { nodes { id title updatedAt } } }`, variables: { q: `${s.product_query} updated_at:>'${since}'` } }); })() }}",
+        "options": {}
+      },
+      "executeOnce": true,
+      "notes": "Live products changed since the last run, oldest change first, 250 a run. A draft that goes live counts as a change, so it's found then. On the very first run with enrol \"new\" this finds nothing and just starts the clock."
+    },
+    {
+      "id": "1c0d0c70-0009-4d2a-8e10-00000000c009",
+      "name": "Enrol them",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1220,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with n as (select * from jsonb_to_recordset($1::jsonb) as x(product_id text, title text)),\nins as (insert into store_pipeline (product_id, title, stage, stage_name) select product_id, title, 0, 'new' from n on conflict (product_id) do nothing returning 1)\ninsert into store_state (key, value, \"updatedAt\") values ('conductor_since', $2, now())\non conflict (key) do update set value = excluded.value, \"updatedAt\" = now()\nreturning (select count(*) from ins)::int as enrolled",
+        "options": {
+          "queryReplacement": "={{ (() => { const p = $json.data?.products?.nodes || []; const since = $('Get the last run').first().json.since; const s = $('Conductor settings').first().json; const start = since || (s.enrol === 'all' ? '2000-01-01T00:00:00Z' : new Date($('Get the last run').first().json.now).toISOString()); return [ JSON.stringify(p.map(x => ({ product_id: x.id, title: x.title }))), p.length ? p[p.length - 1].updatedAt : start ]; })() }}"
+        }
+      },
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Adds products it hasn't seen at stage 0 (one it has seen keeps its stage) and moves the clock to the newest change."
+    },
+    {
+      "id": "1c0d0c70-000a-4d2a-8e10-00000000c00a",
+      "name": "Get open products",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from store_pipeline where not done order by stage_started_at limit $1",
+        "options": {
+          "queryReplacement": "={{ [ $('Conductor settings').first().json.batch_size ] }}"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Oldest first, so a long backlog still moves."
+    },
+    {
+      "id": "1c0d0c70-000b-4d2a-8e10-00000000c00b",
+      "name": "Anything open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1700,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1c0d0c70-000b-4d2a-8e10-00000000c0b1",
+              "leftValue": "={{ $('Get open products').all().filter(i => i.json.product_id).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "1c0d0c70-000c-4d2a-8e10-00000000c00c",
+      "name": "Read their tags",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1940,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Conductor settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query Tags($ids: [ID!]!) { nodes(ids: $ids) { ... on Product { id status tags } } }`, variables: { ids: $('Get open products').all().map(i => i.json.product_id).filter(Boolean) } }) }}",
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "1c0d0c70-000d-4d2a-8e10-00000000c00d",
+      "name": "Build the waiting check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2180,
+        -100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: the query is a UNION of one pending check per template in the plan, which comes from settings.\nconst s = $('Conductor settings').first().json;\nconst checks = (s.stages || []).flatMap(st => st.steps || []).map(x => x.pending).filter(Boolean);\nconst ids = $('Get open products').all().map(i => String(i.json.product_id).replace(/\\D/g, ''));\nconst sql = checks.length\n  ? `select distinct regexp_replace(product_id::text, '\\\\D', '', 'g') as pid from (${checks.map(c => `(${c})`).join(' union all ')}) x where regexp_replace(product_id::text, '\\\\D', '', 'g') = any($1::text[])`\n  : 'select null::text as pid where false and $1::text[] is not null';\nreturn [{ json: { sql, ids } }];"
+      },
+      "notes": "Anything for these products still waiting for a decision in Slack, across every template."
+    },
+    {
+      "id": "1c0d0c70-000e-4d2a-8e10-00000000c00e",
+      "name": "Check what's waiting",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2420,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ [ $json.ids ] }}"
+        }
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "1c0d0c70-000f-4d2a-8e10-00000000c00f",
+      "name": "Decide each product",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        -100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: each product's next stage depends on its tags, its pending rows and its age in the stage; no native node holds that state machine.\nconst s = $('Conductor settings').first().json;\nconst stages = (s.stages || []).filter(st => (st.steps || []).length);\nconst live = Object.fromEntries(($('Read their tags').first().json.data?.nodes || []).filter(Boolean).map(p => [p.id, p]));\nconst waiting = new Set($input.all().map(i => i.json.pid).filter(Boolean));\nconst dayMs = 86400000;\nreturn $('Get open products').all().map(i => i.json).filter(r => r.product_id).map(r => {\n  const p = live[r.product_id];\n  const base = { product_id: r.product_id, title: r.title, stage: r.stage, stage_name: r.stage_name, add_tags: [], moved: false, done: false, note: null };\n  if (!p || p.status !== 'ACTIVE') return { json: { ...base, done: true, moved: true, note: 'no longer live' } };\n  let next = r.stage + 1;\n  if (r.stage > 0) {\n    const cur = stages[r.stage - 1];\n    const left = cur ? cur.steps.map(x => x.tag).filter(t => p.tags.includes(t)) : [];\n    const busy = left.length || waiting.has(String(r.product_id).replace(/\\D/g, ''));\n    const stuck = Date.now() - new Date(r.stage_started_at).getTime() > s.max_stage_days * dayMs;\n    if (busy && !stuck) return { json: base };\n    if (busy) base.note = `moved on after ${s.max_stage_days} days in ${r.stage_name}` + (left.length ? ` (still tagged ${left.join(', ')})` : ' (still waiting in Slack)');\n  }\n  if (next > stages.length) return { json: { ...base, stage: next, stage_name: 'done', done: true, moved: true } };\n  const st = stages[next - 1];\n  return { json: { ...base, stage: next, stage_name: st.stage, add_tags: st.steps.map(x => x.tag).filter(t => !p.tags.includes(t)), moved: true } };\n});"
+      },
+      "notes": "A stage ends when its tags are gone and nothing is waiting in Slack, or after max_stage_days."
+    },
+    {
+      "id": "1c0d0c70-0010-4d2a-8e10-00000000c010",
+      "name": "Moved?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        2900,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1c0d0c70-0010-4d2a-8e10-00000000c1a1",
+              "leftValue": "={{ $json.moved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1c0d0c70-0011-4d2a-8e10-00000000c011",
+      "name": "Tags to add?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        3140,
+        -220
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1c0d0c70-0011-4d2a-8e10-00000000c1b1",
+              "leftValue": "={{ $json.add_tags.length > 0 && !$('Conductor settings').first().json.dry_run }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1c0d0c70-0012-4d2a-8e10-00000000c012",
+      "name": "Add the tags",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3380,
+        -220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Conductor settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `mutation Next($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { field message } } }`, variables: { id: $json.product_id, tags: $json.add_tags } }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "notes": "Writes to Shopify: the next stage's tags, which the phase 3 templates pick up on their next run."
+    },
+    {
+      "id": "1c0d0c70-0013-4d2a-8e10-00000000c013",
+      "name": "Save the stages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3140,
+        20
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with d as (select * from jsonb_to_recordset($1::jsonb) as x(product_id text, stage int, stage_name text, add_tags text, done boolean, note text))\nupdate store_pipeline p set stage = d.stage, stage_name = d.stage_name, tags_added = coalesce(nullif(d.add_tags, ''), p.tags_added), done = d.done, note = coalesce(d.note, p.note), stage_started_at = now(), \"updatedAt\" = now()\nfrom d where p.product_id = d.product_id\nreturning p.product_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($('Moved?').all().map(i => ({ product_id: i.json.product_id, stage: i.json.stage, stage_name: i.json.stage_name, add_tags: i.json.add_tags.join(', '), done: i.json.done, note: i.json.note }))) ] }}"
+        }
+      },
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "1c0d0c70-0014-4d2a-8e10-00000000c014",
+      "name": "Post to the log",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        3380,
+        20
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Conductor settings').first().json.log_channel }}"
+        },
+        "messageType": "text",
+        "text": "={{ (() => { const m = $('Moved?').all().map(i => i.json); const by = {}; for (const x of m) by[x.stage_name] = (by[x.stage_name] || 0) + 1; const notes = m.filter(x => x.note).map(x => `• ${x.title}: ${x.note}`).slice(0, 10); const enrolled = $('Enrol them').first().json.enrolled || 0; return `:arrows_counterclockwise: Conductor${$('Conductor settings').first().json.dry_run ? ' (dry run)' : ''}: ${enrolled ? enrolled + ' new live products enrolled. ' : ''}` + Object.entries(by).map(([k, v]) => `${v} → ${k}`).join(', ') + (notes.length ? '\\n' + notes.join('\\n') : ''); })() }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false
+        }
+      },
+      "executeOnce": true,
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "Only runs when something moved."
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Conductor settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Conductor settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run from /store": {
+      "main": [
+        [
+          {
+            "node": "Conductor settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conductor settings": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Get the last run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the last run": {
+      "main": [
+        [
+          {
+            "node": "Find new products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find new products": {
+      "main": [
+        [
+          {
+            "node": "Enrol them",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrol them": {
+      "main": [
+        [
+          {
+            "node": "Get open products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get open products": {
+      "main": [
+        [
+          {
+            "node": "Anything open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything open?": {
+      "main": [
+        [
+          {
+            "node": "Read their tags",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Read their tags": {
+      "main": [
+        [
+          {
+            "node": "Build the waiting check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the waiting check": {
+      "main": [
+        [
+          {
+            "node": "Check what's waiting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check what's waiting": {
+      "main": [
+        [
+          {
+            "node": "Decide each product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide each product": {
+      "main": [
+        [
+          {
+            "node": "Moved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Moved?": {
+      "main": [
+        [
+          {
+            "node": "Tags to add?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save the stages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tags to add?": {
+      "main": [
+        [
+          {
+            "node": "Add the tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the stages": {
+      "main": [
+        [
+          {
+            "node": "Post to the log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  }
+}

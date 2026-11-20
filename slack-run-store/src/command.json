@@ -1,0 +1,132 @@
+{
+  "name": "Store 6 · Slack command",
+  "nodes": [
+    {
+      "id": "2c0d0c70-0001-4d2a-8e10-00000000d001", "name": "Overview", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-760, -520],
+      "parameters": { "width": 700, "height": 620, "color": 4, "content": "## Store 6 · Slack command\n\nOne slash command for the whole store.\n\n- `/store` or `/store help`: the commands and every job, by phase.\n- `/store status`: what's waiting for a decision in every review queue (the `store_queues` view), with a link to the review page.\n- `/store page` or `/store page <queue>`: a private link to the review page, signed for `link_hours`.\n- `/store run <job>`: starts that job now, the same as its schedule would (`/store run pricing decide`, `/store run images find`). `/store run setup` runs every Setup lane, one after another.\n\nEvery request is checked against Slack's signature. With `approver_ids` set, only those people can run jobs or open the page; everyone else gets a polite no. Slack wants an answer within three seconds, so `run` answers first, then starts the jobs and replies again with what started.\n\nbuild.py writes `jobs` from each template's lanes. **Run the jobs** calls each workflow's **Run from /store** webhook with the **Store run key** header." }
+    },
+    {
+      "id": "2c0d0c70-0002-4d2a-8e10-00000000d002", "name": "Slack sends /store", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 0],
+      "webhookId": "2c0d0c70-0002-4d2a-8e10-00000000d0aa",
+      "parameters": { "httpMethod": "POST", "path": "command", "responseMode": "responseNode", "options": { "rawBody": true } },
+      "notes": "The /store command's Request URL (the manifest sets it)."
+    },
+    {
+      "id": "2c0d0c70-0003-4d2a-8e10-00000000d003", "name": "Read the command", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [240, 0],
+      "parameters": { "mode": "runOnceForAllItems", "language": "javaScript", "jsCode": "// Why Code: the signature needs the exact raw body, kept as binary; no node parses a form body from binary.\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers || {};\nconst ts = h['x-slack-request-timestamp'] || '';\nconst f = {};\nfor (const kv of raw.split('&')) { const i = kv.indexOf('='); if (i > 0) f[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1).replace(/\\+/g, ' ')); }\nreturn [{ json: { base: `v0:${ts}:${raw}`, signature: h['x-slack-signature'] || '', fresh: Math.abs(Date.now() / 1000 - Number(ts)) <= 300,\n  text: (f.text || '').trim(), user_id: f.user_id || '', user_name: f.user_name || '', team_id: f.team_id || '', app_id: f.api_app_id || '', response_url: f.response_url || '' } }];" }
+    },
+    {
+      "id": "2c0d0c70-0004-4d2a-8e10-00000000d004", "name": "Command settings", "type": "n8n-nodes-base.set", "typeVersion": 3.4, "position": [480, 0],
+      "parameters": { "mode": "raw", "jsonOutput": "{\n  \"internal_url\": \"http://localhost:5678\",\n  \"page_url\": \"https://your-n8n.example.com/webhook/review\",\n  \"link_hours\": 8,\n  \"slack_app_id\": \"\",\n  \"slack_team_id\": \"\",\n  \"approver_ids\": [],\n  \"phases\": [],\n  \"jobs\": []\n}", "options": {} },
+      "notes": "build.py writes jobs and phases. approver_ids: Slack user IDs that may run jobs and open the page (empty = anyone in the workspace)."
+    },
+    {
+      "id": "2c0d0c70-0005-4d2a-8e10-00000000d005", "name": "Sign the request", "type": "n8n-nodes-base.crypto", "typeVersion": 2, "position": [720, 0],
+      "parameters": { "action": "hmac", "type": "SHA256", "value": "={{ $('Read the command').first().json.base }}", "dataPropertyName": "sig", "encoding": "hex" },
+      "credentials": { "crypto": { "name": "Slack signing secret" } }
+    },
+    {
+      "id": "2c0d0c70-0006-4d2a-8e10-00000000d006", "name": "What to do", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [960, 0],
+      "parameters": { "mode": "runOnceForAllItems", "language": "javaScript", "jsCode": "// Why Code: parses the sub-command, matches job names and checks who may run them; a Switch would need one rule per job.\nconst c = $('Read the command').first().json;\nconst s = $('Command settings').first().json;\nconst ok = c.fresh && ('v0=' + $input.first().json.sig) === c.signature\n  && (!s.slack_app_id || s.slack_app_id === c.app_id) && (!s.slack_team_id || s.slack_team_id === c.team_id);\nconst out = (o) => [{ json: { u: c.user_id, n: c.user_name, exp: String(Math.floor(Date.now() / 1000) + s.link_hours * 3600), q: '', runs: [], ...o } }];\nif (!ok) return out({ action: 'refuse', status: 401, reply: 'That request did not come from this Slack app.' });\nconst [verb, ...rest] = c.text.split(/\\s+/).filter(Boolean);\nconst arg = rest.join(' ').toLowerCase();\nconst allowed = !(s.approver_ids || []).length || s.approver_ids.includes(c.user_id);\nconst jobs = s.jobs || [];\nconst phaseName = p => (s.phases.find(x => x.phase === p) || {}).name || `Phase ${p}`;\nif (!verb || verb === 'help') {\n  const byPhase = {};\n  for (const j of jobs.filter(j => !j.setup)) (byPhase[j.phase] = byPhase[j.phase] || []).push('`' + j.job + '`');\n  const lines = Object.keys(byPhase).sort().map(p => `*${p} ${phaseName(Number(p))}*\\n${byPhase[p].join('  ')}`);\n  return out({ action: 'reply', reply: '*/store status*  what is waiting in every review queue\\n*/store page* [queue]  a private link to the review page\\n*/store run* <job>  start a job now\\n*/store run setup*  run every Setup lane\\n\\n' + lines.join('\\n\\n') });\n}\nif (verb === 'status') return out({ action: 'status' });\nif (!allowed) return out({ action: 'reply', reply: 'Only the people in approver_ids can do that. Ask one of them, or run `/store status`.' });\nif (verb === 'page') return out({ action: 'page', q: arg });\nif (verb === 'run') {\n  let runs = arg === 'setup' ? jobs.filter(j => j.setup).sort((a, b) => a.phase - b.phase) : jobs.filter(j => j.job === arg);\n  if (!runs.length) {\n    const near = jobs.filter(j => !j.setup && (j.job.startsWith(arg) || arg.startsWith(j.job.split(' ')[0]))).map(j => '`' + j.job + '`');\n    return out({ action: 'reply', reply: `No job called \\`${arg || '(nothing)'}\\`.` + (near.length ? ' Did you mean ' + near.join(', ') + '?' : ' Try `/store help`.') });\n  }\n  return out({ action: 'run', runs: runs.map(j => ({ job: j.job, lane: j.lane, url: s.internal_url.replace(/\\/$/, '') + '/webhook/' + j.path })), reply: runs.length > 1 ? `Starting ${runs.length} jobs, one after another.` : `Starting \\`${runs[0].job}\\`.` });\n}\nreturn out({ action: 'reply', reply: `I don't know \\`${verb}\\`. Try \\`/store help\\`.` });" },
+      "notes": "Signature (and app and workspace, when set), then the sub-command."
+    },
+    {
+      "id": "2c0d0c70-0007-4d2a-8e10-00000000d007", "name": "Sign a page link", "type": "n8n-nodes-base.crypto", "typeVersion": 2, "position": [1200, 0],
+      "parameters": { "action": "hmac", "type": "SHA256", "value": "={{ $json.u + '|' + $json.n + '|' + $json.exp + '|' + $json.q }}", "dataPropertyName": "link_sig", "encoding": "hex" },
+      "credentials": { "crypto": { "name": "Slack signing secret" } },
+      "notes": "The review page checks the same HMAC, so a link can't be changed or reused after it expires."
+    },
+    {
+      "id": "2c0d0c70-0008-4d2a-8e10-00000000d008", "name": "Which answer?", "type": "n8n-nodes-base.switch", "typeVersion": 3.2, "position": [1440, 0],
+      "parameters": { "rules": { "values": [
+        { "outputKey": "status", "renameOutput": true, "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 }, "conditions": [{ "id": "2c0d0c70-0008-4d2a-8e10-00000000d0b1", "leftValue": "={{ $json.action }}", "rightValue": "status", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
+        { "outputKey": "run", "renameOutput": true, "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 }, "conditions": [{ "id": "2c0d0c70-0008-4d2a-8e10-00000000d0b2", "leftValue": "={{ $json.action }}", "rightValue": "run", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
+        { "outputKey": "reply", "renameOutput": true, "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 }, "conditions": [{ "id": "2c0d0c70-0008-4d2a-8e10-00000000d0b3", "leftValue": "={{ ['reply', 'page', 'refuse'].includes($json.action) }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }], "combinator": "and" } }
+      ] }, "options": {} }
+    },
+    {
+      "id": "2c0d0c70-0009-4d2a-8e10-00000000d009", "name": "Count what's waiting", "type": "n8n-nodes-base.postgres", "typeVersion": 2.6, "position": [1700, -260],
+      "parameters": { "operation": "executeQuery", "query": "select queue, label, phase, channel, waiting, oldest from store_queues order by phase, queue", "options": {} },
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "name": "Supabase (Postgres)" } },
+      "notes": "The store_queues view in schema.sql: one row per review queue."
+    },
+    {
+      "id": "2c0d0c70-000a-4d2a-8e10-00000000d00a", "name": "Build the status", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1940, -260],
+      "parameters": { "mode": "runOnceForAllItems", "language": "javaScript", "jsCode": "// Why Code: groups queues by phase into Slack blocks with ages and a signed link; Aggregate + Set would take five nodes.\nconst s = $('Command settings').first().json;\nconst w = $('Sign a page link').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r.queue);\nconst ago = d => { if (!d) return ''; const h = (Date.now() - new Date(d).getTime()) / 3600000; return h < 1 ? 'under an hour' : h < 48 ? Math.round(h) + ' h' : Math.round(h / 24) + ' days'; };\nconst where = ch => /^[CG][A-Z0-9]{8,}$/.test(ch) ? `<#${ch}>` : ch;\nconst phaseName = p => (s.phases.find(x => x.phase === p) || {}).name || `Phase ${p}`;\nconst waiting = rows.filter(r => r.waiting > 0);\nconst total = waiting.reduce((a, r) => a + r.waiting, 0);\nconst byPhase = {};\nfor (const r of waiting) (byPhase[r.phase] = byPhase[r.phase] || []).push(`${r.label}: *${r.waiting}* (oldest ${ago(r.oldest)}) in ${where(r.channel)}`);\nconst link = `${s.page_url}?u=${encodeURIComponent(w.u)}&n=${encodeURIComponent(w.n)}&exp=${w.exp}&q=&sig=${w.link_sig}`;\nconst blocks = [{ type: 'section', text: { type: 'mrkdwn', text: total ? `*${total} waiting for a decision*` : ':white_check_mark: Nothing waiting for a decision.' } }];\nfor (const p of Object.keys(byPhase).sort()) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*${p} ${phaseName(Number(p))}*\\n` + byPhase[p].join('\\n') } });\nif (total) blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open the review page' }, url: link, action_id: 'link_review_page' }] }, { type: 'context', elements: [{ type: 'mrkdwn', text: `Private link, works for ${s.link_hours} hours.` }] });\nreturn [{ json: { body: { response_type: 'ephemeral', text: total ? `${total} waiting` : 'Nothing waiting', blocks } } }];" }
+    },
+    {
+      "id": "2c0d0c70-000b-4d2a-8e10-00000000d00b", "name": "Send the status", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [2180, -260],
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify($json.body) }}", "options": {} }
+    },
+    {
+      "id": "2c0d0c70-000c-4d2a-8e10-00000000d00c", "name": "Say it's starting", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [1700, 0],
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify({ response_type: 'ephemeral', text: $json.reply }) }}", "options": {} },
+      "notes": "Answers Slack straight away; the jobs start after."
+    },
+    {
+      "id": "2c0d0c70-000d-4d2a-8e10-00000000d00d", "name": "One item per job", "type": "n8n-nodes-base.splitOut", "typeVersion": 1, "position": [1940, 0],
+      "parameters": { "fieldToSplitOut": "runs", "options": {} }
+    },
+    {
+      "id": "2c0d0c70-000e-4d2a-8e10-00000000d00e", "name": "Run the jobs", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2180, 0],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST", "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lane: $json.lane, requested_by: $('What to do').first().json.n }) }}",
+        "options": { "batching": { "batch": { "batchSize": 1, "batchInterval": 3000 } }, "timeout": 10000 }
+      },
+      "credentials": { "httpHeaderAuth": { "name": "Store run key" } },
+      "notes": "Why HTTP: each workflow's Run from /store webhook starts the lane, and answers as soon as it has. Setup lanes go 3 seconds apart."
+    },
+    {
+      "id": "2c0d0c70-000f-4d2a-8e10-00000000d00f", "name": "Log the run", "type": "n8n-nodes-base.postgres", "typeVersion": 2.6, "position": [2420, 0],
+      "parameters": { "operation": "executeQuery", "query": "insert into store_activity (source, user_id, user_name, action, detail) values ('/store', $1, $2, 'run', $3)", "options": { "queryReplacement": "={{ [ $('What to do').first().json.u, $('What to do').first().json.n, $('One item per job').all().map((j, i) => j.json.job + ($('Run the jobs').all()[i]?.json?.error ? ' (failed)' : '')).join(', ') ] }}" } },
+      "executeOnce": true,
+      "credentials": { "postgres": { "name": "Supabase (Postgres)" } }
+    },
+    {
+      "id": "2c0d0c70-0010-4d2a-8e10-00000000d010", "name": "Say what started", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2660, 0],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST", "url": "={{ $('Read the command').first().json.response_url }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ (() => { const jobs = $('One item per job').all().map(i => i.json.job); const res = $('Run the jobs').all().map(i => i.json); const failed = jobs.filter((j, i) => res[i]?.error); const started = jobs.filter((j, i) => !res[i]?.error); return JSON.stringify({ response_type: 'ephemeral', text: (started.length ? 'Started ' + started.map(j => '`' + j + '`').join(', ') + '. Each one posts to its own channel when it has something to show.' : '') + (failed.length ? '\\n:warning: Could not start ' + failed.map(j => '`' + j + '`').join(', ') + '. Is that workflow published, with the Store run key on its Run from /store node?' : '') }); })() }}",
+        "options": {}
+      },
+      "executeOnce": true,
+      "notes": "Why HTTP: Slack's response_url, so the reply lands with the command, privately."
+    },
+    {
+      "id": "2c0d0c70-0011-4d2a-8e10-00000000d011", "name": "Build the reply", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1700, 260],
+      "parameters": { "mode": "runOnceForAllItems", "language": "javaScript", "jsCode": "// Why Code: help, page and refusals share one reply shape, and the page answer needs the signed link built in.\nconst s = $('Command settings').first().json;\nconst w = $input.first().json;\nif (w.action === 'page') {\n  const link = `${s.page_url}?u=${encodeURIComponent(w.u)}&n=${encodeURIComponent(w.n)}&exp=${w.exp}&q=${encodeURIComponent(w.q)}&sig=${w.link_sig}`;\n  return [{ json: { status: 200, body: { response_type: 'ephemeral', text: 'Your review page link', blocks: [\n    { type: 'section', text: { type: 'mrkdwn', text: w.q ? `The *${w.q}* queue, everything waiting, up to 100 at a time.` : 'Every review queue, up to 100 waiting in each.' } },\n    { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open the review page' }, url: link, action_id: 'link_review_page' }] },\n    { type: 'context', elements: [{ type: 'mrkdwn', text: `Private to you, works for ${s.link_hours} hours.` }] } ] } } }];\n}\nreturn [{ json: { status: w.status || 200, body: { response_type: 'ephemeral', text: w.reply } } }];" }
+    },
+    {
+      "id": "2c0d0c70-0012-4d2a-8e10-00000000d012", "name": "Send the reply", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [1940, 260],
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify($json.body) }}", "options": { "responseCode": "={{ $json.status }}" } }
+    }
+  ],
+  "connections": {
+    "Slack sends /store": { "main": [[{ "node": "Read the command", "type": "main", "index": 0 }]] },
+    "Read the command": { "main": [[{ "node": "Command settings", "type": "main", "index": 0 }]] },
+    "Command settings": { "main": [[{ "node": "Sign the request", "type": "main", "index": 0 }]] },
+    "Sign the request": { "main": [[{ "node": "What to do", "type": "main", "index": 0 }]] },
+    "What to do": { "main": [[{ "node": "Sign a page link", "type": "main", "index": 0 }]] },
+    "Sign a page link": { "main": [[{ "node": "Which answer?", "type": "main", "index": 0 }]] },
+    "Which answer?": { "main": [
+      [{ "node": "Count what's waiting", "type": "main", "index": 0 }],
+      [{ "node": "Say it's starting", "type": "main", "index": 0 }],
+      [{ "node": "Build the reply", "type": "main", "index": 0 }]
+    ] },
+    "Count what's waiting": { "main": [[{ "node": "Build the status", "type": "main", "index": 0 }]] },
+    "Build the status": { "main": [[{ "node": "Send the status", "type": "main", "index": 0 }]] },
+    "Say it's starting": { "main": [[{ "node": "One item per job", "type": "main", "index": 0 }]] },
+    "One item per job": { "main": [[{ "node": "Run the jobs", "type": "main", "index": 0 }]] },
+    "Run the jobs": { "main": [[{ "node": "Log the run", "type": "main", "index": 0 }]] },
+    "Log the run": { "main": [[{ "node": "Say what started", "type": "main", "index": 0 }]] },
+    "Build the reply": { "main": [[{ "node": "Send the reply", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

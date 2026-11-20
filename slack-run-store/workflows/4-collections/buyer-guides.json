@@ -1,0 +1,1543 @@
+{
+  "name": "Store 4 · Buyer guides",
+  "nodes": [
+    {
+      "id": "ce909c3d-7497-5941-a717-c1cec40896d7",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -560
+      ],
+      "parameters": {
+        "width": 700,
+        "height": 640,
+        "color": 4,
+        "content": "## Store 4 · Buyer guides\n\nA short buyer's guide for each of your top collections, written from what the collection actually stocks, approved in Slack and shown on the collection page.\n\n1. **Pick collections** takes collections whose intro you've approved in **Store 4 · Collection copy**, highest search volume first, `max_per_run` at a time (redrafts first).\n2. **Read the collection** gets its live products and their `custom` metafields, the specs that product data enrichment writes.\n3. **People also ask** (DataForSEO, about US$0.002 a search) collects the questions shoppers ask Google about the collection's keyword. They steer the headings; Google's answers are never used. Disable the node to skip it.\n4. The model writes 3 or 4 short sections from those specs only. **Check the guide** flags any number that isn't in the specs, any product it names and a length outside 200 to 480 words.\n5. One Slack card per guide: **Approve** writes it to the collection metafield `custom.buyer_guide` (Setup creates it), **Redraft** queues it for the next run, **Skip** leaves it.\n\nShow it on a stock theme with a **Custom Liquid** block on the collection template: paste `buyer-guide.liquid`."
+      }
+    },
+    {
+      "id": "b96bd63d-92b1-576f-8d1f-ddf2f09862af",
+      "name": "Lane Write",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -380
+      ],
+      "parameters": {
+        "width": 3860,
+        "height": 680,
+        "color": 7,
+        "content": "# Write\n## every Tuesday, or /store run guides"
+      }
+    },
+    {
+      "id": "1ed57379-c011-504e-9e89-8a836e84289f",
+      "name": "Lane Review",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        760
+      ],
+      "parameters": {
+        "width": 3200,
+        "height": 600,
+        "color": 7,
+        "content": "# Review\n## a button tap in Slack, through the router"
+      }
+    },
+    {
+      "id": "fe3f592d-7318-5f20-b455-2e3bba01db83",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1500
+      ],
+      "parameters": {
+        "width": 1400,
+        "height": 380,
+        "color": 7,
+        "content": "# Setup\n## once: the metafield and the table"
+      }
+    },
+    {
+      "id": "68edb28c-0870-5f5d-afb1-fbb5656fe8d4",
+      "name": "Every Tuesday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        -200
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 4 * * 2"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "82fc89d0-59b6-5212-bb14-3cf8d13651bc",
+      "name": "Run Write now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        60,
+        -40
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "343c37f3-c4fa-5325-b6a5-d1524b49752e",
+      "name": "Run from /store",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        60,
+        120
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "store-run-buyer-guides",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "0cfc5b35-8d39-562d-bd4a-9fd7930925ed",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Store run key"
+        }
+      },
+      "notes": "/store run guides (lane write) and /store run setup (lane setup). Header auth: Store run key."
+    },
+    {
+      "id": "721939df-d712-520c-9993-04d1005a73c5",
+      "name": "Which lane?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        300,
+        120
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "write",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3081ff5b-7ea0-5b8e-91f7-dbc01b765b58",
+                    "leftValue": "={{ $json.body.lane }}",
+                    "rightValue": "write",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "options": {}
+            },
+            {
+              "outputKey": "setup",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "58f15454-5fce-5cd6-b604-44b952cd5836",
+                    "leftValue": "={{ $json.body.lane }}",
+                    "rightValue": "setup",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "options": {}
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b6a5e231-9744-59b8-80f6-1eb5f08897f8",
+      "name": "Write settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        420,
+        -40
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"store_name\": \"Your Store\",\n  \"voice\": \"Plain, practical and specific. Contractions are fine. Explain a technical term the first time it appears.\",\n  \"max_per_run\": 3,\n  \"min_products\": 5,\n  \"min_volume\": 0,\n  \"model\": \"gemma4:31b\",\n  \"review_channel\": \"#review-buyer-guides\",\n  \"search_location_code\": 2840,\n  \"search_language_code\": \"en\",\n  \"metafield_namespace\": \"custom\",\n  \"metafield_key\": \"buyer_guide\",\n  \"spec_namespace\": \"custom\",\n  \"skip_spec_keys\": [\n    \"spec_url\",\n    \"mpn\",\n    \"manufacturer_url\",\n    \"buyer_guide\"\n  ]\n}",
+        "options": {}
+      },
+      "executeOnce": true,
+      "notes": "search_location_code: 2840 United States, 2826 United Kingdom, 2036 Australia (DataForSEO location codes)."
+    },
+    {
+      "id": "2c70783c-c16f-5de9-bef6-813afc7df170",
+      "name": "Get Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Write settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md."
+    },
+    {
+      "id": "99e50f37-6544-55ce-ac24-6a2e95c9fe7a",
+      "name": "Pick collections",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1020,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select c.gid, c.handle, c.title, coalesce(nullif(c.keyword, ''), c.title) as keyword, c.volume\nfrom collection_copy c left join buyer_guides g on g.collection_id = c.gid\nwhere c.status = 'approved' and c.gid is not null and coalesce(c.volume, 0) >= $2\n  and (g.id is null or g.status = 'redraft' or (g.status = 'too_small' and g.\"updatedAt\" < now() - interval '30 days'))\norder by (g.status = 'redraft') desc nulls last, c.volume desc nulls last\nlimit $1",
+        "options": {
+          "queryReplacement": "={{ [ $('Write settings').first().json.max_per_run, $('Write settings').first().json.min_volume ] }}"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Collections with approved copy (Store 4 · Collection copy), top search volume first. Redrafts go first."
+    },
+    {
+      "id": "080c1fc2-74b4-5b85-9948-1295cc53e7b9",
+      "name": "Anything to write?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1260,
+        -40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "33b1af87-0e9c-5000-b5c7-dac9eccc205b",
+              "leftValue": "={{ !!$json.gid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5df105c0-0178-5376-8ccd-f5bf491686c1",
+      "name": "Read the collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Write settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `query C($id: ID!, $ns: String!) { collection(id: $id) { id title handle products(first: 60) { nodes { title vendor productType status totalInventory metafields(first: 40, namespace: $ns) { nodes { key value type } } } } } }`, variables: { id: $json.gid, ns: $('Write settings').first().json.spec_namespace } }) }}",
+        "options": {}
+      },
+      "notes": "Its live products and their spec metafields."
+    },
+    {
+      "id": "bc7967d3-13cd-5e89-b130-800c84ffc64d",
+      "name": "People also ask",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1740,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/serp/google/organic/live/advanced",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify([{ keyword: $('Anything to write?').item.json.keyword, location_code: $('Write settings').first().json.search_location_code, language_code: $('Write settings').first().json.search_language_code, depth: 10, people_also_ask_click_depth: 1 }]) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "name": "DataForSEO"
+        }
+      },
+      "notes": "Why HTTP: DataForSEO has no n8n node. About US$0.002 a search. Disable this node to write without Google's questions."
+    },
+    {
+      "id": "8a689834-8d97-563b-86d7-4e9642b57299",
+      "name": "Build the prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: groups spec values across the range and builds the prompt; it would take a dozen Set and Aggregate nodes.\nconst s = $('Write settings').first().json;\nconst picks = $('Anything to write?').all().map(i => i.json);\nconst cols = $('Read the collection').all().map(i => i.json.data?.collection);\nconst skip = new Set(s.skip_spec_keys || []);\nconst label = k => k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());\nconst show = v => { try { const j = JSON.parse(v); if (Array.isArray(j)) return j.join(', '); if (j && typeof j === 'object') return j.value != null ? `${j.value}${j.unit ? ' ' + j.unit.toLowerCase() : ''}` : ''; } catch (e) {} return String(v); };\nconst SYSTEM = `You write short buyer's guides for collection pages at ${s.store_name}. ${s.voice}\n- Help the shopper choose: what matters, what the trade-offs are, which spec suits which job.\n- Every feature, spec, number or capability you mention must appear in SPECS. If it isn't there, leave it out. General advice about what a spec means is fine; claims about these products are not.\n- Talk about types of product and specs, never a specific model, and never recommend one product.\n- No fear selling, no filler openers, no empty superlatives, no em dashes.`;\nreturn picks.map((p, i) => {\n  const c = cols[i];\n  const products = (c?.products?.nodes || []).filter(x => x.status === 'ACTIVE');\n  const base = { gid: p.gid, handle: p.handle, title: p.title, keyword: p.keyword, volume: p.volume, live: products.length };\n  if (!c || products.length < s.min_products) return { json: { ...base, ok: false, reason: `only ${products.length} live products` } };\n  const tally = {};\n  const perProduct = products.slice(0, 25).map(x => {\n    const specs = (x.metafields?.nodes || []).filter(m => !skip.has(m.key) && !/^gid:\\/\\//.test(m.value)).map(m => [label(m.key), show(m.value)]).filter(([, v]) => v && v.length < 200);\n    for (const [k, v] of specs) { tally[k] = tally[k] || {}; tally[k][v] = (tally[k][v] || 0) + 1; }\n    return `[${x.title}]\\n` + specs.map(([k, v]) => `- ${k}: ${v}`).join('\\n');\n  });\n  const common = Object.entries(tally).flatMap(([k, vals]) => Object.entries(vals).map(([v, n]) => ({ k, v, n }))).filter(x => x.n >= 2).sort((a, b) => b.n - a.n).slice(0, 30).map(x => `- ${x.k}: ${x.v} (${x.n} products)`);\n  const serp = $('People also ask').all()[i]?.json?.tasks?.[0]?.result?.[0]?.items || [];\n  const asked = [...new Set([...serp.filter(x => x.type === 'people_also_ask').flatMap(x => (x.items || []).map(q => q.title)), ...serp.filter(x => x.type === 'related_searches').flatMap(x => x.items || []).filter(q => typeof q === 'string')])].filter(Boolean).slice(0, 12);\n  const vendors = [...new Set(products.map(x => x.vendor).filter(Boolean))];\n  const prompt = `COLLECTION: ${c.title}\\nKeyword: ${p.keyword}\\nLive products: ${products.length}\\nBRANDS: ${vendors.join(', ') || '(none)'}\\n\\nSPECS SHARED ACROSS THE RANGE\\n${common.join('\\n') || '(none)'}\\n\\nSPECS PER PRODUCT\\n${perProduct.join('\\n\\n')}\\n\\nWHAT SHOPPERS ASK GOOGLE\\n${asked.map(q => '- ' + q).join('\\n') || '(nothing found)'}\\nUse these to choose the section headings, where the specs above can answer them.\\n\\nWrite a buyer's guide in 3 or 4 sections, 250 to 400 words in total. Each section: a short heading (a question or a plain phrase), 1 or 2 short paragraphs, and optionally up to 4 bullets.\\nReturn only JSON: {\"sections\": [{\"heading\": \"...\", \"paragraphs\": [\"...\"], \"bullets\": [\"...\"]}]}`;\n  return { json: { ...base, ok: true, system: SYSTEM, prompt, questions: asked, context: [common.join('\\n'), perProduct.join('\\n')].join('\\n'), products: products.map(x => x.title), vendors } };\n});"
+      },
+      "notes": "Specs from the products' own metafields; Google's questions steer the headings."
+    },
+    {
+      "id": "a178fd01-2e5e-5b60-85dc-4af417f045aa",
+      "name": "Enough products?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2220,
+        -40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a33cc69b-8222-559b-aabc-4f73fc488a2d",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "36985a26-9ee5-5b1b-b12c-6ca87e48181b",
+      "name": "Mark too small",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2460,
+        160
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into buyer_guides (collection_id, handle, title, keyword, volume, status, error) values ($1, $2, $3, $4, $5, 'too_small', $6)\non conflict (collection_id) do update set status = 'too_small', error = excluded.error, \"updatedAt\" = now()",
+        "options": {
+          "queryReplacement": "={{ [ $json.gid, $json.handle, $json.title, $json.keyword, $json.volume, $json.reason ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Tried again after 30 days."
+    },
+    {
+      "id": "69ee3af6-98e0-5a8f-b4d6-addcd89a35bf",
+      "name": "Write the guide",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2460,
+        -40
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "={{ $json.system }}"
+            }
+          ]
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "notes": "Returns JSON as text; Check the guide reads it, code fence or not."
+    },
+    {
+      "id": "1ab2d6e2-ede8-5948-8697-b77451af5ed9",
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        2460,
+        140
+      ],
+      "parameters": {
+        "model": "={{ $('Write settings').first().json.model }}",
+        "options": {
+          "temperature": 0.4,
+          "format": "json"
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "name": "Ollama Cloud"
+        }
+      },
+      "notes": "Ollama Cloud by default. Any chat model sub-node works here."
+    },
+    {
+      "id": "c288ed99-4085-5419-8348-c7295a711646",
+      "name": "Check the guide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        -40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: parses the model's JSON (fenced or not), builds the HTML and checks numbers and names against the specs.\nconst ins = $('Enough products?').all().map(i => i.json);\nconst esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst fix = t => String(t || '').replace(/\\s*[—–]\\s*/g, ', ').replace(/[‘’]/g, \"'\").replace(/\\s+/g, ' ').trim();\nreturn $input.all().map((it, i) => {\n  const p = ins[i];\n  const base = { gid: p.gid, handle: p.handle, title: p.title, keyword: p.keyword, volume: p.volume, questions: p.questions, model: $('Write settings').first().json.model };\n  let txt = it.json.text ?? it.json.response ?? (typeof it.json === 'object' && it.json.sections ? JSON.stringify(it.json) : '');\n  txt = String(txt || '').replace(/<think>[\\s\\S]*?<\\/think>/g, '').replace(/```(json)?/g, '').trim();\n  let d = null; try { d = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)); } catch (e) {}\n  const secs = (d?.sections || []).map(s => ({ heading: fix(s.heading), paragraphs: (s.paragraphs || []).map(fix).filter(Boolean), bullets: (s.bullets || []).map(fix).filter(Boolean).slice(0, 4) })).filter(s => s.heading && s.paragraphs.length);\n  if (!secs.length) return { json: { ...base, ok: false, error: it.json.error ? 'model call failed' : 'no guide in the reply' } };\n  const plain = secs.map(s => [s.heading, ...s.paragraphs, ...s.bullets].join(' ')).join(' ');\n  const words = plain.split(/\\s+/).filter(Boolean).length;\n  const flags = [];\n  const ctx = (p.context + ' ' + p.title + ' ' + p.keyword).replace(/(\\d),(?=\\d{3})/g, '$1');\n  const nums = [...new Set(plain.replace(/(\\d),(?=\\d{3})/g, '$1').match(/\\d+(?:\\.\\d+)?/g) || [])].filter(n => !ctx.includes(n));\n  if (nums.length) flags.push('numbers not in the specs: ' + nums.join(', '));\n  const named = (p.products || []).filter(t => t.length > 6 && plain.toLowerCase().includes(t.toLowerCase()));\n  if (named.length) flags.push('names a product: ' + named.slice(0, 3).join(', '));\n  if (words < 200 || words > 480) flags.push(`${words} words`);\n  const html = secs.map(s => `<h3>${esc(s.heading)}</h3>` + s.paragraphs.map(x => `<p>${esc(x)}</p>`).join('') + (s.bullets.length ? '<ul>' + s.bullets.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : '')).join('');\n  const text = secs.map(s => `*${s.heading}*\\n` + s.paragraphs.join('\\n') + (s.bullets.length ? '\\n' + s.bullets.map(b => '• ' + b).join('\\n') : '')).join('\\n\\n');\n  return { json: { ...base, ok: true, html, text, words, flags: flags.join('; ') } };\n});"
+      },
+      "notes": "Flags numbers the specs don't back, products named and the length. You decide in Slack."
+    },
+    {
+      "id": "d808a4ae-a549-5d30-a0f1-a5193967ae21",
+      "name": "Save the draft",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2940,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into buyer_guides (collection_id, handle, title, keyword, volume, status, revision, draft_html, draft_text, words, flags, questions, model, error, slack_channel, slack_ts)\nvalues ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, $10, $11, $12, $13, null, null)\non conflict (collection_id) do update set handle = excluded.handle, title = excluded.title, keyword = excluded.keyword, volume = excluded.volume, status = excluded.status,\n  revision = buyer_guides.revision + 1, draft_html = coalesce(excluded.draft_html, buyer_guides.draft_html), draft_text = coalesce(excluded.draft_text, buyer_guides.draft_text),\n  words = excluded.words, flags = excluded.flags, questions = excluded.questions, model = excluded.model, error = excluded.error, slack_channel = null, slack_ts = null, \"updatedAt\" = now()\nreturning id, collection_id, revision, status",
+        "options": {
+          "queryReplacement": "={{ [ $json.gid, $json.handle, $json.title, $json.keyword, $json.volume, $json.ok ? 'review' : 'failed', $json.html ?? null, $json.text ?? null, $json.words ?? null, $json.flags ?? null, ($json.questions || []).join(' | '), $json.model, $json.error ?? null ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "review when it drafted, failed otherwise (tried again on the next run only after a Redraft)."
+    },
+    {
+      "id": "24358e4a-8568-5572-bf33-9acafd643636",
+      "name": "Drafted?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        3180,
+        -40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4aa201bd-2aa7-510b-af84-3cb02e093064",
+              "leftValue": "={{ $json.status === 'review' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ec44222a-2bc1-504a-b538-5fa052c86356",
+      "name": "Post the card",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        3420,
+        -40
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Write settings').first().json.review_channel }}"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ (() => { const d = $('Check the guide').all().find(i => i.json.gid === $json.collection_id).json; const v = JSON.stringify({ c: $json.collection_id, r: $json.revision }); return JSON.stringify({ blocks: [\n  { type: 'header', text: { type: 'plain_text', text: ('Buyer guide: ' + d.title).slice(0, 150) } },\n  { type: 'section', text: { type: 'mrkdwn', text: d.text.slice(0, 2900) } },\n  { type: 'context', elements: [{ type: 'mrkdwn', text: ((d.flags ? ':warning: ' + d.flags : d.words + ' words') + ' · ' + d.model).slice(0, 2900) }] },\n  { type: 'context', elements: [{ type: 'mrkdwn', text: ('Shoppers ask: ' + ((d.questions || []).join(' | ') || 'nothing found')).slice(0, 2900) }] },\n  { type: 'actions', block_id: 'guide_actions', elements: [\n    { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Approve' }, action_id: 'guide_approve', value: v },\n    { type: 'button', text: { type: 'plain_text', text: 'Redraft' }, action_id: 'guide_redraft', value: v },\n    { type: 'button', text: { type: 'plain_text', text: 'Skip' }, action_id: 'guide_skip', value: v } ] } ] }); })() }}",
+        "text": "=Buyer guide to review",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false
+        }
+      },
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      }
+    },
+    {
+      "id": "26d5d89c-be39-5628-ad53-17ec3892664b",
+      "name": "Save the card",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3660,
+        -40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update buyer_guides set slack_channel = $1, slack_ts = $2, \"updatedAt\" = now() where collection_id = $3",
+        "options": {
+          "queryReplacement": "={{ [ $json.channel, $json.ts ?? $json.message?.ts, $('Drafted?').item.json.collection_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "So the review page can find the card."
+    },
+    {
+      "id": "e60aa9ed-c0a3-5589-b1ea-38e603c981d5",
+      "name": "Slack button click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        60,
+        960
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "store-buyer-guide-review",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "webhookId": "e6e2a5fb-e68c-53e8-aba8-af34030ac208",
+      "notes": "Store · Slack router passes guide_ taps here, unchanged."
+    },
+    {
+      "id": "20d4c413-7930-54ae-94a5-c552ea4b0895",
+      "name": "Respond to Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        960
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      }
+    },
+    {
+      "id": "042dab1d-ec61-5e25-9896-7271a4a9ec0b",
+      "name": "Read the click",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        960
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: the signature needs the exact raw body, kept as binary.\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\nconst h = $input.first().json.headers;\nif (Math.abs(Date.now() / 1000 - Number(h['x-slack-request-timestamp'])) > 300) throw new Error('Stale request');\nconst field = raw.split('&').find(kv => kv.startsWith('payload=')) || '';\nconst p = JSON.parse(decodeURIComponent(field.slice(8).replace(/\\+/g, ' ')));\nconst a = p.actions[0];\nlet v = {}; try { v = JSON.parse(a.value); } catch (e) {}\nreturn [{ json: { base: `v0:${h['x-slack-request-timestamp']}:${raw}`, expected: h['x-slack-signature'],\n  action: a.action_id, collection_id: v.c, revision: Number(v.r), user: p.user?.username || p.user?.name || p.user?.id, channel: p.channel?.id, ts: p.message?.ts, blocks: p.message?.blocks || [] } }];"
+      }
+    },
+    {
+      "id": "b501d623-3e9b-590f-aa81-39c1db301415",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        780,
+        960
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.base }}",
+        "dataPropertyName": "sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "id": "28a91197-0002-55c6-9c02-a31656e13ada",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1020,
+        960
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c5f095d0-0be4-500b-9bd9-164b717aaf74",
+              "leftValue": "={{ 'v0=' + $json.sig === $json.expected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1c1b894f-3533-5b29-8e56-70ec018e28f3",
+      "name": "Review settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1260,
+        900
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"store_domain\": \"your-store.myshopify.com\",\n  \"metafield_namespace\": \"custom\",\n  \"metafield_key\": \"buyer_guide\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "c78862ce-0d45-5d1f-ad03-ce1f6ccfaf9f",
+      "name": "Get the guide",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1500,
+        900
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from buyer_guides where collection_id = $1 and status = 'review' and revision = $2 limit 1",
+        "options": {
+          "queryReplacement": "={{ [ $('Read the click').first().json.collection_id, $('Read the click').first().json.revision ] }}"
+        }
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "Only the latest draft, still waiting. An old card or a second tap finds nothing."
+    },
+    {
+      "id": "651ba305-1188-5901-828b-e29cfbe5e538",
+      "name": "Still waiting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1740,
+        900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9787a45e-0143-559c-b594-1e1d8cec06e9",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fb415187-d691-58a8-8284-6a5286089b13",
+      "name": "Which button?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1980,
+        900
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "approve",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aad70ce3-093c-5bf7-a1ad-c9f55b48419a",
+                    "leftValue": "={{ $('Read the click').first().json.action }}",
+                    "rightValue": "guide_approve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "options": {}
+            },
+            {
+              "outputKey": "other",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8cc9c982-4b96-59f0-be38-86fbbe37bb79",
+                    "leftValue": "={{ ['guide_redraft', 'guide_skip'].includes($('Read the click').first().json.action) }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "options": {}
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f167de50-00db-5053-ba33-000361fe8eb1",
+      "name": "Get Shopify token for Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        840
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Review settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md."
+    },
+    {
+      "id": "2ea3eb68-e3f8-583f-9b22-7420ed46757e",
+      "name": "Publish the guide",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2460,
+        840
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Review settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Review').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `mutation G($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { metafields { id } userErrors { field message } } }`, variables: { m: [{ ownerId: $('Get the guide').first().json.collection_id, namespace: $('Review settings').first().json.metafield_namespace, key: $('Review settings').first().json.metafield_key, type: 'multi_line_text_field', value: $('Get the guide').first().json.draft_html }] } }) }}",
+        "options": {}
+      },
+      "notes": "Writes to Shopify: the guide's HTML into the collection metafield."
+    },
+    {
+      "id": "7ba35bb6-3dd7-54fe-b74d-7f6513975552",
+      "name": "What happened",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Why Code: one decision record from three paths (published, refused, redraft or skip), for one save and one card update.\nconst c = $('Read the click').first().json;\nconst g = $('Get the guide').first().json;\nconst store = $('Review settings').first().json.store_domain;\nif (c.action === 'guide_approve') {\n  const errs = $input.first().json.data?.metafieldsSet?.userErrors || [];\n  const err = $input.first().json.error ? String($input.first().json.error.message || $input.first().json.error) : errs.map(e => e.message).join('; ');\n  return [{ json: { status: err ? 'review' : 'live', error: err || null, note: err ? `:x: Shopify refused it: ${err}` : `:white_check_mark: Approved by @${c.user}. Live on <https://${store}/collections/${g.handle}|the collection page>.` } }];\n}\nif (c.action === 'guide_redraft') return [{ json: { status: 'redraft', error: null, note: `:repeat: @${c.user} asked for a redraft. It's redrafted on the next run.` } }];\nreturn [{ json: { status: 'skipped', error: null, note: `:heavy_minus_sign: Skipped by @${c.user}.` } }];"
+      }
+    },
+    {
+      "id": "60b2697c-7ffc-5631-8c4f-98e2f63a3c83",
+      "name": "Save the decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2940,
+        900
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update buyer_guides set status = $1, error = $2, decided_by = $3, live_at = case when $1 = 'live' then now() else live_at end, \"updatedAt\" = now() where collection_id = $4 returning status",
+        "options": {
+          "queryReplacement": "={{ [ $json.status, $json.error, $('Read the click').first().json.user, $('Get the guide').first().json.collection_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      }
+    },
+    {
+      "id": "ce7fff47-e05e-5195-b2ee-4603b199cacd",
+      "name": "Update the card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3180,
+        900
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Read the click').first().json.channel, ts: $('Read the click').first().json.ts, text: 'Buyer guide reviewed', blocks: $('Read the click').first().json.blocks.filter(b => b.type !== 'actions').concat([{ type: 'context', elements: [{ type: 'mrkdwn', text: $('What happened').first().json.note }] }]) }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "slackApi": {
+          "name": "Slack bot"
+        }
+      },
+      "notes": "Why HTTP: chat.update with the card's own blocks minus the buttons; the Slack node rebuilds blocks from scratch. A refusal keeps the buttons off but leaves the guide in review, so Redraft from the page or /store page still works."
+    },
+    {
+      "id": "736b3edb-ddf2-5b40-bb5f-8f81bf670ab7",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        60,
+        1660
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2f531a6a-69d8-51f6-b947-a1762a7445aa",
+      "name": "Get Shopify token for Setup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        1660
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Write settings').first().json.store_domain }}/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Shopify client credentials"
+        }
+      },
+      "notes": "Client credentials grant: a fresh Admin API token for this run. See SETUP.md."
+    },
+    {
+      "id": "56e1d8a8-bbfc-5169-98e2-021618065674",
+      "name": "Create the metafield",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        1660
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Write settings').first().json.store_domain }}/admin/api/2026-10/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get Shopify token for Setup').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: `mutation D($d: MetafieldDefinitionInput!) { metafieldDefinitionCreate(definition: $d) { createdDefinition { id } userErrors { code message } } }`, variables: { d: { name: 'Buyer guide', namespace: $('Write settings').first().json.metafield_namespace, key: $('Write settings').first().json.metafield_key, ownerType: 'COLLECTION', type: 'multi_line_text_field', description: 'HTML written by the Buyer guides workflow and approved in Slack', access: { storefront: 'PUBLIC_READ' } } } }) }}",
+        "options": {}
+      },
+      "notes": "Collection metafield custom.buyer_guide. Running it again just answers 'already exists'."
+    },
+    {
+      "id": "b1a958af-2d83-54cf-9b52-8dba8fe24467",
+      "name": "Create buyer_guides",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1020,
+        1660
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "create table if not exists buyer_guides (\n  id integer generated by default as identity primary key,\n  collection_id text not null,\n  handle text,\n  title text,\n  keyword text,\n  volume double precision,\n  status text,\n  revision integer not null default 0,\n  draft_html text,\n  draft_text text,\n  words integer,\n  flags text,\n  questions text,\n  model text,\n  error text,\n  slack_channel text,\n  slack_ts text,\n  decided_by text,\n  live_at timestamptz,\n  \"createdAt\" timestamptz not null default now(),\n  \"updatedAt\" timestamptz not null default now(),\n  unique (collection_id)\n);",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Supabase (Postgres)"
+        }
+      },
+      "notes": "The same table as schema.sql, in case you skipped it."
+    },
+    {
+      "id": "96a2da46-0a62-551d-94fa-cd2f57ee7e2e",
+      "name": "Setup run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "83477b5d-3438-5808-b473-556f33135c85",
+              "leftValue": "={{ $('Run once to set up').isExecuted || ($('Run from /store').isExecuted && $('Run from /store').first().json.body.lane === 'setup') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every Tuesday": {
+      "main": [
+        [
+          {
+            "node": "Write settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Write now": {
+      "main": [
+        [
+          {
+            "node": "Write settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run from /store": {
+      "main": [
+        [
+          {
+            "node": "Which lane?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which lane?": {
+      "main": [
+        [
+          {
+            "node": "Write settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write the guide",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write settings": {
+      "main": [
+        [
+          {
+            "node": "Setup run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Pick collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick collections": {
+      "main": [
+        [
+          {
+            "node": "Anything to write?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to write?": {
+      "main": [
+        [
+          {
+            "node": "Read the collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the collection": {
+      "main": [
+        [
+          {
+            "node": "People also ask",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "People also ask": {
+      "main": [
+        [
+          {
+            "node": "Build the prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the prompt": {
+      "main": [
+        [
+          {
+            "node": "Enough products?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the guide": {
+      "main": [
+        [
+          {
+            "node": "Check the guide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check the guide": {
+      "main": [
+        [
+          {
+            "node": "Save the draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the draft": {
+      "main": [
+        [
+          {
+            "node": "Drafted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drafted?": {
+      "main": [
+        [
+          {
+            "node": "Post the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post the card": {
+      "main": [
+        [
+          {
+            "node": "Save the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enough products?": {
+      "main": [
+        [
+          {
+            "node": "Write the guide",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark too small",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack button click": {
+      "main": [
+        [
+          {
+            "node": "Respond to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Slack": {
+      "main": [
+        [
+          {
+            "node": "Read the click",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the click": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review settings": {
+      "main": [
+        [
+          {
+            "node": "Get the guide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the guide": {
+      "main": [
+        [
+          {
+            "node": "Still waiting?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Review": {
+      "main": [
+        [
+          {
+            "node": "Publish the guide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish the guide": {
+      "main": [
+        [
+          {
+            "node": "What happened",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What happened": {
+      "main": [
+        [
+          {
+            "node": "Save the decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the decision": {
+      "main": [
+        [
+          {
+            "node": "Update the card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Review settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still waiting?": {
+      "main": [
+        [
+          {
+            "node": "Which button?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which button?": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "What happened",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Write settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create the metafield": {
+      "main": [
+        [
+          {
+            "node": "Create buyer_guides",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Shopify token for Setup": {
+      "main": [
+        [
+          {
+            "node": "Create the metafield",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup run?": {
+      "main": [
+        [
+          {
+            "node": "Get Shopify token for Setup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  }
+}

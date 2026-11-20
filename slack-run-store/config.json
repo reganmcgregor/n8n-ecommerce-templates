@@ -1,0 +1,58 @@
+{
+  "_about": "Your store's values. Edit this, then run python3 slack-run-store/build.py to rebuild workflows/. Channel values should be Slack channel IDs (C0...), so cards update in place and the router can match them; a #name works for posting but not for everything else.",
+  "plan": "full",
+  "store": {
+    "store_domain": "your-store.myshopify.com",
+    "store_url": "https://www.your-store.com",
+    "store_name": "Your Store",
+    "currency": "USD",
+    "timezone": "UTC"
+  },
+  "n8n": {
+    "public_url": "https://your-n8n.example.com",
+    "internal_url": "http://localhost:5678",
+    "webhook_prefix": "store-"
+  },
+  "slack": {
+    "app_name": "Store",
+    "app_id": "",
+    "team_id": "",
+    "approver_ids": []
+  },
+  "channels": {
+    "log-ingest": "#log-ingest",
+    "log-publish": "#log-publish",
+    "review-supplier-offers": "#review-supplier-offers",
+    "review-product-drafts": "#review-product-drafts",
+    "review-titles": "#review-titles",
+    "alerts": "#alerts",
+    "digest": "#digest",
+    "log-inventory": "#log-inventory",
+    "log-pricing": "#log-pricing",
+    "review-discontinued": "#review-discontinued",
+    "review-pricing": "#review-pricing",
+    "log-competitors": "#log-competitors",
+    "log-sources": "#log-sources",
+    "log-catalogue": "#log-catalogue",
+    "log-videos": "#log-videos",
+    "review-accessories": "#review-accessories",
+    "review-attributes": "#review-attributes",
+    "review-descriptions": "#review-descriptions",
+    "review-documents": "#review-documents",
+    "review-faqs": "#review-faqs",
+    "review-images": "#review-images",
+    "review-manufacturer-reviews": "#review-manufacturer-reviews",
+    "review-videos": "#review-videos",
+    "log-collections": "#log-collections",
+    "review-buyer-guides": "#review-buyer-guides",
+    "review-collection-copy": "#review-collection-copy",
+    "review-collection-proposals": "#review-collection-proposals",
+    "log-google": "#log-google",
+    "log-pinterest": "#log-pinterest",
+    "log-instagram": "#log-instagram",
+    "review-google": "#review-google",
+    "review-instagram": "#review-instagram",
+    "review-pins": "#review-pins"
+  },
+  "overrides": {}
+}
