@@ -1,0 +1,1054 @@
+{
+  "name": "Slack slash command",
+  "nodes": [
+    {
+      "id": "2ca921cd-23ab-54f9-a234-3af6c0209ac9",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -480
+      ],
+      "parameters": {
+        "content": "## Run any n8n workflow from a Slack slash command\n\nOne `/store` command for your n8n workflows.\n\n- `/store` or `/store help`: the commands and every job you've listed.\n- `/store status`: how many cards are waiting in each queue of the Slack approvals template, with a private link to its review page.\n- `/store run <job> [args]`: starts that workflow now. It answers straight away, then posts in the channel when the job finishes or fails.\n\n**Set up**\n1. Run **Run once to set up** to create the `command_runs` table.\n2. Fill in **Command settings**: your app and workspace IDs, `approver_ids`, the review `page_url`, and `jobs`, the only workflows the command can start.\n3. Give each job's workflow a **When Executed by Another Workflow** trigger (accept all data).\n4. Publish, then paste **Slack sends /store**'s Production URL into your slash command's Request URL.\n\nEvery request is checked against Slack's signature, so only your Slack app can use it.",
+        "width": 700,
+        "height": 760,
+        "color": 4
+      }
+    },
+    {
+      "id": "fe5548fd-9963-54e4-bba5-0561b90684c8",
+      "name": "Lane Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -480
+      ],
+      "parameters": {
+        "content": "## Setup\nRun once. Creates the table that records who ran what.",
+        "width": 520,
+        "height": 260,
+        "color": 7
+      }
+    },
+    {
+      "id": "c5223cbf-cb30-5f99-98b1-2240d5bd4af4",
+      "name": "Run once to set up",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        60,
+        -360
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b6435187-fd72-5c1d-8915-28ebfb668142",
+      "name": "Create command_runs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        -360
+      ],
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "command_runs",
+        "columns": {
+          "column": [
+            {
+              "name": "job",
+              "type": "string"
+            },
+            {
+              "name": "args",
+              "type": "string"
+            },
+            {
+              "name": "user_id",
+              "type": "string"
+            },
+            {
+              "name": "user_name",
+              "type": "string"
+            },
+            {
+              "name": "result",
+              "type": "string"
+            },
+            {
+              "name": "seconds",
+              "type": "number"
+            },
+            {
+              "name": "error",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      }
+    },
+    {
+      "id": "f746bc13-fb64-538a-8267-15a7abdc6367",
+      "name": "Lane Check",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -160
+      ],
+      "parameters": {
+        "content": "## 1. Receive and check\nSlack posts the command as a form. The signature is an HMAC of the exact raw body, so the body is read as text before anything else touches it.",
+        "width": 1700,
+        "height": 460,
+        "color": 7
+      }
+    },
+    {
+      "id": "ff67cf4f-9afb-56e0-b2b1-b5780c1431cf",
+      "name": "Slack sends /store",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        60,
+        40
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-command",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "webhookId": "037d09f6-802c-57b7-97f4-652e50eef405",
+      "notes": "Your slash command's Request URL is this node's Production URL."
+    },
+    {
+      "id": "51229f9d-6a3b-557c-a22d-fbb98e8fcace",
+      "name": "Read the raw body",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        40
+      ],
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "data",
+        "destinationKey": "raw_body",
+        "options": {}
+      },
+      "notes": "Keeps the exact bytes Slack signed. A Set node here would drop them."
+    },
+    {
+      "id": "7c9ddc2b-db1a-5118-b56a-e9cbbb36d823",
+      "name": "Command settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        40
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"slack_app_id\": \"\",\n  \"slack_team_id\": \"\",\n  \"approver_ids\": [],\n  \"page_url\": \"https://your-n8n.example.com/webhook/slack-approvals-page\",\n  \"link_hours\": 8,\n  \"jobs\": [\n    {\n      \"key\": \"prices\",\n      \"label\": \"Check competitor prices\",\n      \"workflow_id\": \"REPLACE_WITH_WORKFLOW_ID\"\n    },\n    {\n      \"key\": \"feed\",\n      \"label\": \"Rebuild the Google Shopping feed\",\n      \"workflow_id\": \"REPLACE_WITH_WORKFLOW_ID\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "notes": "jobs is the allowlist: only these workflows can start from Slack."
+    },
+    {
+      "id": "0da51996-3cd3-5062-a6d4-67dd898daebd",
+      "name": "Sign the request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        780,
+        40
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ 'v0:' + $('Slack sends /store').first().json.headers['x-slack-request-timestamp'] + ':' + $('Read the raw body').first().json.raw_body }}",
+        "dataPropertyName": "expected",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      }
+    },
+    {
+      "id": "a6adc618-e013-5e91-a207-1104e6b9d2b0",
+      "name": "From your Slack?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1020,
+        40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "90aa4d06-84e9-55ac-854f-b464f008412f",
+              "leftValue": "={{ (h => ('v0=' + $json.expected) === h['x-slack-signature']\n  && Math.abs($now.toSeconds() - Number(h['x-slack-request-timestamp'])) < 300\n  && (!$json.slack_app_id || $json.slack_app_id === $('Slack sends /store').first().json.body.api_app_id)\n  && (!$json.slack_team_id || $json.slack_team_id === $('Slack sends /store').first().json.body.team_id)\n)($('Slack sends /store').first().json.headers) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Signed by your app's secret, under five minutes old, from your app and workspace."
+    },
+    {
+      "id": "11df4b1e-358a-583d-a967-80fe72c48b5d",
+      "name": "Turn it away",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1260,
+        200
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "That request did not come from this Slack app.",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "0f8df112-67ac-5a64-a925-18c9e331c8a8",
+      "name": "Read the command",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1260,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2909bda3-cc98-5440-afe9-1d2b6e143ef7",
+              "name": "verb",
+              "type": "string",
+              "value": "={{ ($('Slack sends /store').first().json.body.text || '').trim().split(/\\s+/)[0].toLowerCase() || 'help' }}"
+            },
+            {
+              "id": "7ce14d4e-485c-5484-96a3-07526d936272",
+              "name": "job",
+              "type": "string",
+              "value": "={{ ($('Slack sends /store').first().json.body.text || '').trim().split(/\\s+/)[1]?.toLowerCase() || '' }}"
+            },
+            {
+              "id": "a699db58-812b-50e5-82b9-eafc6fa4f13b",
+              "name": "args",
+              "type": "string",
+              "value": "={{ ($('Slack sends /store').first().json.body.text || '').trim().split(/\\s+/).slice(2).join(' ') }}"
+            },
+            {
+              "id": "cae39dc1-3103-56ad-af45-8b74d229131f",
+              "name": "user_id",
+              "type": "string",
+              "value": "={{ $('Slack sends /store').first().json.body.user_id }}"
+            },
+            {
+              "id": "4a91d90c-6098-558c-8925-a056db45ee23",
+              "name": "user_name",
+              "type": "string",
+              "value": "={{ $('Slack sends /store').first().json.body.user_name }}"
+            },
+            {
+              "id": "4117260b-6957-50be-9e2e-029515a09d88",
+              "name": "response_url",
+              "type": "string",
+              "value": "={{ $('Slack sends /store').first().json.body.response_url }}"
+            },
+            {
+              "id": "3f0c77c5-a162-572a-9b99-80874432659b",
+              "name": "started_at",
+              "type": "number",
+              "value": "={{ $now.toMillis() }}"
+            },
+            {
+              "id": "6edfdcaf-2391-5702-bd0d-a41d2ced6993",
+              "name": "exp",
+              "type": "number",
+              "value": "={{ Math.floor($now.toSeconds()) + $('Command settings').first().json.link_hours * 3600 }}"
+            },
+            {
+              "id": "2f2b0f19-fc6f-5969-bce6-e095f01aeb6e",
+              "name": "is_approver",
+              "type": "boolean",
+              "value": "={{ !$('Command settings').first().json.approver_ids.length || $('Command settings').first().json.approver_ids.includes($('Slack sends /store').first().json.body.user_id) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "verb is the first word (help when empty), job the second, args the rest."
+    },
+    {
+      "id": "85a777c0-3606-5506-9397-1913ec0f0411",
+      "name": "Which command?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1500,
+        0
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "status",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d7c6485e-0f13-5d3c-b527-bb54bffcf1b2",
+                    "leftValue": "={{ $json.verb }}",
+                    "rightValue": "status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "run",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3d399df5-1350-5e01-98cb-4452a6613306",
+                    "leftValue": "={{ $json.verb }}",
+                    "rightValue": "run",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "help"
+        }
+      }
+    },
+    {
+      "id": "2bf608b8-e045-5efc-94ee-4ef3bb16a6e5",
+      "name": "Lane Help",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1740,
+        560
+      ],
+      "parameters": {
+        "content": "## 2. Help\nAnything that isn't status or run gets the list of commands and jobs, privately.",
+        "width": 560,
+        "height": 280,
+        "color": 7
+      }
+    },
+    {
+      "id": "ccac7424-dfc4-5758-8e3d-7036b7420bb0",
+      "name": "Reply with help",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1860,
+        680
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ response_type: 'ephemeral', text: [\n  $json.verb === 'help' ? '' : \"I don't know `\" + $json.verb + \"`.\",\n  '*/store status*  what is waiting in every review queue',\n  '*/store run <job>*  start a job now',\n  '',\n  '*Jobs*',\n  ...$('Command settings').first().json.jobs.map(j => '`' + j.key + '`  ' + j.label)\n].filter((l, i) => l || i > 0).join('\\n') }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "edf56d72-e8d2-56b1-839d-635e8dfea01e",
+      "name": "Lane Status",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1740,
+        -540
+      ],
+      "parameters": {
+        "content": "## 3. Status\nCounts what's waiting in the approvals table, one line per queue, and signs a review page link the same way the approvals template does.",
+        "width": 1280,
+        "height": 340,
+        "color": 7
+      }
+    },
+    {
+      "id": "25b65bfd-7230-5665-8ac3-afcb930655a7",
+      "name": "Sign a page link",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        -400
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.user_id + '|' + $json.exp }}",
+        "dataPropertyName": "page_sig",
+        "encoding": "hex"
+      },
+      "credentials": {
+        "crypto": {
+          "name": "Slack signing secret"
+        }
+      },
+      "notes": "The approvals review page checks the same HMAC of user|exp."
+    },
+    {
+      "id": "79713ce3-adf6-5fce-bf21-cf042e07031b",
+      "name": "Get waiting cards",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2100,
+        -400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "approvals"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "notes": "The approvals template's table. Without it, status says nothing is waiting."
+    },
+    {
+      "id": "6a29d8ed-a5d6-550c-8279-970a329fa571",
+      "name": "Count what's waiting",
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [
+        2340,
+        -400
+      ],
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "count",
+              "field": "id"
+            },
+            {
+              "aggregation": "min",
+              "field": "requested_at"
+            }
+          ]
+        },
+        "fieldsToSplitBy": "kind, channel",
+        "options": {}
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "3ec46077-5d28-531f-8d9f-b0044961dc1d",
+      "name": "Reply with the status",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2580,
+        -400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ (() => {\n  const c = $('Read the command').first().json;\n  const s = $('Command settings').first().json;\n  const sig = $('Sign a page link').first().json.page_sig;\n  const rows = $input.all().map(i => i.json).filter(r => r.kind && r.count_id > 0);\n  const total = rows.reduce((n, r) => n + Number(r.count_id), 0);\n  const age = d => { const h = ($now.toMillis() - new Date(d).getTime()) / 3600000; return !d ? '' : h < 1 ? 'under an hour' : h < 48 ? Math.round(h) + ' h' : Math.round(h / 24) + ' days'; };\n  const name = k => k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' ');\n  const where = ch => /^[CG][A-Z0-9]{8,}$/.test(ch || '') ? ' in <#' + ch + '>' : '';\n  const lines = rows.map(r => '*' + r.count_id + '* ' + name(r.kind) + where(r.channel) + ' (oldest ' + age(r.min_requested_at) + ')');\n  const link = s.page_url + '?u=' + encodeURIComponent(c.user_id) + '&exp=' + c.exp + '&sig=' + sig;\n  const blocks = [{ type: 'section', text: { type: 'mrkdwn', text: total ? '*' + total + ' waiting for a decision*\\n' + lines.join('\\n') : ':white_check_mark: Nothing waiting for a decision.' } }];\n  if (total && c.is_approver) blocks.push({ type: 'actions', elements: [{ type: 'button', style: 'primary', action_id: 'approval_link', text: { type: 'plain_text', text: 'Open the review page' }, url: link }] },\n    { type: 'context', elements: [{ type: 'mrkdwn', text: 'Private link, works for ' + s.link_hours + ' hours.' }] });\n  return JSON.stringify({ response_type: 'ephemeral', text: total ? total + ' waiting' : 'Nothing waiting', blocks });\n})() }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "ed7533f6-9471-52f4-842f-55288e039703",
+      "name": "Lane Run",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1740,
+        -160
+      ],
+      "parameters": {
+        "content": "## 4. Run\nOnly jobs in **Command settings** can start. Slack wants an answer within three seconds, so the reply goes first, then the workflow runs and this one waits for it. When it ends, the result posts through Slack's `response_url`, which works for 30 minutes.",
+        "width": 2140,
+        "height": 680,
+        "color": 7
+      }
+    },
+    {
+      "id": "5e8904eb-0c28-5721-912d-ee5d0585998e",
+      "name": "Can it run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1860,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d78d35d8-64d5-5b70-841c-a9f696d51b7a",
+              "leftValue": "={{ $json.is_approver && $('Command settings').first().json.jobs.some(j => j.key === $json.job) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "The person is an approver (or approver_ids is empty) and the job is on the list."
+    },
+    {
+      "id": "a51760c5-1e36-5727-9d9c-62f45b562efa",
+      "name": "Say why not",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2100,
+        200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ response_type: 'ephemeral', text: !$json.is_approver\n  ? 'Only the people in approver_ids can run jobs. Try `/store status`.'\n  : ($json.job ? 'No job called `' + $json.job + '`.' : 'Which job?') + ' Try one of: ' + $('Command settings').first().json.jobs.map(j => '`' + j.key + '`').join(', ') }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "321fd777-974c-5351-a907-f798996a2b94",
+      "name": "Say it's starting",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2100,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ response_type: 'ephemeral', text: 'Starting *' + $('Command settings').first().json.jobs.find(j => j.key === $json.job).label + '*. I will post here when it finishes.' }) }}",
+        "options": {}
+      },
+      "notes": "Answers Slack inside its three seconds, before the job runs."
+    },
+    {
+      "id": "8a9d84c9-b9e8-5fc7-981c-909b914ada4a",
+      "name": "What the job gets",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2340,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9b7bdc01-f612-5a2f-8a31-0e545f6f4033",
+              "name": "run_source",
+              "type": "string",
+              "value": "slack"
+            },
+            {
+              "id": "1c6e7763-26d4-5a0d-8502-030dfd6592bc",
+              "name": "requested_by",
+              "type": "string",
+              "value": "={{ $('Read the command').first().json.user_name }}"
+            },
+            {
+              "id": "45181f5c-9eb8-52c0-a58d-dac0e0c3889f",
+              "name": "args",
+              "type": "string",
+              "value": "={{ $('Read the command').first().json.args }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "A job's 'accept all data' trigger receives this item."
+    },
+    {
+      "id": "02688843-f4b9-5b02-8741-f47507eefa0c",
+      "name": "Run the job",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2580,
+        0
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Command settings').first().json.jobs.find(j => j.key === $('Read the command').first().json.job).workflow_id }}"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Waits for the job, so the result can be posted. On error it carries on with the error as the item."
+    },
+    {
+      "id": "53182de8-305f-59ca-9db4-6ea2310b5cfe",
+      "name": "How it went",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2820,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "914fe7bb-d48d-562d-9d60-7e4e6eb8b014",
+              "name": "result",
+              "type": "string",
+              "value": "={{ $json.error ? 'failed' : 'finished' }}"
+            },
+            {
+              "id": "474bc4db-0243-5d09-b04f-3c18f41233c1",
+              "name": "error",
+              "type": "string",
+              "value": "={{ $json.error ? String($json.error.message || $json.error).slice(0, 300) : '' }}"
+            },
+            {
+              "id": "acf35e57-0ad5-5ab5-b53f-cf2bb3ed8ee6",
+              "name": "seconds",
+              "type": "number",
+              "value": "={{ Math.round(($now.toMillis() - $('Read the command').first().json.started_at) / 1000) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true,
+      "notes": "A failed job arrives here as an item with an error field."
+    },
+    {
+      "id": "d06f2ffd-3561-5da1-bbf3-7b73c3ab1213",
+      "name": "Post when it's done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3060,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read the command').first().json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => {\n  const c = $('Read the command').first().json;\n  const label = $('Command settings').first().json.jobs.find(j => j.key === c.job).label;\n  const took = $json.seconds < 90 ? $json.seconds + ' s' : Math.round($json.seconds / 60) + ' min';\n  const text = $json.result === 'finished'\n    ? ':white_check_mark: <@' + c.user_id + '> ran *' + label + '*' + (c.args ? ' for ' + c.args : '') + '. It finished in ' + took + '.'\n    : ':x: *' + label + '* failed after ' + took + ': ' + $json.error;\n  return JSON.stringify({ response_type: 'in_channel', replace_original: false, text });\n})() }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Slack's response_url needs no token and works for 30 minutes. in_channel so the channel sees the result."
+    },
+    {
+      "id": "be85d0f2-6039-5bd9-bea7-0974a1f08243",
+      "name": "Log the run",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3300,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "command_runs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job": "={{ $('Read the command').first().json.job }}",
+            "args": "={{ $('Read the command').first().json.args }}",
+            "user_id": "={{ $('Read the command').first().json.user_id }}",
+            "user_name": "={{ $('Read the command').first().json.user_name }}",
+            "result": "={{ $('How it went').first().json.result }}",
+            "seconds": "={{ $('How it went').first().json.seconds }}",
+            "error": "={{ $('How it went').first().json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "job",
+              "displayName": "job",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "args",
+              "displayName": "args",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "seconds",
+              "displayName": "seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Run once to set up": {
+      "main": [
+        [
+          {
+            "node": "Create command_runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack sends /store": {
+      "main": [
+        [
+          {
+            "node": "Read the raw body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the raw body": {
+      "main": [
+        [
+          {
+            "node": "Command settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Command settings": {
+      "main": [
+        [
+          {
+            "node": "Sign the request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign the request": {
+      "main": [
+        [
+          {
+            "node": "From your Slack?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the command": {
+      "main": [
+        [
+          {
+            "node": "Which command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From your Slack?": {
+      "main": [
+        [
+          {
+            "node": "Read the command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Turn it away",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which command?": {
+      "main": [
+        [
+          {
+            "node": "Sign a page link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can it run?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply with help",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign a page link": {
+      "main": [
+        [
+          {
+            "node": "Get waiting cards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get waiting cards": {
+      "main": [
+        [
+          {
+            "node": "Count what's waiting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count what's waiting": {
+      "main": [
+        [
+          {
+            "node": "Reply with the status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can it run?": {
+      "main": [
+        [
+          {
+            "node": "Say it's starting",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Say why not",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say it's starting": {
+      "main": [
+        [
+          {
+            "node": "What the job gets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What the job gets": {
+      "main": [
+        [
+          {
+            "node": "Run the job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run the job": {
+      "main": [
+        [
+          {
+            "node": "How it went",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "How it went": {
+      "main": [
+        [
+          {
+            "node": "Post when it's done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post when it's done": {
+      "main": [
+        [
+          {
+            "node": "Log the run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
